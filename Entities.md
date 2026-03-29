@@ -19,16 +19,16 @@ Sale
   sale_id, event_id, product_id, customer_name, employee_id (not a table in here, just the actualy employee customer's id), payment_method, qty, total, timestamp, order_status, synced
 
 Order
-  id, sale_id, event_id, order_status, updated_at
+  order_id, sale_id, event_id, order_status, updated_at
 
 ApprovalRequest
-  id, type (stock|soa), event_id, requester_id, status, details_json
+  request_id, type (stock|soa), event_id, requester_id, status, details_json
 
 
 # New Additions
 
 Notification
-  id, user_id, type, title, details, timestamp, marked_as_read
+  notification_id, user_id, type, title, details, timestamp, marked_as_read
 
-Document
-  id, type (soa|list of orders), file_type (docx, csv, pdf), event_id, title, timestamp, file_url
+DocumentRequest
+  document_id, type (soa|list of orders), file_type (docx, csv, pdf), event_id, title, timestamp, file_url
