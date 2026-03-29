@@ -84,7 +84,7 @@ class PosState {
         .where((m) => m.name.trim().toUpperCase() == selected)
         .cast<PaymentMethodMeta?>()
         .firstWhere((m) => m != null, orElse: () => null);
-    return (method?.requiresEmployeeId ?? false) || selected == 'OTHER';
+    return method?.requiresEmployeeId ?? false;
   }
 
   PosState copyWith({
@@ -226,39 +226,90 @@ class PosCubit extends Cubit<PosState> {
     emit(state.copyWith(discountPercent: value.clamp(0, 100)));
   }
 
-  void addToCart(
+  Future<int> availableStock({
+    required int productId,
+    required int? variantOptionId,
+  }) {
+    return _productRepository.availableStock(
+      productId: productId,
+      variantOptionId: variantOptionId,
+    );
+  }
+
+  Future<Map<int, int>> variantStocksByOptionId(int productId) {
+    return _productRepository.variantStocksByOptionId(productId);
+  }
+
+  int _reservedInCart({required int productId, required int? variantOptionId}) {
+    return state.cart
+        .where(
+          (item) =>
+              item.product.id == productId && item.variantOptionId == variantOptionId,
+        )
+        .fold<int>(0, (sum, item) => sum + item.quantity);
+  }
+
+  Future<bool> addToCart(
     Product product, {
     ProductVariantGroup? variantGroup,
     ProductVariantOption? variantOption,
     int quantity = 1,
-  }) {
+  }) async {
+    final requested = quantity.clamp(1, 9999);
+    final variantOptionId = variantOption?.id;
+    final available = await availableStock(
+      productId: product.id,
+      variantOptionId: variantOptionId,
+    );
+    final alreadyInCart = _reservedInCart(
+      productId: product.id,
+      variantOptionId: variantOptionId,
+    );
+    if ((alreadyInCart + requested) > available) {
+      return false;
+    }
+
     final updated = [...state.cart];
     final idx = updated.indexWhere(
       (item) =>
           item.product.id == product.id &&
-          item.variantOptionId == variantOption?.id,
+          item.variantOptionId == variantOptionId,
     );
 
     if (idx == -1) {
       updated.add(
         CartItem(
           product: product,
-          quantity: quantity,
+          quantity: requested,
           variantGroup: variantGroup,
           variantOption: variantOption,
         ),
       );
     } else {
-      updated[idx].quantity += quantity;
+      updated[idx].quantity += requested;
     }
     emit(state.copyWith(cart: updated, quantity: 1));
+    return true;
   }
 
-  void incrementCartItem(int index) {
+  Future<bool> incrementCartItem(int index) async {
     final updated = [...state.cart];
-    if (index < 0 || index >= updated.length) return;
+    if (index < 0 || index >= updated.length) return false;
+    final item = updated[index];
+    final available = await availableStock(
+      productId: item.product.id,
+      variantOptionId: item.variantOptionId,
+    );
+    final reserved = _reservedInCart(
+      productId: item.product.id,
+      variantOptionId: item.variantOptionId,
+    );
+    if ((reserved + 1) > available) {
+      return false;
+    }
     updated[index].quantity += 1;
     emit(state.copyWith(cart: updated));
+    return true;
   }
 
   void decrementCartItem(int index) {
@@ -353,13 +404,13 @@ class PosCubit extends Cubit<PosState> {
     return _productRepository.variantOptionsForProduct(productId);
   }
 
-  Future<void> completeSale({
+  Future<bool> completeSale({
     required AppUser user,
     required OrderStatus status,
   }) async {
     final event = state.selectedEvent;
     if (event == null || state.cart.isEmpty) {
-      return;
+      return false;
     }
 
     final subtotal = state.subtotal;
@@ -372,7 +423,7 @@ class PosCubit extends Cubit<PosState> {
         quantity: item.quantity,
       );
       if (!deducted) {
-        continue;
+        return false;
       }
 
       final sale = Sale(
@@ -419,6 +470,7 @@ class PosCubit extends Cubit<PosState> {
             state.paymentMethods.isEmpty ? 'CASH' : state.paymentMethods.first.name,
       ),
     );
+    return true;
   }
 
   List<PaymentMethodMeta> _methodsForEvent(
@@ -430,18 +482,30 @@ class PosCubit extends Cubit<PosState> {
     }
 
     final result = <PaymentMethodMeta>[];
+    final customByName = {
+      for (final method in event.customOtherMethods)
+        method.name.trim().toUpperCase(): method,
+    };
     final acceptedSet = event.acceptedPaymentMethods
         .map((item) => item.trim().toUpperCase())
         .toSet();
 
     for (final method in baseMethods) {
       if (acceptedSet.contains(method.name.trim().toUpperCase())) {
-        result.add(method);
+        final custom = customByName[method.name.trim().toUpperCase()];
+        result.add(
+          PaymentMethodMeta(
+            name: method.name,
+            requiresEmployeeId: custom?.requiresEmployeeId ?? method.requiresEmployeeId,
+          ),
+        );
       }
     }
 
-    if (acceptedSet.contains('OTHER')) {
-      for (final custom in event.customOtherMethods) {
+    for (final custom in event.customOtherMethods) {
+      final upper = custom.name.trim().toUpperCase();
+      if (acceptedSet.contains(upper) &&
+          !result.any((method) => method.name.trim().toUpperCase() == upper)) {
         result.add(
           PaymentMethodMeta(
             name: custom.name,
@@ -449,6 +513,12 @@ class PosCubit extends Cubit<PosState> {
           ),
         );
       }
+    }
+
+    if (result.isEmpty) {
+      return const [
+        PaymentMethodMeta(name: 'CASH'),
+      ];
     }
 
     return result;

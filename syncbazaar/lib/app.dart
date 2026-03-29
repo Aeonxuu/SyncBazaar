@@ -31,6 +31,7 @@ import 'ui/screens/approvals/approvals_screen.dart';
 import 'ui/screens/dashboard/dashboard_screen.dart';
 import 'ui/screens/inventory/inventory_screen.dart';
 import 'ui/screens/login/login_screen.dart';
+import 'ui/screens/location/location_screen.dart';
 import 'ui/screens/orders/orders_screen.dart';
 import 'ui/screens/pos/pos_screen.dart';
 import 'ui/screens/post_bazaar/post_bazaar_screen.dart';
@@ -192,6 +193,20 @@ class _MainShellState extends State<MainShell> {
     context.read<PosCubit>().load(widget.user);
   }
 
+  void _handleSectionSelect(int index) {
+    setState(() => _selectedIndex = index);
+    final section = _navItems[index].section;
+    if (section == AppSection.dashboard) {
+      context.read<DashboardCubit>().load(widget.user);
+    }
+    if (section == AppSection.pos) {
+      context.read<PosCubit>().load(widget.user);
+    }
+    if (section == AppSection.orders) {
+      context.read<OrdersCubit>().load();
+    }
+  }
+
   List<AppNavItem> _buildNavItems(AppUser user) {
     final canApprove = user.isAdminOrOwner;
     return [
@@ -238,6 +253,11 @@ class _MainShellState extends State<MainShell> {
           icon: Icons.groups_2_outlined,
         ),
       const AppNavItem(
+        section: AppSection.location,
+        label: 'Location',
+        icon: Icons.place_outlined,
+      ),
+      const AppNavItem(
         section: AppSection.settings,
         label: 'Settings',
         icon: Icons.settings_outlined,
@@ -257,7 +277,7 @@ class _MainShellState extends State<MainShell> {
           SideNavigationRail(
             items: _navItems,
             selectedIndex: _selectedIndex,
-            onSelect: (index) => setState(() => _selectedIndex = index),
+            onSelect: _handleSectionSelect,
             isCollapsed: _isNavCollapsed,
             onToggle: () => setState(() => _isNavCollapsed = !_isNavCollapsed),
           ),
@@ -325,6 +345,8 @@ class _MainShellState extends State<MainShell> {
         return StaffScreen(currentUser: widget.user);
       case AppSection.settings:
         return SettingsScreen(user: widget.user);
+      case AppSection.location:
+        return LocationScreen(user: widget.user);
     }
   }
 }

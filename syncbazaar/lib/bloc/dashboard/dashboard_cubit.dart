@@ -11,13 +11,13 @@ class DashboardKpiData {
   const DashboardKpiData({
     required this.title,
     required this.value,
-    required this.trendText,
-    required this.trendIsPositive,
+    this.trendText,
+    this.trendIsPositive = true,
   });
 
   final String title;
   final String value;
-  final String trendText;
+  final String? trendText;
   final bool trendIsPositive;
 }
 
@@ -74,6 +74,8 @@ class DashboardState {
     String? selectedBazaarFilter,
     List<String>? salesFilterOptions,
     String? selectedSalesFilter,
+    this.averageDailySalesTrendText = '+0.0%',
+    this.averageDailySalesTrendIsPositive = true,
   }) : _kpis = kpis,
        _bazaarSummaries = bazaarSummaries,
        _dailySales = dailySales,
@@ -97,6 +99,8 @@ class DashboardState {
   final String? _selectedBazaarFilter;
   final List<String>? _salesFilterOptions;
   final String? _selectedSalesFilter;
+  final String averageDailySalesTrendText;
+  final bool averageDailySalesTrendIsPositive;
 
   List<DashboardKpiData> get kpis => _kpis ?? const [];
   List<BazaarSummaryData> get bazaarSummaries => _bazaarSummaries ?? const [];
@@ -125,6 +129,8 @@ class DashboardState {
     String? selectedBazaarFilter,
     List<String>? salesFilterOptions,
     String? selectedSalesFilter,
+    String? averageDailySalesTrendText,
+    bool? averageDailySalesTrendIsPositive,
   }) {
     return DashboardState(
       events: events ?? this.events,
@@ -140,6 +146,11 @@ class DashboardState {
       selectedBazaarFilter: selectedBazaarFilter ?? this.selectedBazaarFilter,
       salesFilterOptions: salesFilterOptions ?? this.salesFilterOptions,
       selectedSalesFilter: selectedSalesFilter ?? this.selectedSalesFilter,
+      averageDailySalesTrendText:
+          averageDailySalesTrendText ?? this.averageDailySalesTrendText,
+      averageDailySalesTrendIsPositive:
+          averageDailySalesTrendIsPositive ??
+          this.averageDailySalesTrendIsPositive,
     );
   }
 }
@@ -203,6 +214,11 @@ class DashboardCubit extends Cubit<DashboardState> {
       sales: salesForVisibleEvents,
       eventNameById: eventNameById,
     );
+    final trendData = _buildTrendData(
+      selectedFilter: defaultFilter,
+      sales: salesForVisibleEvents,
+      eventNameById: eventNameById,
+    );
     final insights = await _insightsService.generateInsights(
       DashboardInsightsRequest(
         user: user,
@@ -218,6 +234,8 @@ class DashboardCubit extends Cubit<DashboardState> {
       eventNameById: eventNameById,
     );
 
+    final dailySales = _buildDailySalesForFilter(selectedFilter: defaultFilter);
+
     emit(
       state.copyWith(
         events: events,
@@ -230,6 +248,12 @@ class DashboardCubit extends Cubit<DashboardState> {
           todayRevenue: metrics.todayRevenue,
           activeBazaars: metrics.activeBazaars,
           totalOrders: metrics.totalOrders,
+          totalRevenueTrendText: trendData.totalRevenueTrendText,
+          totalRevenueTrendIsPositive: trendData.totalRevenueTrendIsPositive,
+          todayRevenueTrendText: trendData.todayRevenueTrendText,
+          todayRevenueTrendIsPositive: trendData.todayRevenueTrendIsPositive,
+          totalOrdersTrendText: trendData.totalOrdersTrendText,
+          totalOrdersTrendIsPositive: trendData.totalOrdersTrendIsPositive,
         ),
         bazaarSummaries: summaries,
         aiInsights: insights,
@@ -237,7 +261,10 @@ class DashboardCubit extends Cubit<DashboardState> {
         selectedBazaarFilter: defaultFilter,
         salesFilterOptions: filters,
         selectedSalesFilter: defaultFilter,
-        dailySales: _buildDailySalesForFilter(selectedFilter: defaultFilter),
+        dailySales: dailySales,
+        averageDailySalesTrendText: trendData.averageDailySalesTrendText,
+        averageDailySalesTrendIsPositive:
+          trendData.averageDailySalesTrendIsPositive,
         recentOrders: _applyOrderFilter(
           orders: _allOrders,
           selectedBazaarFilter: defaultFilter,
@@ -285,6 +312,11 @@ class DashboardCubit extends Cubit<DashboardState> {
       sales: _visibleSales,
       eventNameById: _eventNameById,
     );
+    final trendData = _buildTrendData(
+      selectedFilter: selectedFilter,
+      sales: _visibleSales,
+      eventNameById: _eventNameById,
+    );
     final insights = await _insightsService.generateInsights(
       DashboardInsightsRequest(
         user: user,
@@ -295,6 +327,8 @@ class DashboardCubit extends Cubit<DashboardState> {
       ),
     );
 
+    final dailySales = _buildDailySalesForFilter(selectedFilter: selectedFilter);
+
     emit(
       state.copyWith(
         todayRevenue: metrics.todayRevenue,
@@ -302,7 +336,10 @@ class DashboardCubit extends Cubit<DashboardState> {
         activeBazaars: metrics.activeBazaars,
         selectedBazaarFilter: selectedFilter,
         selectedSalesFilter: selectedFilter,
-        dailySales: _buildDailySalesForFilter(selectedFilter: selectedFilter),
+        dailySales: dailySales,
+        averageDailySalesTrendText: trendData.averageDailySalesTrendText,
+        averageDailySalesTrendIsPositive:
+          trendData.averageDailySalesTrendIsPositive,
         recentOrders: _applyOrderFilter(
           orders: _allOrders,
           selectedBazaarFilter: selectedFilter,
@@ -314,6 +351,12 @@ class DashboardCubit extends Cubit<DashboardState> {
           todayRevenue: metrics.todayRevenue,
           activeBazaars: metrics.activeBazaars,
           totalOrders: metrics.totalOrders,
+          totalRevenueTrendText: trendData.totalRevenueTrendText,
+          totalRevenueTrendIsPositive: trendData.totalRevenueTrendIsPositive,
+          todayRevenueTrendText: trendData.todayRevenueTrendText,
+          todayRevenueTrendIsPositive: trendData.todayRevenueTrendIsPositive,
+          totalOrdersTrendText: trendData.totalOrdersTrendText,
+          totalOrdersTrendIsPositive: trendData.totalOrdersTrendIsPositive,
         ),
         aiInsights: insights,
       ),
@@ -326,32 +369,36 @@ class DashboardCubit extends Cubit<DashboardState> {
     required double todayRevenue,
     required int activeBazaars,
     required int totalOrders,
+    required String totalRevenueTrendText,
+    required bool totalRevenueTrendIsPositive,
+    required String todayRevenueTrendText,
+    required bool todayRevenueTrendIsPositive,
+    required String totalOrdersTrendText,
+    required bool totalOrdersTrendIsPositive,
   }) {
     final scopeSuffix = user.isAdminOrOwner ? '' : ' (My Bazaar)';
     return [
       DashboardKpiData(
         title: 'Total Revenue$scopeSuffix',
         value: 'PHP ${totalRevenue.toStringAsFixed(2)}',
-        trendText: '+2.5%',
-        trendIsPositive: true,
+        trendText: totalRevenueTrendText,
+        trendIsPositive: totalRevenueTrendIsPositive,
       ),
       DashboardKpiData(
         title: 'Today\'s Revenue$scopeSuffix',
         value: 'PHP ${todayRevenue.toStringAsFixed(2)}',
-        trendText: '-1.2%',
-        trendIsPositive: false,
+        trendText: todayRevenueTrendText,
+        trendIsPositive: todayRevenueTrendIsPositive,
       ),
       DashboardKpiData(
         title: 'Active Bazaars$scopeSuffix',
         value: '$activeBazaars',
-        trendText: '+1.2%',
-        trendIsPositive: true,
       ),
       DashboardKpiData(
         title: 'Total Orders$scopeSuffix',
         value: '$totalOrders',
-        trendText: '+3.1%',
-        trendIsPositive: true,
+        trendText: totalOrdersTrendText,
+        trendIsPositive: totalOrdersTrendIsPositive,
       ),
     ];
   }
@@ -464,6 +511,28 @@ class _DashboardMetrics {
   final int activeBazaars;
 }
 
+class _DashboardTrendData {
+  const _DashboardTrendData({
+    required this.totalRevenueTrendText,
+    required this.totalRevenueTrendIsPositive,
+    required this.todayRevenueTrendText,
+    required this.todayRevenueTrendIsPositive,
+    required this.totalOrdersTrendText,
+    required this.totalOrdersTrendIsPositive,
+    required this.averageDailySalesTrendText,
+    required this.averageDailySalesTrendIsPositive,
+  });
+
+  final String totalRevenueTrendText;
+  final bool totalRevenueTrendIsPositive;
+  final String todayRevenueTrendText;
+  final bool todayRevenueTrendIsPositive;
+  final String totalOrdersTrendText;
+  final bool totalOrdersTrendIsPositive;
+  final String averageDailySalesTrendText;
+  final bool averageDailySalesTrendIsPositive;
+}
+
 _DashboardMetrics _metricsForFilter({
   required String selectedFilter,
   required List<BazaarEvent> events,
@@ -516,4 +585,114 @@ List<Sale> _filterSalesByBazaar({
   return sales
       .where((sale) => eventNameById[sale.eventId] == selectedFilter)
       .toList();
+}
+
+_DashboardTrendData _buildTrendData({
+  required String selectedFilter,
+  required List<Sale> sales,
+  required Map<int, String> eventNameById,
+}) {
+  final filteredSales = _filterSalesByBazaar(
+    sales: sales,
+    selectedFilter: selectedFilter,
+    eventNameById: eventNameById,
+  );
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final yesterday = today.subtract(const Duration(days: 1));
+  final monthStart = today.subtract(const Duration(days: 29));
+  final previousMonthStart = monthStart.subtract(const Duration(days: 30));
+
+  bool sameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  final totalRevenueCurrent = filteredSales
+      .where((sale) => !sale.timestamp.isBefore(monthStart))
+      .fold<double>(0, (sum, sale) => sum + sale.total);
+  final totalRevenuePrevious = filteredSales
+      .where(
+        (sale) =>
+            !sale.timestamp.isBefore(previousMonthStart) &&
+            sale.timestamp.isBefore(monthStart),
+      )
+      .fold<double>(0, (sum, sale) => sum + sale.total);
+
+  final todayRevenue = filteredSales
+      .where((sale) => sameDay(sale.timestamp, today))
+      .fold<double>(0, (sum, sale) => sum + sale.total);
+  final yesterdayRevenue = filteredSales
+      .where((sale) => sameDay(sale.timestamp, yesterday))
+      .fold<double>(0, (sum, sale) => sum + sale.total);
+
+  final totalOrdersCurrent = filteredSales
+      .where((sale) => !sale.timestamp.isBefore(monthStart))
+      .length;
+  final totalOrdersPrevious = filteredSales
+      .where(
+        (sale) =>
+            !sale.timestamp.isBefore(previousMonthStart) &&
+            sale.timestamp.isBefore(monthStart),
+      )
+      .length;
+
+  final weekStart = today.subtract(const Duration(days: 6));
+  final previousWeekStart = weekStart.subtract(const Duration(days: 7));
+
+  final weekRevenue = filteredSales
+      .where((sale) => !sale.timestamp.isBefore(weekStart))
+      .fold<double>(0, (sum, sale) => sum + sale.total);
+  final previousWeekRevenue = filteredSales
+      .where(
+        (sale) =>
+            !sale.timestamp.isBefore(previousWeekStart) &&
+            sale.timestamp.isBefore(weekStart),
+      )
+      .fold<double>(0, (sum, sale) => sum + sale.total);
+
+  final currentWeekAvg = weekRevenue / 7;
+  final previousWeekAvg = previousWeekRevenue / 7;
+
+  final totalRevenueDelta = _percentChange(
+    current: totalRevenueCurrent,
+    previous: totalRevenuePrevious,
+  );
+  final todayRevenueDelta = _percentChange(
+    current: todayRevenue,
+    previous: yesterdayRevenue,
+  );
+  final totalOrdersDelta = _percentChange(
+    current: totalOrdersCurrent.toDouble(),
+    previous: totalOrdersPrevious.toDouble(),
+  );
+  final averageDailyDelta = _percentChange(
+    current: currentWeekAvg,
+    previous: previousWeekAvg,
+  );
+
+  return _DashboardTrendData(
+    totalRevenueTrendText: _formatTrend(totalRevenueDelta),
+    totalRevenueTrendIsPositive: totalRevenueDelta >= 0,
+    todayRevenueTrendText: _formatTrend(todayRevenueDelta),
+    todayRevenueTrendIsPositive: todayRevenueDelta >= 0,
+    totalOrdersTrendText: _formatTrend(totalOrdersDelta),
+    totalOrdersTrendIsPositive: totalOrdersDelta >= 0,
+    averageDailySalesTrendText: _formatTrend(averageDailyDelta),
+    averageDailySalesTrendIsPositive: averageDailyDelta >= 0,
+  );
+}
+
+double _percentChange({required double current, required double previous}) {
+  if (previous == 0) {
+    if (current == 0) {
+      return 0;
+    }
+    return 100;
+  }
+  return ((current - previous) / previous) * 100;
+}
+
+String _formatTrend(double value) {
+  final prefix = value >= 0 ? '+' : '';
+  return '$prefix${value.toStringAsFixed(1)}%';
 }

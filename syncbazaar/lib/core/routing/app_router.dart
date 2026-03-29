@@ -7,5 +7,6 @@ enum AppSection {
   approvals,
   inventory,
   staff,
+  location,
   settings,
 }

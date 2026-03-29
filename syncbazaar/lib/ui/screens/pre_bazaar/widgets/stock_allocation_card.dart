@@ -49,6 +49,7 @@ class StockAllocationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scrollController = ScrollController();
     final theme = Theme.of(context);
 
     return CustomCard(
@@ -116,90 +117,107 @@ class StockAllocationCard extends StatelessWidget {
           ],
           SizedBox(
             height: 320,
-            child: SingleChildScrollView(
-              child: Column(
-                children: groups
-                    .map(
-                      (group) => Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                group.productName,
-                                style: theme.textTheme.bodyLarge?.copyWith(
-                                  fontWeight: FontWeight.w700,
+            child: Scrollbar(
+              controller: scrollController,
+              thumbVisibility: true,
+              trackVisibility: true,
+              thickness: 8,
+              radius: const Radius.circular(999),
+              child: SingleChildScrollView(
+                controller: scrollController,
+                child: Column(
+                  children: groups
+                      .map(
+                        (group) => Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  group.productName,
+                                  style: theme.textTheme.bodyLarge?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 6),
-                              ...group.rows.map(
-                                (row) => Padding(
-                                  padding: const EdgeInsets.only(bottom: 4),
-                                  child: Row(
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          row.label,
-                                          style: theme.textTheme.bodyMedium?.copyWith(
+                                const SizedBox(height: 6),
+                                ...group.rows.map(
+                                  (row) => Container(
+                                    margin: const EdgeInsets.only(bottom: 6),
+                                    padding: const EdgeInsets.only(bottom: 6),
+                                    decoration: const BoxDecoration(
+                                      border: Border(
+                                        bottom: BorderSide(
+                                          color: Color(0xFFD9D9D9),
+                                          width: 1,
+                                        ),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            row.label,
+                                            style: theme.textTheme.bodyMedium?.copyWith(
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ),
+                                        IconButton(
+                                          onPressed: isAllocationEnabled
+                                              ? () => onAllocationChanged(
+                                                  row.key,
+                                                  (row.allocated - 1).clamp(0, 9999),
+                                                )
+                                              : null,
+                                          icon: const Icon(Icons.remove_circle_outline),
+                                        ),
+                                        SizedBox(
+                                          width: 28,
+                                          child: Text(
+                                            '${row.allocated}',
+                                            textAlign: TextAlign.center,
+                                            style: theme.textTheme.bodyLarge?.copyWith(
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        ),
+                                        IconButton(
+                                          onPressed: isAllocationEnabled
+                                              ? () => onAllocationChanged(
+                                                  row.key,
+                                                  row.allocated + 1,
+                                                )
+                                              : null,
+                                          icon: const Icon(Icons.add_circle_outline),
+                                        ),
+                                        Text(
+                                          'Stock: ${row.remaining}',
+                                          style: theme.textTheme.bodySmall?.copyWith(
+                                            color: Colors.black54,
                                             fontWeight: FontWeight.w600,
                                           ),
                                         ),
-                                      ),
-                                      IconButton(
-                                        onPressed: isAllocationEnabled
-                                            ? () => onAllocationChanged(
-                                                row.key,
-                                                (row.allocated - 1).clamp(0, 9999),
-                                              )
-                                            : null,
-                                        icon: const Icon(Icons.remove_circle_outline),
-                                      ),
-                                      SizedBox(
-                                        width: 28,
-                                        child: Text(
-                                          '${row.allocated}',
-                                          textAlign: TextAlign.center,
-                                          style: theme.textTheme.bodyLarge?.copyWith(
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                      ),
-                                      IconButton(
-                                        onPressed: isAllocationEnabled
-                                            ? () => onAllocationChanged(
-                                                row.key,
-                                                row.allocated + 1,
-                                              )
-                                            : null,
-                                        icon: const Icon(Icons.add_circle_outline),
-                                      ),
-                                      Text(
-                                        'Stock: ${row.remaining}',
-                                        style: theme.textTheme.bodySmall?.copyWith(
-                                          color: Colors.black54,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                    )
-                    .toList(),
+                      )
+                      .toList(),
+                ),
               ),
             ),
           ),

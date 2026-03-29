@@ -16,10 +16,12 @@ class ProductVariantOption {
     required this.variantGroupId,
     required this.value,
     this.extraPrice = 0,
+    this.stockQuantity = 0,
   });
 
   final int id;
   final int variantGroupId;
   final String value;
   final double extraPrice;
+  final int stockQuantity;
 }

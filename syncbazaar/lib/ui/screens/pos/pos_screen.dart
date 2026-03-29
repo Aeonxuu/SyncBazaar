@@ -12,6 +12,7 @@ import '../../../models/product_variant.dart';
 import '../../../models/sale.dart';
 import '../../../models/user.dart';
 import '../../../data/repositories/product_repository.dart';
+import '../../widgets/confirmation_dialog.dart';
 import '../../widgets/custom_card.dart';
 import 'widgets/pos_product_card.dart';
 
@@ -101,30 +102,12 @@ class PosScreen extends StatelessWidget {
                                       );
                                       return;
                                     }
-                                    final confirmed = await showDialog<bool>(
+                                    final confirmed = await showConfirmationDialog(
                                       context: context,
-                                      builder: (context) => AlertDialog(
-                                        title: const Text('Delete Bazaar'),
-                                        content: Text(
+                                      title: 'Delete Bazaar',
+                                      message:
                                           'Are you sure you want to delete "${event.name}"?',
-                                        ),
-                                        actions: [
-                                          TextButton(
-                                            onPressed: () =>
-                                                Navigator.pop(context, false),
-                                            child: const Text('Cancel'),
-                                          ),
-                                          ElevatedButton(
-                                            onPressed: () =>
-                                                Navigator.pop(context, true),
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor: AppColors.error,
-                                              foregroundColor: Colors.white,
-                                            ),
-                                            child: const Text('Delete'),
-                                          ),
-                                        ],
-                                      ),
+                                      confirmLabel: 'Delete',
                                     );
                                     if (confirmed != true || !context.mounted) {
                                       return;
@@ -291,9 +274,12 @@ class PosScreen extends StatelessWidget {
             ),
             itemBuilder: (context, i) {
               final product = state.filteredProducts[i];
+              final inStock = product.stockQuantity > 0;
               return PosProductCard(
                 product: product,
-                subtitle: 'Category: ${state.categoryNames[product.categoryId] ?? 'Uncategorized'}',
+                subtitle:
+                    'Category: ${state.categoryNames[product.categoryId] ?? 'Uncategorized'} • Stock: ${product.stockQuantity}',
+                isEnabled: inStock,
                 onTap: () => _showVariantPicker(context, product),
               );
             },
@@ -482,9 +468,20 @@ class PosScreen extends StatelessWidget {
                             ),
                             Text('${item.quantity}'),
                             IconButton(
-                              onPressed: () => context
-                                  .read<PosCubit>()
-                                  .incrementCartItem(i),
+                              onPressed: () async {
+                                final ok = await context
+                                    .read<PosCubit>()
+                                    .incrementCartItem(i);
+                                if (!ok && context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        'Cannot exceed available stock for this item.',
+                                      ),
+                                    ),
+                                  );
+                                }
+                              },
                               icon: const Icon(Icons.add_circle_outline),
                               visualDensity: VisualDensity.compact,
                             ),
@@ -569,10 +566,20 @@ class PosScreen extends StatelessWidget {
                             state.total,
                           );
                           if (status == null) return;
-                          await context.read<PosCubit>().completeSale(
+                          final sold = await context.read<PosCubit>().completeSale(
                             user: user,
                             status: status,
                           );
+                          if (!sold && context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Some items are out of stock. Please review cart quantities.',
+                                ),
+                              ),
+                            );
+                            return;
+                          }
                           if (context.mounted) {
                             await context.read<DashboardCubit>().load(user);
                             await context.read<OrdersCubit>().load();
@@ -787,85 +794,110 @@ class PosScreen extends StatelessWidget {
         return StatefulBuilder(
           builder: (context, setState) {
             return Dialog(
+              insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
               backgroundColor: Colors.white,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(10),
               ),
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Confirm Sale',
-                      style: Theme.of(context).textTheme.titleLarge,
+              child: SizedBox(
+                width: 360,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Confirm Sale',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 6),
                     Text(
                       'Total: PHP ${total.toStringAsFixed(2)}',
-                      style: Theme.of(context).textTheme.bodyMedium,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
                     ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<OrderStatus>(
-                      initialValue: selected,
-                      items: OrderStatus.values
-                          .map(
-                            (s) => DropdownMenuItem<OrderStatus>(
-                              value: s,
-                              child: Text(s.name.toUpperCase()),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (value) {
-                        if (value != null) {
-                          setState(() => selected = value);
-                        }
-                      },
-                      decoration: InputDecoration(
-                        labelText: 'Order Status',
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-                        filled: true,
-                        fillColor: const Color(0xFFF5F1FB),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
-                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
-                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: AppColors.primary, width: 1.5)),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
+                    const SizedBox(height: 8),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context, false),
-                          style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            backgroundColor: Colors.white,
-                            foregroundColor: AppColors.primary,
-                            side: BorderSide(color: AppColors.primary),
-                          ),
-                          child: const Text('Cancel'),
+                        Text(
+                          'Order status',
+                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                color: Colors.grey,
+                                fontWeight: FontWeight.w500,
+                                fontSize: 11,
+                              ),
                         ),
-                        const SizedBox(width: 12),
-                        ElevatedButton(
-                          onPressed: () => Navigator.pop(context, true),
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                            backgroundColor: AppColors.primary,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(6),
-                            ),
+                        const SizedBox(height: 4),
+                        DropdownButtonFormField<OrderStatus>(
+                          initialValue: selected,
+                          items: OrderStatus.values
+                              .map(
+                                (s) => DropdownMenuItem<OrderStatus>(
+                                  value: s,
+                                  child: Text(s.name.toUpperCase()),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) {
+                            if (value != null) {
+                              setState(() => selected = value);
+                            }
+                          },
+                          decoration: InputDecoration(
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                            filled: true,
+                            fillColor: const Color(0xFFF5F1FB),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
+                            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
+                            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
                           ),
-                          child: const Text('Confirm'),
                         ),
                       ],
                     ),
-                  ],
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => Navigator.pop(context, false),
+                            icon: const Icon(Icons.close_rounded, size: 18),
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size.fromHeight(38),
+                              foregroundColor: const Color(0xFFC62828),
+                              side: const BorderSide(color: Color(0xFFC62828)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                            ),
+                            label: const Text('Cancel'),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () => Navigator.pop(context, true),
+                            icon: const Icon(Icons.check_rounded, size: 18),
+                            style: ElevatedButton.styleFrom(
+                              minimumSize: const Size.fromHeight(38),
+                              backgroundColor: const Color(0xFF2E7D32),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                            ),
+                            label: const Text('Confirm'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    ],
+                  ),
                 ),
               ),
             );
@@ -883,6 +915,11 @@ class PosScreen extends StatelessWidget {
     final cubit = context.read<PosCubit>();
     final group = await cubit.variantGroupForProduct(product.id);
     final options = await cubit.variantOptionsForProduct(product.id);
+    final variantStocks = await cubit.variantStocksByOptionId(product.id);
+    final nonVariantStock = await cubit.availableStock(
+      productId: product.id,
+      variantOptionId: null,
+    );
     ProductVariantOption? selected;
     int quantity = 1;
 
@@ -897,7 +934,27 @@ class PosScreen extends StatelessWidget {
         return StatefulBuilder(
           builder: (context, setState) {
             final hasVariants = group != null && options.isNotEmpty;
-            final canAdd = quantity > 0 && (!hasVariants || selected != null);
+            final cart = context.read<PosCubit>().state.cart;
+            final selectedOptionId = selected?.id;
+            final inCartQty = cart
+                .where(
+                  (item) =>
+                      item.product.id == product.id &&
+                      item.variantOptionId == (hasVariants ? selectedOptionId : null),
+                )
+                .fold<int>(0, (sum, item) => sum + item.quantity);
+            final availableForSelection = hasVariants
+                ? ((selectedOptionId == null ? 0 : (variantStocks[selectedOptionId] ?? 0)) - inCartQty)
+                : (nonVariantStock - inCartQty);
+            final maxSelectable = availableForSelection < 0 ? 0 : availableForSelection;
+            if (quantity > maxSelectable && maxSelectable > 0) {
+              quantity = maxSelectable;
+            }
+            final canAdd =
+                quantity > 0 &&
+                (!hasVariants || selected != null) &&
+                maxSelectable > 0 &&
+                quantity <= maxSelectable;
 
             return Padding(
               padding: EdgeInsets.only(
@@ -927,11 +984,16 @@ class PosScreen extends StatelessWidget {
                       children: options
                           .map(
                             (option) => ChoiceChip(
-                              label: Text(option.value),
+                              label: Text(
+                                '${option.value} (${variantStocks[option.id] ?? 0})',
+                              ),
                               selected: selected?.id == option.id,
-                              onSelected: (_) {
+                              onSelected: (variantStocks[option.id] ?? 0) <= 0
+                                  ? null
+                                  : (_) {
                                 setState(() {
                                   selected = option;
+                                  quantity = 1;
                                 });
                               },
                             ),
@@ -940,6 +1002,21 @@ class PosScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                   ],
+                  if (!hasVariants)
+                    Text(
+                      'Available stock: ${maxSelectable < 0 ? 0 : maxSelectable}',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Colors.black54,
+                          ),
+                    ),
+                  if (hasVariants && selected != null)
+                    Text(
+                      'Available for ${selected!.value}: ${maxSelectable < 0 ? 0 : maxSelectable}',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Colors.black54,
+                          ),
+                    ),
+                  const SizedBox(height: 6),
                   Row(
                     children: [
                       IconButton(
@@ -957,7 +1034,9 @@ class PosScreen extends StatelessWidget {
                         ),
                       ),
                       IconButton(
-                        onPressed: () => setState(() => quantity += 1),
+                        onPressed: quantity >= maxSelectable
+                            ? null
+                            : () => setState(() => quantity += 1),
                         icon: const Icon(Icons.add_circle_outline),
                       ),
                       const Spacer(),
@@ -974,13 +1053,26 @@ class PosScreen extends StatelessWidget {
                     width: double.infinity,
                     child: ElevatedButton(
                       onPressed: canAdd
-                          ? () {
-                              cubit.addToCart(
+                          ? () async {
+                              final added = await cubit.addToCart(
                                 product,
                                 variantGroup: group,
                                 variantOption: selected,
                                 quantity: quantity,
                               );
+                              if (!context.mounted) {
+                                return;
+                              }
+                              if (!added) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Cannot add more than available stock.',
+                                    ),
+                                  ),
+                                );
+                                return;
+                              }
                               Navigator.pop(context);
                             }
                           : null,

@@ -44,6 +44,10 @@ class InventoryCubit extends Cubit<List<Product>> {
     return _productRepository.variantOptionsForProduct(productId);
   }
 
+  Future<Map<int, int>> variantStocksByOptionId(int productId) {
+    return _productRepository.variantStocksByOptionId(productId);
+  }
+
   Future<void> saveProduct({
     int? id,
     required String name,

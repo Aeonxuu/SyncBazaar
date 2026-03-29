@@ -8,7 +8,7 @@ class DashboardKpiCard extends StatelessWidget {
     super.key,
     required this.title,
     required this.value,
-    required this.trendText,
+    this.trendText,
     required this.trendIsPositive,
     this.icon,
     this.iconWidget,
@@ -16,7 +16,7 @@ class DashboardKpiCard extends StatelessWidget {
 
   final String title;
   final String value;
-  final String trendText;
+  final String? trendText;
   final bool trendIsPositive;
   final IconData? icon;
   final Widget? iconWidget;
@@ -71,7 +71,8 @@ class DashboardKpiCard extends StatelessWidget {
                   ),
                 ),
               ),
-              TrendPill(text: trendText, isPositive: trendIsPositive),
+              if ((trendText ?? '').isNotEmpty)
+                TrendPill(text: trendText!, isPositive: trendIsPositive),
             ],
           ),
         ],

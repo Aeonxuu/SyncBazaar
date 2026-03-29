@@ -91,38 +91,12 @@ class InventoryScreen extends StatelessWidget {
                                         ),
                                         IconButton(
                                           onPressed: () async {
-                                            final confirmed = await showDialog<bool>(
-                                                  context: context,
-                                                  builder: (context) => AlertDialog(
-                                                    shape: RoundedRectangleBorder(
-                                                      borderRadius: BorderRadius.circular(4),
-                                                    ),
-                                                    title: const Text('Delete Product'),
-                                                    content: Text(
-                                                      'Delete "${p.name}"?',
-                                                    ),
-                                                    actions: [
-                                                      TextButton(
-                                                        onPressed: () => Navigator.pop(context, false),
-                                                        style: TextButton.styleFrom(
-                                                          backgroundColor: Colors.white,
-                                                          foregroundColor: AppColors.primary,
-                                                          side: BorderSide(color: AppColors.primary),
-                                                        ),
-                                                        child: const Text('Cancel'),
-                                                      ),
-                                                      ElevatedButton(
-                                                        style: ElevatedButton.styleFrom(
-                                                          backgroundColor: const Color(0xFFFF5252),
-                                                          foregroundColor: Colors.white,
-                                                        ),
-                                                        onPressed: () => Navigator.pop(context, true),
-                                                        child: const Text('Delete'),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ) ??
-                                                false;
+                                            final confirmed = await showConfirmationDialog(
+                                              context: context,
+                                              title: 'Delete Product',
+                                              message: 'Delete "${p.name}"?',
+                                              confirmLabel: 'Delete',
+                                            );
                                             if (confirmed && context.mounted) {
                                               await context
                                                   .read<InventoryCubit>()
@@ -172,6 +146,7 @@ class InventoryScreen extends StatelessWidget {
     String? imagePath = product?.imagePath;
     int? selectedCategoryId = initialCategoryId;
     bool hasVariants = false;
+    bool isVariantStep = false;
     String groupName = '';
     final options = <_VariantOptionInput>[];
 
@@ -186,6 +161,7 @@ class InventoryScreen extends StatelessWidget {
               (option) => _VariantOptionInput(
                 value: option.value,
                 extraPrice: option.extraPrice.toString(),
+                stockQuantity: option.stockQuantity.toString(),
               ),
             )
             .toList(),
@@ -203,7 +179,6 @@ class InventoryScreen extends StatelessWidget {
           builder: (context, setState) {
             Future<void> addCategoryInline() async {
               final name = TextEditingController();
-              final description = TextEditingController();
               await showDialog<void>(
                 context: context,
                 builder: (context) => AlertDialog(
@@ -232,28 +207,7 @@ class InventoryScreen extends StatelessWidget {
                           fillColor: const Color(0xFFF5F1FB),
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
                           enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
-                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: AppColors.primary, width: 1.5)),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Description (optional)',
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              color: Colors.grey,
-                              fontWeight: FontWeight.w500,
-                            ),
-                      ),
-                      const SizedBox(height: 4),
-                      TextField(
-                        controller: description,
-                        decoration: InputDecoration(
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-                          filled: true,
-                          fillColor: const Color(0xFFF5F1FB),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
-                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
-                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: AppColors.primary, width: 1.5)),
+                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
                         ),
                       )
                     ],
@@ -269,10 +223,7 @@ class InventoryScreen extends StatelessWidget {
                         if (value.isEmpty) {
                           return;
                         }
-                        final created = await cubit.addCategory(
-                          name: value,
-                          description: description.text,
-                        );
+                        final created = await cubit.addCategory(name: value);
                         categories = await cubit.categories();
                         selectedCategoryId = created.id;
                         if (context.mounted) {
@@ -285,6 +236,27 @@ class InventoryScreen extends StatelessWidget {
                   ],
                 ),
               );
+            }
+
+            int parsedTotalStock() =>
+                int.tryParse(stockQuantityController.text.trim()) ?? 0;
+
+            int assignedVariantStock() {
+              return options.fold<int>(
+                0,
+                (sum, option) =>
+                    sum + (int.tryParse(option.stockQuantity.trim()) ?? 0),
+              );
+            }
+
+            int maxAllowedForOption(int index, int totalStock) {
+              var usedExceptCurrent = 0;
+              for (var i = 0; i < options.length; i++) {
+                if (i == index) continue;
+                usedExceptCurrent +=
+                    int.tryParse(options[i].stockQuantity.trim()) ?? 0;
+              }
+              return (totalStock - usedExceptCurrent).clamp(0, totalStock);
             }
 
             Future<void> pickImage() async {
@@ -346,7 +318,7 @@ class InventoryScreen extends StatelessWidget {
                                     fillColor: const Color(0xFFF5F1FB),
                                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
                                     enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
-                                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: AppColors.primary, width: 1.5)),
+                                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
                                   ),
                                 ),
                               ],
@@ -381,7 +353,7 @@ class InventoryScreen extends StatelessWidget {
                           fillColor: const Color(0xFFF5F1FB),
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
                           enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
-                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: AppColors.primary, width: 1.5)),
+                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -410,7 +382,7 @@ class InventoryScreen extends StatelessWidget {
                                     fillColor: const Color(0xFFF5F1FB),
                                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
                                     enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
-                                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: AppColors.primary, width: 1.5)),
+                                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
                                   ),
                                 ),
                               ],
@@ -439,7 +411,7 @@ class InventoryScreen extends StatelessWidget {
                                     fillColor: const Color(0xFFF5F1FB),
                                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
                                     enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
-                                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: AppColors.primary, width: 1.5)),
+                                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
                                   ),
                                 ),
                               ],
@@ -458,17 +430,37 @@ class InventoryScreen extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      SwitchListTile.adaptive(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('This product has variants'),
-                        value: hasVariants,
-                        onChanged: (value) {
-                          setState(() {
-                            hasVariants = value;
-                          });
-                        },
-                      ),
-                      if (hasVariants) ...[
+                      if (!isVariantStep) ...[
+                        SwitchListTile.adaptive(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('This product has variants'),
+                          value: hasVariants,
+                          onChanged: (value) {
+                            setState(() {
+                              hasVariants = value;
+                            });
+                          },
+                        ),
+                      ],
+                      if (hasVariants && isVariantStep) ...[
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            'Total stock: ${parsedTotalStock()} | Assigned: ${assignedVariantStock()} | Remaining: ${parsedTotalStock() - assignedVariantStock()}',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: AppColors.primary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                        ),
                         const SizedBox(height: 8),
                         Text(
                           'Variant group name (e.g., Size, Color)',
@@ -488,7 +480,7 @@ class InventoryScreen extends StatelessWidget {
                             fillColor: const Color(0xFFF5F1FB),
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
                             enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
-                            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: AppColors.primary, width: 1.5)),
+                            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -524,7 +516,7 @@ class InventoryScreen extends StatelessWidget {
                                               fillColor: const Color(0xFFF5F1FB),
                                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
                                               enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
-                                              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: AppColors.primary, width: 1.5)),
+                                              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
                                             ),
                                           ),
                                         ],
@@ -555,7 +547,39 @@ class InventoryScreen extends StatelessWidget {
                                               fillColor: const Color(0xFFF5F1FB),
                                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
                                               enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
-                                              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: AppColors.primary, width: 1.5)),
+                                              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      flex: 2,
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'Stock',
+                                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                                  color: Colors.grey,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          TextFormField(
+                                            initialValue: option.stockQuantity,
+                                            onChanged: (value) => option.stockQuantity = value,
+                                            keyboardType: TextInputType.number,
+                                            decoration: InputDecoration(
+                                              isDense: true,
+                                              hintText: 'Max ${maxAllowedForOption(index, parsedTotalStock())}',
+                                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                                              filled: true,
+                                              fillColor: const Color(0xFFF5F1FB),
+                                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
+                                              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
+                                              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
                                             ),
                                           ),
                                         ],
@@ -576,6 +600,13 @@ class InventoryScreen extends StatelessWidget {
                                     ),
                                   ],
                                 ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Remaining available stock after this option: ${maxAllowedForOption(index, parsedTotalStock()) - (int.tryParse(option.stockQuantity.trim()) ?? 0)}',
+                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                        color: Colors.black54,
+                                      ),
+                                ),
                               ],
                             ),
                           );
@@ -589,12 +620,28 @@ class InventoryScreen extends StatelessWidget {
                           icon: const Icon(Icons.add),
                           label: const Text('Add option'),
                         ),
+                      ] else if (hasVariants) ...[
+                        Text(
+                          'Tap Next to configure variant options and stock allocation.',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Colors.black54,
+                              ),
+                        ),
                       ],
                     ],
                   ),
                 ),
               ),
               actions: [
+                if (hasVariants && isVariantStep)
+                  TextButton(
+                    onPressed: () {
+                      setState(() {
+                        isVariantStep = false;
+                      });
+                    },
+                    child: const Text('Back'),
+                  ),
                 TextButton(
                   onPressed: () => Navigator.pop(context),
                   child: const Text('Cancel'),
@@ -603,36 +650,123 @@ class InventoryScreen extends StatelessWidget {
                   onPressed: () async {
                     final name = nameController.text.trim();
                     final basePrice = double.tryParse(priceController.text.trim());
+                    final stockQuantity =
+                        int.tryParse(stockQuantityController.text.trim());
 
-                    if (name.isEmpty || selectedCategoryId == null || basePrice == null) {
+                    if (name.isEmpty ||
+                        selectedCategoryId == null ||
+                        basePrice == null ||
+                        stockQuantity == null ||
+                        stockQuantity <= 0) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text(
-                            'Category, name, and valid base price are required.',
+                            'Category, name, base price, and stock quantity are required.',
                           ),
                         ),
                       );
                       return;
                     }
 
+                    if (hasVariants && !isVariantStep) {
+                      setState(() {
+                        isVariantStep = true;
+                      });
+                      return;
+                    }
+
+                    final enteredNames = <String>{};
+
                     final cleanOptions = options
-                        .where((option) => option.value.trim().isNotEmpty)
                         .map(
-                          (option) => ProductVariantOption(
+                          (option) {
+                            final label = option.value.trim();
+                            enteredNames.add(label.toUpperCase());
+                            return ProductVariantOption(
                             id: 0,
                             variantGroupId: 0,
-                            value: option.value.trim(),
+                            value: label,
                             extraPrice:
                                 double.tryParse(option.extraPrice.trim()) ?? 0,
-                          ),
+                            stockQuantity:
+                                int.tryParse(option.stockQuantity.trim()) ?? 0,
+                          );
+                          },
                         )
                         .toList();
+
+                    if (hasVariants && groupName.trim().isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Variant group name is required.'),
+                        ),
+                      );
+                      return;
+                    }
+
+                    if (hasVariants &&
+                        cleanOptions.any((option) => option.value.trim().isEmpty)) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Each variant option must have a value.'),
+                        ),
+                      );
+                      return;
+                    }
+
+                    if (hasVariants && enteredNames.length != cleanOptions.length) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Variant option values must be unique.'),
+                        ),
+                      );
+                      return;
+                    }
 
                     if (hasVariants && cleanOptions.isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text(
                             'Add at least one variant option when variants are enabled.',
+                          ),
+                        ),
+                      );
+                      return;
+                    }
+
+                    if (hasVariants &&
+                        cleanOptions.any((option) => option.stockQuantity < 0)) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Variant stock cannot be negative.'),
+                        ),
+                      );
+                      return;
+                    }
+
+                    if (hasVariants &&
+                        cleanOptions.any(
+                          (option) => option.stockQuantity > stockQuantity,
+                        )) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'A variant stock cannot exceed total stock quantity.',
+                          ),
+                        ),
+                      );
+                      return;
+                    }
+
+                    final assigned = cleanOptions.fold<int>(
+                      0,
+                      (sum, option) => sum + option.stockQuantity,
+                    );
+                    if (hasVariants && assigned != stockQuantity) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'Assigned variant stock must equal total stock quantity ($stockQuantity).',
                           ),
                         ),
                       );
@@ -648,14 +782,14 @@ class InventoryScreen extends StatelessWidget {
                       imagePath: imagePath,
                       variantGroupName: hasVariants ? groupName.trim() : null,
                       variantOptions: hasVariants ? cleanOptions : const [],
-                      stockQuantity: int.tryParse(stockQuantityController.text.trim()) ?? 0,
+                      stockQuantity: stockQuantity,
                     );
 
                     if (context.mounted) {
                       Navigator.pop(context);
                     }
                   },
-                  child: const Text('Save'),
+                  child: Text(hasVariants && !isVariantStep ? 'Next' : 'Save'),
                 ),
               ],
             );
@@ -694,35 +828,12 @@ class InventoryScreen extends StatelessWidget {
                       trailing: IconButton(
                         onPressed: () async {
                           Navigator.pop(context);
-                          final confirmed = await showDialog<bool>(
+                          final confirmed = await showConfirmationDialog(
                             context: context,
-                            builder: (context) => AlertDialog(
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              title: const Text('Delete Category'),
-                              content: Text(
-                                'Delete "${category.name}"? All products will be removed.',
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(context, false),
-                                  child: const Text(
-                                    'Cancel',
-                                    style: TextStyle(color: Color(0xFFFF5252)),
-                                  ),
-                                ),
-                                ElevatedButton(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFF4CAF50),
-                                  ),
-                                  onPressed: () => Navigator.pop(context, true),
-                                  child: const Text('Delete'),
-                                ),
-                              ],
-                            ),
-                          ) ??
-                          false;
+                            title: 'Delete Category',
+                            message: 'Delete "${category.name}"? All products will be removed.',
+                            confirmLabel: 'Delete',
+                          );
                           if (confirmed && context.mounted) {
                             await cubit.deleteCategory(category.id);
                             if (context.mounted) {
@@ -754,8 +865,13 @@ class InventoryScreen extends StatelessWidget {
 }
 
 class _VariantOptionInput {
-  _VariantOptionInput({this.value = '', this.extraPrice = '0'});
+  _VariantOptionInput({
+    this.value = '',
+    this.extraPrice = '0',
+    this.stockQuantity = '0',
+  });
 
   String value;
   String extraPrice;
+  String stockQuantity;
 }

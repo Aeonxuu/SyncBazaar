@@ -200,7 +200,38 @@ class ProductRepository {
     if (group == null) {
       return const [];
     }
-    return List<ProductVariantOption>.from(_variantOptionsByGroupId[group.id] ?? const []);
+    final options = _variantOptionsByGroupId[group.id] ?? const [];
+    return options
+        .map(
+          (option) => ProductVariantOption(
+            id: option.id,
+            variantGroupId: option.variantGroupId,
+            value: option.value,
+            extraPrice: option.extraPrice,
+            stockQuantity:
+                _stockByAllocationKey[allocationKey(productId, option.id)] ?? 0,
+          ),
+        )
+        .toList();
+  }
+
+  Future<int> availableStock({
+    required int productId,
+    required int? variantOptionId,
+  }) async {
+    return _stockByAllocationKey[allocationKey(productId, variantOptionId)] ?? 0;
+  }
+
+  Future<Map<int, int>> variantStocksByOptionId(int productId) async {
+    final group = _variantGroupByProductId[productId];
+    if (group == null) {
+      return const {};
+    }
+    final options = _variantOptionsByGroupId[group.id] ?? const [];
+    return {
+      for (final option in options)
+        option.id: _stockByAllocationKey[allocationKey(productId, option.id)] ?? 0,
+    };
   }
 
   Future<List<ProductAllocationItem>> allocationItems() async {
@@ -382,6 +413,7 @@ class ProductRepository {
             variantGroupId: group.id,
             value: option.value.trim(),
             extraPrice: option.extraPrice,
+            stockQuantity: option.stockQuantity,
           ),
         )
         .toList();
@@ -390,14 +422,15 @@ class ProductRepository {
   void _ensureStockEntriesForProduct(int productId, {int initialStock = 0}) {
     final group = _variantGroupByProductId[productId];
     if (group == null) {
-      _stockByAllocationKey.putIfAbsent(allocationKey(productId, null), () => initialStock);
+      _stockByAllocationKey[allocationKey(productId, null)] = initialStock;
       return;
     }
 
     _stockByAllocationKey.remove(allocationKey(productId, null));
     final options = _variantOptionsByGroupId[group.id] ?? const [];
     for (final option in options) {
-      _stockByAllocationKey.putIfAbsent(allocationKey(productId, option.id), () => initialStock);
+      _stockByAllocationKey[allocationKey(productId, option.id)] =
+          option.stockQuantity;
     }
   }
 }

@@ -16,4 +16,24 @@ class Company {
   final double incentivePercent;
   final double bufferPercent;
   final String? qrImagePath;
+
+  Company copyWith({
+    int? id,
+    String? name,
+    String? address,
+    String? contact,
+    double? incentivePercent,
+    double? bufferPercent,
+    String? qrImagePath,
+  }) {
+    return Company(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      address: address ?? this.address,
+      contact: contact ?? this.contact,
+      incentivePercent: incentivePercent ?? this.incentivePercent,
+      bufferPercent: bufferPercent ?? this.bufferPercent,
+      qrImagePath: qrImagePath ?? this.qrImagePath,
+    );
+  }
 }

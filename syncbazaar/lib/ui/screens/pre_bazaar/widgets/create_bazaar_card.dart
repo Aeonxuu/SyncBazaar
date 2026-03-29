@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/constants/colors.dart';
-import '../../../../models/bazaar_event.dart';
+import '../../../../data/repositories/settings_repository.dart';
 import '../../../widgets/custom_card.dart';
 
 class CreateBazaarCard extends StatelessWidget {
@@ -16,14 +16,7 @@ class CreateBazaarCard extends StatelessWidget {
     required this.onPickDates,
     required this.onCancel,
     required this.onNext,
-    required this.acceptedPaymentMethods,
-    required this.onPaymentMethodToggled,
-    required this.otherPaymentMethodController,
-    required this.otherRequiresEmployeeId,
-    required this.onOtherRequiresEmployeeIdChanged,
-    required this.onAddOtherMethod,
-    required this.customOtherMethods,
-    required this.onRemoveOtherMethod,
+    required this.configuredPaymentMethods,
     this.isNextEnabled = true,
   });
 
@@ -35,14 +28,7 @@ class CreateBazaarCard extends StatelessWidget {
   final VoidCallback onPickDates;
   final VoidCallback onCancel;
   final VoidCallback onNext;
-  final Set<String> acceptedPaymentMethods;
-  final void Function(String method, bool enabled) onPaymentMethodToggled;
-  final TextEditingController otherPaymentMethodController;
-  final bool otherRequiresEmployeeId;
-  final ValueChanged<bool> onOtherRequiresEmployeeIdChanged;
-  final VoidCallback onAddOtherMethod;
-  final List<BazaarPaymentMethod> customOtherMethods;
-  final ValueChanged<String> onRemoveOtherMethod;
+  final List<PaymentMethodMeta> configuredPaymentMethods;
   final bool isNextEnabled;
 
   @override
@@ -96,25 +82,29 @@ class CreateBazaarCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 18),
+          _fieldLabel(context, 'Event name'),
+          const SizedBox(height: 4),
           TextField(
             controller: eventNameController,
-            decoration: const InputDecoration(
-              labelText: 'Event name',
+            decoration: _filledDecoration(
               hintText: 'e.g. SyncBazaar Summer Pop-up',
             ),
           ),
           const SizedBox(height: 12),
+          _fieldLabel(context, 'Location'),
+          const SizedBox(height: 4),
           DropdownButtonFormField<int>(
             initialValue: selectedCompanyId,
             icon: const Icon(Icons.keyboard_arrow_down_rounded),
             items: companyItems,
             onChanged: onCompanyChanged,
-            decoration: const InputDecoration(
-              labelText: 'Company',
-              hintText: 'Select a company',
+            decoration: _filledDecoration(
+              hintText: 'Select a location',
             ),
           ),
           const SizedBox(height: 12),
+          _fieldLabel(context, 'Event dates'),
+          const SizedBox(height: 4),
           InkWell(
             borderRadius: BorderRadius.circular(6),
             onTap: onPickDates,
@@ -124,6 +114,7 @@ class CreateBazaarCard extends StatelessWidget {
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(6),
                 color: const Color(0xFFF5F1FB),
+                border: Border.all(color: Colors.transparent),
               ),
               child: Row(
                 children: [
@@ -144,84 +135,42 @@ class CreateBazaarCard extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            'Accepted payment methods',
+            'Accepted payment methods (from Location)',
             style: theme.textTheme.bodySmall?.copyWith(
               color: Colors.black45,
               fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _paymentChip('CASH'),
-              _paymentChip('COOP'),
-              _paymentChip('OTHER'),
-            ].map((chip) {
-              return FilterChip(
-                label: Text(chip),
-                selected: acceptedPaymentMethods.contains(chip),
-                onSelected: (value) => onPaymentMethodToggled(chip, value),
-              );
-            }).toList(),
-          ),
-          if (acceptedPaymentMethods.contains('OTHER')) ...[
-            const SizedBox(height: 10),
-            TextField(
-              controller: otherPaymentMethodController,
-              decoration: const InputDecoration(
-                labelText: 'Other payment method name',
-                hintText: 'e.g. GCASH, MAYA, BANK TRANSFER',
+          if (configuredPaymentMethods.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF4E5),
+                borderRadius: BorderRadius.circular(8),
               ),
-            ),
-            const SizedBox(height: 6),
-            SwitchListTile.adaptive(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Requires Employee ID'),
-              value: otherRequiresEmployeeId,
-              onChanged: onOtherRequiresEmployeeIdChanged,
-            ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: ElevatedButton.icon(
-                onPressed: onAddOtherMethod,
-                icon: const Icon(Icons.add),
-                label: const Text('Add OTHER option'),
+              child: const Text(
+                'No payment methods configured for this location. Configure it in Location section.',
               ),
+            )
+          else
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: configuredPaymentMethods
+                  .map(
+                    (method) => Chip(
+                      label: Text(
+                        method.requiresEmployeeId
+                            ? '${method.name} (Needs Employee ID)'
+                            : method.name,
+                      ),
+                      backgroundColor: const Color(0xFFF5F1FB),
+                    ),
+                  )
+                  .toList(),
             ),
-            if (customOtherMethods.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              ...customOtherMethods.map(
-                (method) => Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            '${method.name}${method.requiresEmployeeId ? ' (Needs Employee ID)' : ''}',
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: () => onRemoveOtherMethod(method.name),
-                          icon: const Icon(Icons.close),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ],
           const Spacer(),
           const SizedBox(height: 12),
           Row(
@@ -246,5 +195,36 @@ class CreateBazaarCard extends StatelessWidget {
     );
   }
 
-  String _paymentChip(String method) => method;
+  Widget _fieldLabel(BuildContext context, String label) {
+    return Text(
+      label,
+      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            color: Colors.grey,
+            fontWeight: FontWeight.w500,
+            fontSize: 11,
+          ),
+    );
+  }
+
+  InputDecoration _filledDecoration({required String hintText}) {
+    return InputDecoration(
+      hintText: hintText,
+      isDense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+      filled: true,
+      fillColor: const Color(0xFFF5F1FB),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(6),
+        borderSide: BorderSide.none,
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(6),
+        borderSide: BorderSide.none,
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(6),
+        borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+      ),
+    );
+  }
 }

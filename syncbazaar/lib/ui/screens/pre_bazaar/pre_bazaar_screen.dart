@@ -3,13 +3,15 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../bloc/dashboard/dashboard_cubit.dart';
 import '../../../bloc/inventory/inventory_cubit.dart';
+import '../../../bloc/orders/orders_cubit.dart';
 import '../../../bloc/pos/pos_cubit.dart';
-import '../../../core/constants/colors.dart';
 import '../../../data/repositories/event_repository.dart';
 import '../../../data/repositories/product_repository.dart';
 import '../../../data/repositories/settings_repository.dart';
 import '../../../models/bazaar_event.dart';
+import '../../../models/company.dart';
 import '../../../models/user.dart';
+import '../../widgets/confirmation_dialog.dart';
 import 'widgets/create_bazaar_card.dart';
 import 'widgets/stock_allocation_card.dart';
 
@@ -36,23 +38,18 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
   final Map<String, int> _masterStockByItem = {};
   final Map<String, int> _availableStockAtDraftStart = {};
   final Map<String, ProductAllocationItem> _allocationMetaByKey = {};
-  final Set<String> _acceptedPaymentMethods = {'CASH', 'COOP'};
-  final List<BazaarPaymentMethod> _customOtherMethods = [];
-  final TextEditingController _otherPaymentMethodController =
-      TextEditingController();
-  bool _otherRequiresEmployeeId = false;
-
-  final List<DropdownMenuItem<int>> _companyItems = const [
-    DropdownMenuItem<int>(value: 1, child: Text('Amkor Technology')),
-    DropdownMenuItem<int>(value: 2, child: Text('Shin-Etsu')),
-  ];
+  List<Company> _locations = const [];
+  Map<int, List<PaymentMethodMeta>> _locationPaymentMethodsByCompanyId = const {};
 
   @override
   void initState() {
     super.initState();
     _stockAllocationUnlocked = false;
     _eventName.addListener(_onEventNameChanged);
-    Future.microtask(_syncStocksFromRepository);
+    Future.microtask(() async {
+      await _syncLocationsFromRepository();
+      await _syncStocksFromRepository();
+    });
   }
 
   void _onEventNameChanged() {
@@ -65,18 +62,33 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
   void dispose() {
     _eventName.removeListener(_onEventNameChanged);
     _eventName.dispose();
-    _otherPaymentMethodController.dispose();
     super.dispose();
+  }
+
+  List<DropdownMenuItem<int>> get _locationItems {
+    return _locations
+        .map(
+          (location) => DropdownMenuItem<int>(
+            value: location.id,
+            child: Text(location.name),
+          ),
+        )
+        .toList();
+  }
+
+  List<PaymentMethodMeta> get _selectedLocationPaymentMethods {
+    if (_selectedCompanyId == null) {
+      return const [];
+    }
+    return _locationPaymentMethodsByCompanyId[_selectedCompanyId!] ?? const [];
   }
 
   bool get _isBazaarInfoComplete {
     final eventNameOk = _eventName.text.trim().isNotEmpty;
     final companyOk = _selectedCompanyId != null;
     final dateOk = _dateRange != null;
-    final paymentOk = _acceptedPaymentMethods.isNotEmpty;
-    final otherOk = !_acceptedPaymentMethods.contains('OTHER') ||
-        _customOtherMethods.isNotEmpty;
-    return eventNameOk && companyOk && dateOk && paymentOk && otherOk;
+    final paymentOk = _selectedLocationPaymentMethods.isNotEmpty;
+    return eventNameOk && companyOk && dateOk && paymentOk;
   }
 
   Future<void> _pickDateRange() async {
@@ -115,14 +127,8 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
     setState(() {
       _eventName.clear();
       _dateRange = null;
-      _selectedCompanyId = _companyItems.first.value;
+      _selectedCompanyId = _locationItems.isEmpty ? null : _locationItems.first.value;
       _stockAllocationUnlocked = false;
-      _acceptedPaymentMethods
-        ..clear()
-        ..addAll({'CASH', 'COOP'});
-      _customOtherMethods.clear();
-      _otherPaymentMethodController.clear();
-      _otherRequiresEmployeeId = false;
     });
   }
 
@@ -139,60 +145,33 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
     setState(() {
       _eventName.clear();
       _dateRange = null;
-      _selectedCompanyId = _companyItems.first.value;
+      _selectedCompanyId = _locationItems.isEmpty ? null : _locationItems.first.value;
       _stockAllocationUnlocked = false;
       _allocations.updateAll((_, __) => 0);
       _masterStockByItem.clear();
-      _acceptedPaymentMethods
-        ..clear()
-        ..addAll({'CASH', 'COOP'});
-      _customOtherMethods.clear();
-      _otherPaymentMethodController.clear();
-      _otherRequiresEmployeeId = false;
     });
+    await _syncLocationsFromRepository();
     await _syncStocksFromRepository();
   }
 
-  void _togglePaymentMethod(String method, bool enabled) {
+  Future<void> _syncLocationsFromRepository() async {
+    final settingsRepository = context.read<SettingsRepository>();
+    final locations = await settingsRepository.listCompanies();
+    final methodsByCompanyId =
+        await settingsRepository.paymentMethodsByCompanyId();
+
+    if (!mounted) {
+      return;
+    }
+
     setState(() {
-      if (enabled) {
-        _acceptedPaymentMethods.add(method);
-      } else {
-        _acceptedPaymentMethods.remove(method);
-        if (method == 'OTHER') {
-          _customOtherMethods.clear();
-        }
+      _locations = locations;
+      _locationPaymentMethodsByCompanyId = methodsByCompanyId;
+
+      if (_selectedCompanyId == null ||
+          !_locations.any((location) => location.id == _selectedCompanyId)) {
+        _selectedCompanyId = _locations.isEmpty ? null : _locations.first.id;
       }
-    });
-  }
-
-  void _addOtherMethod() {
-    final name = _otherPaymentMethodController.text.trim();
-    if (name.isEmpty) {
-      return;
-    }
-    final exists = _customOtherMethods.any(
-      (method) => method.name.trim().toUpperCase() == name.toUpperCase(),
-    );
-    if (exists) {
-      return;
-    }
-
-    setState(() {
-      _customOtherMethods.add(
-        BazaarPaymentMethod(
-          name: name,
-          requiresEmployeeId: _otherRequiresEmployeeId,
-        ),
-      );
-      _otherPaymentMethodController.clear();
-      _otherRequiresEmployeeId = false;
-    });
-  }
-
-  void _removeOtherMethod(String name) {
-    setState(() {
-      _customOtherMethods.removeWhere((method) => method.name == name);
     });
   }
 
@@ -251,28 +230,11 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
 
   Future<void> _handleSubmit() async {
     if (!widget.user.isAdminOrOwner) {
-      final approved = await showDialog<bool>(
+      final approved = await showConfirmationDialog(
         context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Confirm Submission'),
-          content: const Text(
-            'Submit this stock allocation for admin/owner approval?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('Submit'),
-            ),
-          ],
-        ),
+        title: 'Confirm Submission',
+        message: 'Submit this stock allocation for admin/owner approval?',
+        confirmLabel: 'Submit',
       );
 
       if (approved == true && mounted) {
@@ -286,7 +248,7 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'Complete event name, company, and event dates before finishing.',
+              'Complete event name, location, and event dates before finishing.',
             ),
           ),
         );
@@ -294,71 +256,32 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
       return;
     }
 
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showConfirmationDialog(
       context: context,
-      barrierColor: Colors.black.withOpacity(0.5),
-      builder: (context) => Dialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Confirm Bazaar Publish',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Please confirm all event information is correct before publishing this bazaar.',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(false),
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      backgroundColor: Colors.white,
-                      foregroundColor: AppColors.primary,
-                      side: BorderSide(color: AppColors.primary),
-                    ),
-                    child: const Text('Review'),
-                  ),
-                  const SizedBox(width: 12),
-                  ElevatedButton(
-                    onPressed: () => Navigator.of(context).pop(true),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                    ),
-                    child: const Text('Publish'),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
+      title: 'Confirm Bazaar Publish',
+      message: 'Publish this bazaar now?',
+      cancelLabel: 'Review',
+      confirmLabel: 'Publish',
     );
 
     if (confirmed == true && mounted) {
       final eventRepository = context.read<EventRepository>();
       final productRepository = context.read<ProductRepository>();
-      final settingsRepository = context.read<SettingsRepository>();
+      await _syncLocationsFromRepository();
+
+      final selectedMethods = _selectedLocationPaymentMethods;
+      if (selectedMethods.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Selected location has no payment methods. Configure it in Location section.',
+              ),
+            ),
+          );
+        }
+        return;
+      }
 
       final allocationsByAllocationKey = <String, int>{};
       for (final entry in _allocations.entries) {
@@ -386,22 +309,20 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
 
       await eventRepository.createEvent(
         name: _eventName.text.trim(),
-        companyId: _selectedCompanyId ?? _companyItems.first.value ?? 1,
+        companyId: _selectedCompanyId ?? _locationItems.first.value ?? 1,
         startDate: _dateRange!.start,
         endDate: _dateRange!.end,
-        acceptedPaymentMethods: _acceptedPaymentMethods.toList(),
-        customOtherMethods: _customOtherMethods,
+        acceptedPaymentMethods: selectedMethods.map((method) => method.name).toList(),
+        customOtherMethods: selectedMethods
+            .map(
+              (method) => BazaarPaymentMethod(
+                name: method.name,
+                requiresEmployeeId: method.requiresEmployeeId,
+              ),
+            )
+            .toList(),
         allocationsByAllocationKey: allocationsByAllocationKey,
       );
-
-      for (final custom in _customOtherMethods) {
-        await settingsRepository.upsertPaymentMethod(
-          PaymentMethodMeta(
-            name: custom.name,
-            requiresEmployeeId: custom.requiresEmployeeId,
-          ),
-        );
-      }
 
       if (!mounted) {
         return;
@@ -410,6 +331,7 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
       await context.read<DashboardCubit>().load(widget.user);
       await context.read<PosCubit>().load(widget.user);
       await context.read<InventoryCubit>().load();
+      await context.read<OrdersCubit>().load();
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Bazaar published successfully.')),
@@ -435,22 +357,12 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
           final createCard = CreateBazaarCard(
             eventNameController: _eventName,
             selectedCompanyId: _selectedCompanyId,
-            companyItems: _companyItems,
+            companyItems: _locationItems,
             dateRange: _dateRange,
-            acceptedPaymentMethods: _acceptedPaymentMethods,
-            onPaymentMethodToggled: _togglePaymentMethod,
-            otherPaymentMethodController: _otherPaymentMethodController,
-            otherRequiresEmployeeId: _otherRequiresEmployeeId,
-            onOtherRequiresEmployeeIdChanged: (value) {
-              setState(() {
-                _otherRequiresEmployeeId = value;
-              });
+            configuredPaymentMethods: _selectedLocationPaymentMethods,
+            onCompanyChanged: (value) {
+              setState(() => _selectedCompanyId = value);
             },
-            onAddOtherMethod: _addOtherMethod,
-            customOtherMethods: _customOtherMethods,
-            onRemoveOtherMethod: _removeOtherMethod,
-            onCompanyChanged: (value) =>
-                setState(() => _selectedCompanyId = value),
             onPickDates: _pickDateRange,
             onCancel: _resetCreateBazaar,
             onNext: _onNextFromCreate,

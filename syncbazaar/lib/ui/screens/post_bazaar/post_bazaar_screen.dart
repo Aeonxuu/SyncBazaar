@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/constants/colors.dart';
 import '../../../data/repositories/event_repository.dart';
 import '../../../data/repositories/orders_repository.dart';
 import '../../../data/repositories/product_repository.dart';
 import '../../../data/repositories/sales_repository.dart';
+import '../../../data/repositories/settings_repository.dart';
+import '../../../models/bazaar_event.dart';
 import '../../../models/order.dart';
 import '../../../models/product.dart';
 import '../../../models/sale.dart';
-import '../../widgets/custom_card.dart';
 import '../../widgets/confirmation_dialog.dart';
 
 class PostBazaarScreen extends StatefulWidget {
@@ -20,6 +22,16 @@ class PostBazaarScreen extends StatefulWidget {
 
 class _PostBazaarScreenState extends State<PostBazaarScreen> {
   late Future<_PostBazaarData> _futureData;
+  int? _selectedReconciliationEventId;
+
+  static const _kCardRadius = 12.0;
+  static const _kCardShadow = [
+    BoxShadow(
+      color: Color(0x11000000),
+      blurRadius: 20,
+      offset: Offset(0, 4),
+    ),
+  ];
 
   @override
   void initState() {
@@ -32,17 +44,40 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
     final ordersRepository = context.read<OrdersRepository>();
     final productRepository = context.read<ProductRepository>();
     final eventRepository = context.read<EventRepository>();
+    final settingsRepository = context.read<SettingsRepository>();
 
     final sales = await salesRepository.listSales();
     final orders = await ordersRepository.listOrders();
     final products = await productRepository.listProducts();
     final events = await eventRepository.listAll();
+    final allocationsByEventId = <int, Map<String, int>>{};
+    for (final event in events) {
+      allocationsByEventId[event.id] =
+          await eventRepository.allocationsForEventByAllocationKey(event.id);
+    }
     final eventNameById = {for (final event in events) event.id: event.name};
+    final companies = await settingsRepository.listCompanies();
+    final companyById = {for (final company in companies) company.id: company};
+    final companyNameById = {for (final company in companies) company.id: company.name};
     return _PostBazaarData(
       sales: sales,
       orders: orders,
       products: products,
+      events: events,
+      allocationsByEventId: allocationsByEventId,
       eventNameById: eventNameById,
+      locationNameByEventId: {
+        for (final event in events)
+          event.id: companyNameById[event.companyId] ?? 'Unknown Location',
+      },
+      incentivePercentByEventId: {
+        for (final event in events)
+          event.id: companyById[event.companyId]?.incentivePercent ?? 10,
+      },
+      bufferPercentByEventId: {
+        for (final event in events)
+          event.id: companyById[event.companyId]?.bufferPercent ?? 10,
+      },
     );
   }
 
@@ -59,12 +94,32 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
       length: 3,
       child: Column(
         children: [
-          const TabBar(
-            tabs: [
-              Tab(text: 'SOA Draft'),
-              Tab(text: 'List of Orders'),
-              Tab(text: 'Inventory Reconciliation'),
-            ],
+          Container(
+            margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: _kCardShadow,
+            ),
+            child: TabBar(
+              dividerColor: Colors.transparent,
+              indicatorSize: TabBarIndicatorSize.tab,
+              indicator: BoxDecoration(
+                color: const Color(0xFFF2ECFC),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              labelColor: AppColors.primary,
+              unselectedLabelColor: Colors.black54,
+              labelStyle: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+              tabs: const [
+                Tab(text: 'SOA Draft'),
+                Tab(text: 'List of Orders'),
+                Tab(text: 'Inventory Reconciliation'),
+              ],
+            ),
           ),
           Expanded(
             child: FutureBuilder<_PostBazaarData>(
@@ -74,6 +129,15 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
                   return const Center(child: CircularProgressIndicator());
                 }
                 final data = snapshot.data!;
+                if (_selectedReconciliationEventId == null && data.events.isNotEmpty) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted && _selectedReconciliationEventId == null) {
+                      setState(() {
+                        _selectedReconciliationEventId = data.events.first.id;
+                      });
+                    }
+                  });
+                }
                 return RefreshIndicator(
                   onRefresh: _refresh,
                   child: TabBarView(
@@ -93,197 +157,850 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
   }
 
   Widget _soaDraft(BuildContext context, _PostBazaarData data) {
-    final grossSales = data.sales.fold<double>(
-      0,
-      (sum, sale) => sum + sale.total,
-    );
-    final incentive = grossSales * 0.10;
-    final buffer = grossSales * 0.10;
-    final net = grossSales - incentive - buffer;
+    if (data.events.isEmpty) {
+      return _emptyState('No bazaar events found.');
+    }
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        CustomCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Gross sales: PHP ${grossSales.toStringAsFixed(2)}'),
-              Text(
-                'Incentive deduction (10%): PHP ${incentive.toStringAsFixed(2)}',
-              ),
-              Text('Buffer deduction (10%): PHP ${buffer.toStringAsFixed(2)}'),
-              Text('Net amount: PHP ${net.toStringAsFixed(2)}'),
-              const SizedBox(height: 8),
-              Text(
-                'Transactions captured: ${data.sales.length}',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('SOA draft generated.')),
-                      );
-                    },
-                    icon: const Icon(Icons.description_outlined),
-                    label: const Text('Generate Draft SOA'),
-                  ),
-                  OutlinedButton(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('PDF export queued.')),
-                      );
-                    },
-                    child: const Text('Export PDF'),
-                  ),
-                  OutlinedButton(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('CSV export queued.')),
-                      );
-                    },
-                    child: const Text('Export CSV'),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ],
+    return _eventGrid(
+      events: data.events,
+      locationNameByEventId: data.locationNameByEventId,
+      compactCardLayout: true,
+      onOpenDetails: (event) => _openSoaDetails(context, data, event),
     );
   }
 
   Widget _ordersExport(BuildContext context, _PostBazaarData data) {
-    final ordersByEvent = <int, List<Order>>{};
-    for (final order in data.orders) {
-      ordersByEvent.putIfAbsent(order.eventId, () => []).add(order);
+    if (data.events.isEmpty) {
+      return _emptyState('No bazaar events found.');
     }
 
-    final cash = data.orders.where((o) => o.paymentMethod == 'CASH').length;
-    final coop = data.orders.where((o) => o.paymentMethod == 'COOP').length;
-    final other = data.orders.where((o) => o.paymentMethod == 'OTHER').length;
-
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        CustomCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Order exports based on current transaction records'),
-              const SizedBox(height: 8),
-              Text('Total orders: ${data.orders.length}'),
-              Text('CASH: $cash   COOP: $coop   OTHER: $other'),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                children: [
-                  OutlinedButton(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('CASH list exported.')),
-                      );
-                    },
-                    child: const Text('Export CASH list'),
-                  ),
-                  OutlinedButton(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('COOP list exported.')),
-                      );
-                    },
-                    child: const Text('Export COOP list'),
-                  ),
-                  OutlinedButton(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('OTHER list exported.')),
-                      );
-                    },
-                    child: const Text('Export Other list'),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        ...ordersByEvent.entries.map((entry) {
-          final eventId = entry.key;
-          final orders = entry.value;
-          final eventName = data.eventNameById[eventId] ?? 'Event #$eventId';
-          final cashCount = orders.where((o) => o.paymentMethod == 'CASH').length;
-          final coopCount = orders.where((o) => o.paymentMethod == 'COOP').length;
-          final otherCount = orders.where((o) => o.paymentMethod == 'OTHER').length;
-          final completedCount = orders.where((o) => o.orderStatus.name == 'completed').length;
-          final pendingCount = orders.where((o) => o.orderStatus.name == 'pending').length;
-
-          return CustomCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  eventName,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 8),
-                Text('Total orders: ${orders.length}'),
-                Text('CASH: $cashCount • COOP: $coopCount • OTHER: $otherCount'),
-                Text('Completed: $completedCount • Pending: $pendingCount'),
-              ],
-            ),
-          );
-        }).toList(),
-      ],
+    return _eventGrid(
+      events: data.events,
+      locationNameByEventId: data.locationNameByEventId,
+      compactCardLayout: true,
+      onOpenDetails: (event) => _openOrdersDetails(context, data, event),
     );
   }
 
   Widget _reconciliation(BuildContext context, _PostBazaarData data) {
+    if (data.events.isEmpty) {
+      return _emptyState('No bazaar events found.');
+    }
+
+    final selectedId = _selectedReconciliationEventId ?? data.events.first.id;
+    final selectedEvent = data.events.firstWhere(
+      (event) => event.id == selectedId,
+      orElse: () => data.events.first,
+    );
+    final allocations = data.allocationsByEventId[selectedEvent.id] ?? const {};
+    final allocatedQty = allocations.values.fold<int>(0, (sum, qty) => sum + qty);
+    final salesCount =
+      data.sales.where((sale) => sale.eventId == selectedEvent.id).length;
+    final ordersCount =
+      data.orders.where((order) => order.eventId == selectedEvent.id).length;
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        CustomCard(
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(_kCardRadius),
+            boxShadow: _kCardShadow,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Current inventory after reservations and sales'),
-              const SizedBox(height: 8),
-              ...data.products.map(
-                (product) => ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(
-                    '${product.name} / ${product.variant} / ${product.size}',
-                  ),
-                  subtitle: Text('Remaining stock: ${product.stockQuantity}'),
-                ),
+              Text(
+                'Choose Bazaar',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.black54,
+                      fontWeight: FontWeight.w700,
+                    ),
               ),
               const SizedBox(height: 8),
-              ElevatedButton(
-                onPressed: () async {
-                  final confirmed = await showConfirmationDialog(
-                    context: context,
-                    title: 'Finalize Bazaar',
-                    message: 'Are you sure you want to finalize this bazaar? This action will close all ongoing transactions and cannot be undone.',
-                  );
-                  if (confirmed && context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Bazaar finalized.')),
-                    );
-                  }
+              DropdownButtonFormField<int>(
+                initialValue: selectedEvent.id,
+                items: data.events
+                    .map(
+                      (event) => DropdownMenuItem<int>(
+                        value: event.id,
+                        child: Text(event.name),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() {
+                    _selectedReconciliationEventId = value;
+                  });
                 },
-                child: const Text('Finalize Bazaar'),
+                decoration: InputDecoration(
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                  filled: true,
+                  fillColor: const Color(0xFFF5F1FB),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: BorderSide.none,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        Center(
+          child: SizedBox(
+            width: 300,
+            child: _eventCard(
+              event: selectedEvent,
+              locationName: data.locationNameByEventId[selectedEvent.id] ??
+                  'Unknown Location',
+              quickMeta: [
+                'Allocated lines: ${allocations.length}',
+                'Allocated qty: $allocatedQty',
+                'Sales: $salesCount • Orders: $ordersCount',
+              ],
+              onTap: () => _openReconciliationDetails(context, data, selectedEvent),
+            ),
+          ),
+        ),
+        if (allocations.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: Text(
+              'This bazaar has no allocated stock yet. Open details to review and finalize when ready.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Colors.black54,
+                  ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _eventGrid({
+    required List<BazaarEvent> events,
+    required Map<int, String> locationNameByEventId,
+    bool compactCardLayout = false,
+    required ValueChanged<BazaarEvent> onOpenDetails,
+  }) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return GridView.builder(
+          padding: EdgeInsets.symmetric(
+            horizontal: compactCardLayout ? 36 : 16,
+            vertical: 16,
+          ),
+          itemCount: events.length,
+          gridDelegate: compactCardLayout
+              ? const SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 300,
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: 0.8,
+                )
+              : SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: constraints.maxWidth >= 900 ? 2 : 1,
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  childAspectRatio:
+                      constraints.maxWidth >= 900 ? 0.95 : 0.9,
+                ),
+          itemBuilder: (context, index) {
+            final event = events[index];
+            return _AnimatedEntrance(
+              delayMs: 40 * (index % 8),
+              child: _eventCard(
+                event: event,
+                locationName: locationNameByEventId[event.id] ?? 'Unknown Location',
+                onTap: () => onOpenDetails(event),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _eventCard({
+    required BazaarEvent event,
+    required String locationName,
+    List<String> quickMeta = const [],
+    required VoidCallback onTap,
+  }) {
+    final titleStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: Colors.black54,
+          fontWeight: FontWeight.w600,
+        );
+    final valueStyle = Theme.of(context).textTheme.headlineSmall?.copyWith(
+          color: AppColors.text,
+          fontWeight: FontWeight.w700,
+          height: 1,
+        );
+    final metaStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: Colors.black54,
+          fontWeight: FontWeight.w600,
+        );
+
+    return _InteractiveCard(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(_kCardRadius),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(_kCardRadius),
+          boxShadow: _kCardShadow,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    locationName,
+                    style: titleStyle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF2ECFC),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.storefront_outlined,
+                    color: AppColors.primary,
+                    size: 18,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              event.name,
+              style: valueStyle,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _statusBackground(event.status),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    event.status.name.toUpperCase(),
+                    style: metaStyle?.copyWith(color: _statusForeground(event.status)),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _formatDateRange(event.startDate, event.endDate),
+              style: metaStyle,
+            ),
+            if (quickMeta.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              ...quickMeta.map(
+                (line) => Padding(
+                  padding: const EdgeInsets.only(bottom: 2),
+                  child: Text(
+                    line,
+                    style: metaStyle,
+                  ),
+                ),
+              ),
+            ],
+            const Spacer(),
+            Align(
+              alignment: Alignment.bottomRight,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeOut,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF2ECFC),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'View details',
+                      style: metaStyle?.copyWith(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(
+                      Icons.arrow_forward_rounded,
+                      color: AppColors.primary,
+                      size: 16,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatDateRange(DateTime start, DateTime end) {
+    String fmt(DateTime d) => '${d.month}/${d.day}/${d.year}';
+    return '${fmt(start)} - ${fmt(end)}';
+  }
+
+  Color _statusBackground(BazaarStatus status) {
+    switch (status) {
+      case BazaarStatus.upcoming:
+        return const Color(0x1AF59E0B);
+      case BazaarStatus.ongoing:
+        return const Color(0x1A2E7D32);
+      case BazaarStatus.ended:
+        return const Color(0x1A6B7280);
+    }
+  }
+
+  Color _statusForeground(BazaarStatus status) {
+    switch (status) {
+      case BazaarStatus.upcoming:
+        return const Color(0xFFB45309);
+      case BazaarStatus.ongoing:
+        return const Color(0xFF2E7D32);
+      case BazaarStatus.ended:
+        return const Color(0xFF4B5563);
+    }
+  }
+
+  Widget _emptyState(String message) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(_kCardRadius),
+            boxShadow: _kCardShadow,
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF2ECFC),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.info_outline,
+                  color: AppColors.primary,
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  message,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.black54,
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
               ),
             ],
           ),
         ),
       ],
+    );
+  }
+
+  Future<void> _openSoaDetails(
+    BuildContext context,
+    _PostBazaarData data,
+    BazaarEvent event,
+  ) async {
+    final eventSales = data.sales.where((sale) => sale.eventId == event.id).toList();
+    final grossSales = eventSales.fold<double>(0, (sum, sale) => sum + sale.total);
+    final location = data.locationNameByEventId[event.id] ?? 'Unknown Location';
+    final incentivePct = data.incentivePercentByEventId[event.id] ?? 10;
+    final bufferPct = data.bufferPercentByEventId[event.id] ?? 10;
+    final incentive = grossSales * (incentivePct / 100);
+    final buffer = grossSales * (bufferPct / 100);
+    final net = grossSales - incentive - buffer;
+
+    await _showDetailsDialog(
+      context: context,
+      title: event.name,
+      subtitle: location,
+      content: [
+        _receiptRow(
+          context,
+          label: 'Gross sales',
+          value: 'PHP ${grossSales.toStringAsFixed(2)}',
+        ),
+        _receiptRow(
+          context,
+          label: 'Incentive (${incentivePct.toStringAsFixed(1)}%)',
+          value: 'PHP ${incentive.toStringAsFixed(2)}',
+        ),
+        _receiptRow(
+          context,
+          label: 'Buffer (${bufferPct.toStringAsFixed(1)}%)',
+          value: 'PHP ${buffer.toStringAsFixed(2)}',
+        ),
+        const Divider(height: 18),
+        _receiptRow(
+          context,
+          label: 'Net amount',
+          value: 'PHP ${net.toStringAsFixed(2)}',
+          emphasize: true,
+        ),
+        _receiptRow(
+          context,
+          label: 'Transactions',
+          value: '${eventSales.length}',
+        ),
+      ],
+      footer: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Draft SOA generated for ${event.name}.')),
+              );
+            },
+            icon: const Icon(Icons.description_outlined),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+            ),
+            label: const Text('Generate Draft SOA'),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('PDF export queued for ${event.name}.')),
+              );
+            },
+            child: const Text('Export PDF'),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('CSV export queued for ${event.name}.')),
+              );
+            },
+            child: const Text('Export CSV'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openOrdersDetails(
+    BuildContext context,
+    _PostBazaarData data,
+    BazaarEvent event,
+  ) async {
+    final eventOrders = data.orders.where((order) => order.eventId == event.id).toList();
+    final cashCount = eventOrders.where((order) => order.paymentMethod == 'CASH').length;
+    final coopCount = eventOrders.where((order) => order.paymentMethod == 'COOP').length;
+    final customCount = eventOrders
+        .where(
+          (order) =>
+              order.paymentMethod != 'CASH' &&
+              order.paymentMethod != 'COOP',
+        )
+        .length;
+    final completedCount =
+        eventOrders.where((order) => order.orderStatus == OrderStatus.completed).length;
+    final pendingCount =
+        eventOrders.where((order) => order.orderStatus == OrderStatus.pending).length;
+    final incompleteCount =
+        eventOrders.where((order) => order.orderStatus == OrderStatus.incomplete).length;
+
+    await _showDetailsDialog(
+      context: context,
+      title: event.name,
+      subtitle: data.locationNameByEventId[event.id] ?? 'Unknown Location',
+      content: [
+        _receiptRow(
+          context,
+          label: 'Total orders',
+          value: '${eventOrders.length}',
+          emphasize: true,
+        ),
+        const Divider(height: 18),
+        _receiptRow(
+          context,
+          label: 'CASH',
+          value: '$cashCount',
+        ),
+        _receiptRow(
+          context,
+          label: 'COOP',
+          value: '$coopCount',
+        ),
+        _receiptRow(
+          context,
+          label: 'Custom methods',
+          value: '$customCount',
+        ),
+        const Divider(height: 18),
+        _receiptRow(
+          context,
+          label: 'Completed',
+          value: '$completedCount',
+        ),
+        _receiptRow(
+          context,
+          label: 'Pending',
+          value: '$pendingCount',
+        ),
+        _receiptRow(
+          context,
+          label: 'Incomplete',
+          value: '$incompleteCount',
+        ),
+      ],
+      footer: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Order list generated for ${event.name}.')),
+              );
+            },
+            icon: const Icon(Icons.receipt_long_outlined),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+            ),
+            label: const Text('Generate Order List'),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Exported order PDF for ${event.name}.')),
+              );
+            },
+            child: const Text('Export PDF'),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Exported order CSV for ${event.name}.')),
+              );
+            },
+            child: const Text('Export CSV'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openReconciliationDetails(
+    BuildContext context,
+    _PostBazaarData data,
+    BazaarEvent event,
+  ) async {
+    final eventSales = data.sales.where((sale) => sale.eventId == event.id).toList();
+    final eventOrders = data.orders.where((order) => order.eventId == event.id).toList();
+    final allocations = await context
+        .read<EventRepository>()
+        .allocationsForEventByAllocationKey(event.id);
+    if (!context.mounted) {
+      return;
+    }
+    final totalAllocated = allocations.values.fold<int>(0, (sum, qty) => sum + qty);
+    final canFinalize = event.status != BazaarStatus.ended;
+
+    await _showDetailsDialog(
+      context: context,
+      title: event.name,
+      subtitle: data.locationNameByEventId[event.id] ?? 'Unknown Location',
+      content: [
+        Text('Status: ${event.status.name.toUpperCase()}'),
+        Text('Allocated stock items: ${allocations.length}'),
+        Text('Total allocated quantity: $totalAllocated'),
+        Text('Sales records: ${eventSales.length}'),
+        Text('Order records: ${eventOrders.length}'),
+      ],
+      footer: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          IconButton(
+            onPressed: !canFinalize
+                ? null
+                : () async {
+                    final confirmed = await showConfirmationDialog(
+                      context: context,
+                      title: 'Finalize Bazaar',
+                      message:
+                          'Finalize ${event.name}? Allocated stock will be returned to master inventory and the bazaar will be marked ended.',
+                    );
+                    if (!confirmed || !context.mounted) {
+                      return;
+                    }
+
+                    final productRepository = context.read<ProductRepository>();
+                    final eventRepository = context.read<EventRepository>();
+                    final released = await productRepository.adjustStocksByAllocationKey(
+                      allocations,
+                    );
+                    if (!released) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Unable to return allocated stock.'),
+                          ),
+                        );
+                      }
+                      return;
+                    }
+
+                    await eventRepository.clearAllocationsForEvent(event.id);
+                    await eventRepository.finalizeEvent(event.id);
+
+                    if (!context.mounted) {
+                      return;
+                    }
+
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          '${event.name} finalized and stock returned to master inventory.',
+                        ),
+                      ),
+                    );
+                    await _refresh();
+                  },
+            icon: const Icon(Icons.flag_circle_outlined),
+            color: const Color(0xFF2E7D32),
+            tooltip: canFinalize ? 'Finalize Bazaar' : 'Bazaar already finalized',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showDetailsDialog({
+    required BuildContext context,
+    required String title,
+    required String subtitle,
+    required List<Widget> content,
+    required Widget footer,
+  }) async {
+    await showDialog<void>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.5),
+      builder: (dialogContext) => Dialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(_kCardRadius),
+        ),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 400),
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0.96, end: 1),
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            builder: (context, value, child) => Transform.scale(
+              scale: value,
+              child: Opacity(opacity: value, child: child),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                title,
+                                style: Theme.of(dialogContext).textTheme.titleMedium?.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                subtitle,
+                                style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
+                                      color: Colors.black54,
+                                    ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.of(dialogContext).pop(),
+                          tooltip: 'Close',
+                          icon: const Icon(Icons.close_rounded, size: 20),
+                        ),
+                      ],
+                    ),
+                    const Divider(height: 16),
+                    ...content,
+                    const SizedBox(height: 16),
+                    footer,
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _receiptRow(
+    BuildContext context, {
+    required String label,
+    required String value,
+    bool emphasize = false,
+  }) {
+    final labelStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: Colors.black54,
+          fontWeight: FontWeight.w600,
+        );
+    final valueStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
+          color: AppColors.text,
+          fontWeight: emphasize ? FontWeight.w700 : FontWeight.w600,
+        );
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          Expanded(child: Text(label, style: labelStyle)),
+          const SizedBox(width: 10),
+          Text(value, style: valueStyle),
+        ],
+      ),
+    );
+  }
+}
+
+class _AnimatedEntrance extends StatefulWidget {
+  const _AnimatedEntrance({
+    required this.child,
+    required this.delayMs,
+  });
+
+  final Widget child;
+  final int delayMs;
+
+  @override
+  State<_AnimatedEntrance> createState() => _AnimatedEntranceState();
+}
+
+class _AnimatedEntranceState extends State<_AnimatedEntrance> {
+  bool _visible = false;
+
+  @override
+  void initState() {
+    super.initState();
+    Future<void>.delayed(Duration(milliseconds: widget.delayMs), () {
+      if (!mounted) return;
+      setState(() {
+        _visible = true;
+      });
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSlide(
+      duration: const Duration(milliseconds: 320),
+      curve: Curves.easeOutCubic,
+      offset: _visible ? Offset.zero : const Offset(0, 0.06),
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 300),
+        opacity: _visible ? 1 : 0,
+        child: widget.child,
+      ),
+    );
+  }
+}
+
+class _InteractiveCard extends StatefulWidget {
+  const _InteractiveCard({
+    required this.onTap,
+    required this.child,
+    required this.borderRadius,
+  });
+
+  final VoidCallback onTap;
+  final Widget child;
+  final BorderRadius borderRadius;
+
+  @override
+  State<_InteractiveCard> createState() => _InteractiveCardState();
+}
+
+class _InteractiveCardState extends State<_InteractiveCard> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedScale(
+      scale: _pressed ? 0.99 : 1,
+      duration: const Duration(milliseconds: 120),
+      curve: Curves.easeOut,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: widget.onTap,
+          borderRadius: widget.borderRadius,
+          onTapDown: (_) => setState(() => _pressed = true),
+          onTapUp: (_) => setState(() => _pressed = false),
+          onTapCancel: () => setState(() => _pressed = false),
+          child: widget.child,
+        ),
+      ),
     );
   }
 }
@@ -293,11 +1010,21 @@ class _PostBazaarData {
     required this.sales,
     required this.orders,
     required this.products,
+    required this.events,
+    required this.allocationsByEventId,
     required this.eventNameById,
+    required this.locationNameByEventId,
+    required this.incentivePercentByEventId,
+    required this.bufferPercentByEventId,
   });
 
   final List<Sale> sales;
   final List<Order> orders;
   final List<Product> products;
+  final List<BazaarEvent> events;
+  final Map<int, Map<String, int>> allocationsByEventId;
   final Map<int, String> eventNameById;
+  final Map<int, String> locationNameByEventId;
+  final Map<int, double> incentivePercentByEventId;
+  final Map<int, double> bufferPercentByEventId;
 }

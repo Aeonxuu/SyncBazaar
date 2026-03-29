@@ -243,8 +243,8 @@ class DashboardScreen extends StatelessWidget {
                   height: pairedCardHeight,
                   child: AverageDailySalesCard(
                     dailySales: state.dailySales,
-                    trendText: '+4.2%',
-                    trendIsPositive: true,
+                    trendText: state.averageDailySalesTrendText,
+                    trendIsPositive: state.averageDailySalesTrendIsPositive,
                     showFilter: false,
                     filterOptions: state.salesFilterOptions,
                     selectedFilter: state.selectedSalesFilter,
@@ -279,8 +279,8 @@ class DashboardScreen extends StatelessWidget {
         const SizedBox(height: 12),
         AverageDailySalesCard(
           dailySales: state.dailySales,
-          trendText: '+4.2%',
-          trendIsPositive: true,
+          trendText: state.averageDailySalesTrendText,
+          trendIsPositive: state.averageDailySalesTrendIsPositive,
           showFilter: false,
           filterOptions: state.salesFilterOptions,
           selectedFilter: state.selectedSalesFilter,

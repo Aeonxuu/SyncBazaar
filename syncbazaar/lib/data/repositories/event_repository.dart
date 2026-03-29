@@ -10,9 +10,9 @@ class EventRepository {
       startDate: DateTime(2026, 3, 25),
       endDate: DateTime(2026, 3, 31),
       status: BazaarStatus.ongoing,
-      acceptedPaymentMethods: ['CASH', 'COOP', 'OTHER'],
+      acceptedPaymentMethods: ['CASH', 'COOP', 'GCASH'],
       customOtherMethods: [
-        BazaarPaymentMethod(name: 'GCASH', requiresEmployeeId: false),
+        const BazaarPaymentMethod(name: 'GCASH', requiresEmployeeId: false),
       ],
     ),
     BazaarEvent(
@@ -93,6 +93,10 @@ class EventRepository {
       acceptedPaymentMethods: event.acceptedPaymentMethods,
       customOtherMethods: event.customOtherMethods,
     );
+  }
+
+  Future<void> clearAllocationsForEvent(int eventId) async {
+    _allocationsByEventId.remove(eventId);
   }
 
   Future<Map<String, int>> allocationsForEventByAllocationKey(int eventId) async {
