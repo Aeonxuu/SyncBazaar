@@ -1,0 +1,11 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "type": "command",
+        "windows": "powershell -NoProfile -ExecutionPolicy Bypass -File .github/hooks/scripts/flutter-analyze-changed.ps1",
+        "timeout": 180
+      }
+    ]
+  }
+}
