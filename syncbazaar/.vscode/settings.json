@@ -1,0 +1,14 @@
+{
+  "dart.flutterSdkPath": "C:/dev/flutter",
+  "dart.env": {
+    "PUB_CACHE": "C:/dev/pub-cache",
+    "FLUTTER_ROOT": "C:/dev/flutter",
+    "DART": "C:/dev/flutter/bin/cache/dart-sdk/bin/dart.exe"
+  },
+  "terminal.integrated.env.windows": {
+    "PUB_CACHE": "C:/dev/pub-cache",
+    "FLUTTER_ROOT": "C:/dev/flutter",
+    "DART": "C:/dev/flutter/bin/cache/dart-sdk/bin/dart.exe",
+    "PATH": "C:/dev/flutter/bin;${env:PATH}"
+  }
+}

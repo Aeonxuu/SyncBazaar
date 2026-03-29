@@ -1,0 +1,6 @@
+Restore point created: 2026-03-29 17:20:01
+Archive: C:\Users\Lala School\Desktop\SyncBazaar_restorepoints\restore_20260329_172001.zip
+
+Restore command (PowerShell):
+Remove-Item -Recurse -Force "C:\Users\Lala School\Desktop\SyncBazaar\.vscode","C:\Users\Lala School\Desktop\SyncBazaar\syncbazaar";
+tar -xf "C:\Users\Lala School\Desktop\SyncBazaar_restorepoints\restore_20260329_172001.zip" -C "C:\Users\Lala School\Desktop\SyncBazaar"
