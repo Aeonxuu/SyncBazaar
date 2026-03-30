@@ -17,6 +17,14 @@ class SalesRepository {
     return _sales.where((s) => s.eventId == eventId).toList();
   }
 
+  Future<void> updateSaleOrderStatus(int saleId, OrderStatus status) async {
+    final idx = _sales.indexWhere((sale) => sale.id == saleId);
+    if (idx == -1) {
+      return;
+    }
+    _sales[idx] = _sales[idx].copyWith(orderStatus: status, synced: false);
+  }
+
   Future<double> totalForToday() async {
     final now = DateTime.now();
     return _sales

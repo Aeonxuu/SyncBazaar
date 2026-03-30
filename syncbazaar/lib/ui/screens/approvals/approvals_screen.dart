@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../bloc/approvals/approvals_cubit.dart';
 import '../../../core/constants/colors.dart';
 import '../../../models/approval_request.dart';
+import '../../widgets/confirmation_dialog.dart';
 
 class ApprovalsScreen extends StatelessWidget {
   const ApprovalsScreen({super.key});
@@ -138,6 +139,8 @@ class _ApprovalList extends StatelessWidget {
       itemBuilder: (context, i) {
         final req = requests[i];
         final title = _getTitle(req);
+        final locationName = _getLocationName(req);
+        final eventDateRange = _getEventDateRange(req);
 
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
@@ -183,12 +186,26 @@ class _ApprovalList extends StatelessWidget {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            'Event ID: ${req.eventId}',
+                            locationName,
                             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                   color: Colors.black54,
                                   fontWeight: FontWeight.w600,
                                 ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
+                          if (eventDateRange != null) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              eventDateRange,
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: Colors.black45,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -237,7 +254,54 @@ class _ApprovalList extends StatelessWidget {
   }
 
   String _getTitle(ApprovalRequest req) {
+    if (req.type == ApprovalType.stock) {
+      return 'STOCK REQUEST for ${_getEventName(req)}';
+    }
     return '${req.type.name.toUpperCase()} Request #${req.id}';
+  }
+
+  String _getEventName(ApprovalRequest req) {
+    final decoded = _safeDecode(req.detailsJson);
+    final rawName = decoded?['eventName'];
+    if (rawName is String && rawName.trim().isNotEmpty) {
+      return rawName.trim();
+    }
+    return 'Event ID: ${req.eventId}';
+  }
+
+  String? _getEventDateRange(ApprovalRequest req) {
+    final decoded = _safeDecode(req.detailsJson);
+    final startRaw = decoded?['dateStart'];
+    final endRaw = decoded?['dateEnd'];
+
+    final startDate = startRaw is String ? DateTime.tryParse(startRaw) : null;
+    final endDate = endRaw is String ? DateTime.tryParse(endRaw) : null;
+    if (startDate == null || endDate == null) {
+      return null;
+    }
+
+    final start = _formatDate(startDate);
+    final end = _formatDate(endDate);
+    return '$start - $end';
+  }
+
+  String _getLocationName(ApprovalRequest req) {
+    final decoded = _safeDecode(req.detailsJson);
+    final rawLocationName = decoded?['locationName'];
+    if (rawLocationName is String && rawLocationName.trim().isNotEmpty) {
+      return rawLocationName.trim();
+    }
+    final companyId = decoded?['companyId'];
+    if (companyId is int) {
+      return 'Location ID: $companyId';
+    }
+    return 'Location not specified';
+  }
+
+  String _formatDate(DateTime date) {
+    final month = date.month.toString().padLeft(2, '0');
+    final day = date.day.toString().padLeft(2, '0');
+    return '${date.year}-$month-$day';
   }
 
   Future<void> _showDetailsModal(BuildContext context, ApprovalRequest req) async {
@@ -303,8 +367,17 @@ class _ApprovalList extends StatelessWidget {
                         children: [
                           Expanded(
                             child: OutlinedButton.icon(
-                              onPressed: () {
+                              onPressed: () async {
+                                await context.read<ApprovalsCubit>().reject(req);
+                                if (!context.mounted) {
+                                  return;
+                                }
                                 Navigator.pop(context);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Request rejected.'),
+                                  ),
+                                );
                               },
                               icon: const Icon(Icons.close_rounded, size: 18),
                               style: OutlinedButton.styleFrom(
@@ -321,8 +394,39 @@ class _ApprovalList extends StatelessWidget {
                           const SizedBox(width: 10),
                           Expanded(
                             child: ElevatedButton.icon(
-                              onPressed: () {
+                              onPressed: () async {
+                                final confirmed = await showConfirmationDialog(
+                                  context: context,
+                                  title: 'Confirm Stock Allocation',
+                                  message: req.type == ApprovalType.stock
+                                      ? 'Approve stock allocation request for ${_getEventName(req)}?'
+                                      : 'Approve this request?',
+                                  confirmLabel: 'Approve',
+                                );
+                                if (confirmed != true) {
+                                  return;
+                                }
+
+                                final approved = await context.read<ApprovalsCubit>().approve(req);
+                                if (!context.mounted) {
+                                  return;
+                                }
+                                if (!approved) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        'Unable to approve. Please review requested allocations.',
+                                      ),
+                                    ),
+                                  );
+                                  return;
+                                }
                                 Navigator.pop(context);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Request approved and synced to POS.'),
+                                  ),
+                                );
                               },
                               icon: const Icon(Icons.check_rounded, size: 18),
                               style: ElevatedButton.styleFrom(
@@ -377,11 +481,11 @@ class _ApprovalList extends StatelessWidget {
             children: [
               Table(
                 columnWidths: const {
-                  0: FlexColumnWidth(2),
+                  0: FlexColumnWidth(2.3),
                   1: FlexColumnWidth(1.5),
-                  2: FlexColumnWidth(1.5),
-                  3: FlexColumnWidth(1),
-                  4: FlexColumnWidth(1),
+                  2: FlexColumnWidth(1.1),
+                  3: FlexColumnWidth(0.9),
+                  4: FlexColumnWidth(0.8),
                 },
                 border: TableBorder(
                   horizontalInside: BorderSide(
@@ -413,11 +517,17 @@ class _ApprovalList extends StatelessWidget {
                       ),
                       Padding(
                         padding: EdgeInsets.all(8),
-                        child: Text('Price', style: TextStyle(fontWeight: FontWeight.bold)),
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          child: Text('Price', style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
                       ),
                       Padding(
                         padding: EdgeInsets.all(8),
-                        child: Text('QTY', style: TextStyle(fontWeight: FontWeight.bold)),
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          child: Text('QTY', style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
                       ),
                     ],
                   ),
@@ -459,14 +569,20 @@ class _ApprovalList extends StatelessWidget {
                           delayMs: 35 * (rowIndex + 1) + 18,
                           child: Padding(
                             padding: const EdgeInsets.all(8),
-                            child: Text(price.toString()),
+                            child: Align(
+                              alignment: Alignment.centerRight,
+                              child: Text(price.toString()),
+                            ),
                           ),
                         ),
                         _animatedTableCell(
                           delayMs: 35 * (rowIndex + 1) + 24,
                           child: Padding(
                             padding: const EdgeInsets.all(8),
-                            child: Text(qty.toString()),
+                            child: Align(
+                              alignment: Alignment.centerRight,
+                              child: Text(qty.toString()),
+                            ),
                           ),
                         ),
                       ],

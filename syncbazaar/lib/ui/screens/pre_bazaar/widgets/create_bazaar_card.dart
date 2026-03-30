@@ -17,7 +17,13 @@ class CreateBazaarCard extends StatelessWidget {
     required this.onCancel,
     required this.onNext,
     required this.configuredPaymentMethods,
+    required this.employeeItems,
+    required this.selectedEmployeeId,
+    required this.assignedEmployees,
+    required this.onEmployeeChanged,
+    required this.onRemoveAssignedEmployee,
     this.isNextEnabled = true,
+    this.showEmployeeAssignment = false,
   });
 
   final TextEditingController eventNameController;
@@ -29,11 +35,22 @@ class CreateBazaarCard extends StatelessWidget {
   final VoidCallback onCancel;
   final VoidCallback onNext;
   final List<PaymentMethodMeta> configuredPaymentMethods;
+  final List<DropdownMenuItem<int>> employeeItems;
+  final int? selectedEmployeeId;
+  final List<MapEntry<int, String>> assignedEmployees;
+  final ValueChanged<int?> onEmployeeChanged;
+  final ValueChanged<int> onRemoveAssignedEmployee;
   final bool isNextEnabled;
+  final bool showEmployeeAssignment;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final hasSelectedEmployeeInItems = employeeItems
+      .map((item) => item.value)
+      .contains(selectedEmployeeId);
+    final effectiveSelectedEmployeeId =
+      hasSelectedEmployeeInItems ? selectedEmployeeId : null;
     final dateLabel = dateRange == null
         ? 'Select start and end date'
         : '${DateFormat('MMM d, y').format(dateRange!.start)} - ${DateFormat('MMM d, y').format(dateRange!.end)}';
@@ -49,7 +66,7 @@ class CreateBazaarCard extends StatelessWidget {
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.12),
+                  color: AppColors.primary.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(
@@ -171,6 +188,45 @@ class CreateBazaarCard extends StatelessWidget {
                   )
                   .toList(),
             ),
+          if (showEmployeeAssignment) ...[
+            const SizedBox(height: 12),
+            _fieldLabel(context, 'Assign employee(s)'),
+            const SizedBox(height: 4),
+            DropdownButtonFormField<int>(
+              initialValue: effectiveSelectedEmployeeId,
+              icon: const Icon(Icons.keyboard_arrow_down_rounded),
+              items: employeeItems,
+              onChanged: employeeItems.isEmpty ? null : onEmployeeChanged,
+              decoration: _filledDecoration(
+                hintText: employeeItems.isEmpty
+                    ? 'No available employees to assign'
+                    : 'Select employee',
+              ),
+            ),
+            const SizedBox(height: 8),
+            if (assignedEmployees.isEmpty)
+              Text(
+                'No employees assigned yet.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: Colors.black45,
+                  fontWeight: FontWeight.w600,
+                ),
+              )
+            else
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: assignedEmployees
+                    .map(
+                      (employee) => InputChip(
+                        label: Text(employee.value),
+                        onDeleted: () => onRemoveAssignedEmployee(employee.key),
+                        backgroundColor: const Color(0xFFF5F1FB),
+                      ),
+                    )
+                    .toList(),
+              ),
+          ],
           const Spacer(),
           const SizedBox(height: 12),
           Row(
@@ -183,7 +239,7 @@ class CreateBazaarCard extends StatelessWidget {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
-                  disabledBackgroundColor: AppColors.primary.withOpacity(0.35),
+                  disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.35),
                   disabledForegroundColor: Colors.white70,
                 ),
                 child: const Text('Next'),

@@ -49,18 +49,23 @@ class PosScreen extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Select Active Bazaar',
-            style: Theme.of(context).textTheme.headlineSmall,
-          ),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: state.events.map((event) {
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minWidth: constraints.maxWidth),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Select Active Bazaar',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  const SizedBox(height: 16),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: state.events.map((event) {
               final enabled = event.status == BazaarStatus.ongoing;
               final statusColor = event.status == BazaarStatus.ongoing
                   ? const Color(0xFF2E7D32)
@@ -222,9 +227,13 @@ class PosScreen extends StatelessWidget {
                   ),
                 ),
               );
-            }).toList(),
-          ),
-        ],
+                    }).toList(),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }

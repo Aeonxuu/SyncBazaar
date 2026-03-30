@@ -1,10 +1,15 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../bloc/approvals/approvals_cubit.dart';
 import '../../../bloc/dashboard/dashboard_cubit.dart';
 import '../../../bloc/inventory/inventory_cubit.dart';
 import '../../../bloc/orders/orders_cubit.dart';
 import '../../../bloc/pos/pos_cubit.dart';
+import '../../../bloc/pre_bazaar/pre_bazaar_cubit.dart';
+import '../../../bloc/staff/staff_cubit.dart';
 import '../../../data/repositories/event_repository.dart';
 import '../../../data/repositories/product_repository.dart';
 import '../../../data/repositories/settings_repository.dart';
@@ -38,6 +43,8 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
   final Map<String, int> _masterStockByItem = {};
   final Map<String, int> _availableStockAtDraftStart = {};
   final Map<String, ProductAllocationItem> _allocationMetaByKey = {};
+  final Set<int> _assignedEmployeeIds = {};
+  int? _selectedEmployeeId;
   List<Company> _locations = const [];
   Map<int, List<PaymentMethodMeta>> _locationPaymentMethodsByCompanyId = const {};
 
@@ -129,6 +136,8 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
       _dateRange = null;
       _selectedCompanyId = _locationItems.isEmpty ? null : _locationItems.first.value;
       _stockAllocationUnlocked = false;
+      _assignedEmployeeIds.clear();
+      _selectedEmployeeId = null;
     });
   }
 
@@ -149,6 +158,8 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
       _stockAllocationUnlocked = false;
       _allocations.updateAll((_, __) => 0);
       _masterStockByItem.clear();
+      _assignedEmployeeIds.clear();
+      _selectedEmployeeId = null;
     });
     await _syncLocationsFromRepository();
     await _syncStocksFromRepository();
@@ -230,6 +241,19 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
 
   Future<void> _handleSubmit() async {
     if (!widget.user.isAdminOrOwner) {
+      if (!_isBazaarInfoComplete) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Complete event name, location, and event dates before submitting.',
+              ),
+            ),
+          );
+        }
+        return;
+      }
+
       final approved = await showConfirmationDialog(
         context: context,
         title: 'Confirm Submission',
@@ -238,6 +262,75 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
       );
 
       if (approved == true && mounted) {
+        final categories = await context.read<ProductRepository>().listCategories();
+        final categoryNameById = {
+          for (final category in categories) category.id: category.name,
+        };
+        final selectedMethods = _selectedLocationPaymentMethods;
+        final locationName = _locations
+                .where((location) => location.id == _selectedCompanyId)
+                .map((location) => location.name)
+                .cast<String?>()
+                .firstWhere((value) => value != null, orElse: () => null) ??
+            'Unknown Location';
+        final allocationsByAllocationKey = <String, int>{
+          for (final entry in _allocations.entries)
+            if (entry.value > 0) entry.key: entry.value,
+        };
+
+        final selectedAllocations = _allocations.entries
+            .where((entry) => entry.value > 0)
+            .toList();
+
+        if (selectedAllocations.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Add at least one allocated quantity before submitting.'),
+            ),
+          );
+          return;
+        }
+
+        final allocationItems = selectedAllocations.map((entry) {
+          final meta = _allocationMetaByKey[entry.key];
+          final product = meta?.product;
+          return {
+            'name': product?.name ?? entry.key,
+            'category': product == null
+                ? '—'
+                : (categoryNameById[product.categoryId] ?? 'Uncategorized'),
+            'variant': meta?.option?.value ?? '—',
+            'price': product == null ? '—' : product.basePrice.toStringAsFixed(2),
+            'qty': entry.value,
+          };
+        }).toList();
+
+        final details = jsonEncode({
+          'eventName': _eventName.text.trim(),
+          'locationName': locationName,
+          'companyId': _selectedCompanyId,
+          'dateStart': _dateRange?.start.toIso8601String(),
+          'dateEnd': _dateRange?.end.toIso8601String(),
+          'acceptedPaymentMethods': selectedMethods.map((method) => method.name).toList(),
+          'customOtherMethods': selectedMethods
+              .map(
+                (method) => {
+                  'name': method.name,
+                  'requiresEmployeeId': method.requiresEmployeeId,
+                },
+              )
+              .toList(),
+          'allocationsByAllocationKey': allocationsByAllocationKey,
+          'items': allocationItems,
+        });
+
+        await context.read<PreBazaarCubit>().submitAllocation(
+          user: widget.user,
+          eventId: DateTime.now().millisecondsSinceEpoch,
+          detailsJson: details,
+        );
+
+        await context.read<ApprovalsCubit>().loadPending();
         widget.onOpenApprovals();
       }
       return;
@@ -307,7 +400,7 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
         return;
       }
 
-      await eventRepository.createEvent(
+      final createdEvent = await eventRepository.createEvent(
         name: _eventName.text.trim(),
         companyId: _selectedCompanyId ?? _locationItems.first.value ?? 1,
         startDate: _dateRange!.start,
@@ -323,6 +416,13 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
             .toList(),
         allocationsByAllocationKey: allocationsByAllocationKey,
       );
+
+      if (_assignedEmployeeIds.isNotEmpty) {
+        await context.read<StaffCubit>().assignEmployeesToBazaar(
+          eventId: createdEvent.id,
+          employeeIds: _assignedEmployeeIds.toList(),
+        );
+      }
 
       if (!mounted) {
         return;
@@ -343,6 +443,23 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
   @override
   Widget build(BuildContext context) {
     final isAdminOrOwner = widget.user.isAdminOrOwner;
+    final users = context.select((StaffCubit cubit) => cubit.state);
+    final employees = users.where((user) => user.role == UserRole.employee).toList();
+    final employeeNameById = {
+      for (final employee in employees) employee.id: employee.name,
+    };
+    final assignedEmployees = _assignedEmployeeIds
+        .map((id) => MapEntry(id, employeeNameById[id] ?? 'Employee #$id'))
+        .toList();
+    final employeeItems = employees
+        .map(
+          (employee) => DropdownMenuItem<int>(
+            value: employee.id,
+            child: Text(employee.name),
+          ),
+        )
+        .toList();
+
     final canGoNext = _isBazaarInfoComplete;
     final isStockAllocationUnlocked = _stockAllocationUnlocked ?? false;
     final canUseStockAllocation = isStockAllocationUnlocked;
@@ -360,6 +477,24 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
             companyItems: _locationItems,
             dateRange: _dateRange,
             configuredPaymentMethods: _selectedLocationPaymentMethods,
+            employeeItems: employeeItems,
+            selectedEmployeeId: _selectedEmployeeId,
+            assignedEmployees: assignedEmployees,
+            onEmployeeChanged: (value) {
+              if (value == null) {
+                return;
+              }
+              setState(() {
+                _selectedEmployeeId = value;
+                _assignedEmployeeIds.add(value);
+              });
+            },
+            onRemoveAssignedEmployee: (employeeId) {
+              setState(() {
+                _assignedEmployeeIds.remove(employeeId);
+              });
+            },
+            showEmployeeAssignment: isAdminOrOwner,
             onCompanyChanged: (value) {
               setState(() => _selectedCompanyId = value);
             },

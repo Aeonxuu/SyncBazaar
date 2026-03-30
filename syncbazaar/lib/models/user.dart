@@ -17,6 +17,25 @@ class AppUser {
 
   bool get isAdminOrOwner => role == UserRole.admin || role == UserRole.owner;
 
+  AppUser copyWith({
+    int? id,
+    String? name,
+    String? email,
+    UserRole? role,
+    int? assignedEventId,
+    bool clearAssignedEventId = false,
+  }) {
+    return AppUser(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      email: email ?? this.email,
+      role: role ?? this.role,
+      assignedEventId: clearAssignedEventId
+          ? null
+          : (assignedEventId ?? this.assignedEventId),
+    );
+  }
+
   Map<String, dynamic> toJson() => {
     'id': id,
     'name': name,

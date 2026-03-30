@@ -92,7 +92,7 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
       child: MultiBlocProvider(
         providers: [
           BlocProvider(
-            create: (_) => AuthCubit(_authRepository)..restoreSession(),
+            create: (_) => AuthCubit(_authRepository),
           ),
           BlocProvider(
             create: (_) => DashboardCubit(
@@ -110,14 +110,24 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
               _settingsRepository,
             ),
           ),
-          BlocProvider(create: (_) => OrdersCubit(_ordersRepository)..load()),
           BlocProvider(
-            create: (_) => ApprovalsCubit(_approvalsRepository)..loadPending(),
+            create: (_) => OrdersCubit(
+              _ordersRepository,
+              _salesRepository,
+            )..load(),
+          ),
+          BlocProvider(
+            create: (_) => ApprovalsCubit(
+              _approvalsRepository,
+              _eventRepository,
+              _productRepository,
+              _authRepository,
+            )..loadPending(),
           ),
           BlocProvider(
             create: (_) => InventoryCubit(_productRepository)..load(),
           ),
-          BlocProvider(create: (_) => StaffCubit()),
+          BlocProvider(create: (_) => StaffCubit(_authRepository)..load()),
           BlocProvider(
             create: (_) => SettingsCubit(_settingsRepository)..load(),
           ),
@@ -205,6 +215,9 @@ class _MainShellState extends State<MainShell> {
     if (section == AppSection.orders) {
       context.read<OrdersCubit>().load();
     }
+    if (section == AppSection.approvals) {
+      context.read<ApprovalsCubit>().loadPending();
+    }
   }
 
   List<AppNavItem> _buildNavItems(AppUser user) {
@@ -252,11 +265,12 @@ class _MainShellState extends State<MainShell> {
           label: 'Staff List',
           icon: Icons.groups_2_outlined,
         ),
-      const AppNavItem(
-        section: AppSection.location,
-        label: 'Location',
-        icon: Icons.place_outlined,
-      ),
+      if (canApprove)
+        const AppNavItem(
+          section: AppSection.location,
+          label: 'Location',
+          icon: Icons.place_outlined,
+        ),
       const AppNavItem(
         section: AppSection.settings,
         label: 'Settings',
@@ -270,7 +284,8 @@ class _MainShellState extends State<MainShell> {
     final section = _navItems[_selectedIndex].section;
 
     return Scaffold(
-      resizeToAvoidBottomInset: section != AppSection.pos,
+      resizeToAvoidBottomInset:
+          section != AppSection.pos && section != AppSection.staff,
       backgroundColor: AppColors.background,
       body: Row(
         children: [
@@ -328,7 +343,10 @@ class _MainShellState extends State<MainShell> {
             final index = _navItems.indexWhere(
               (i) => i.section == AppSection.approvals,
             );
-            if (index != -1) setState(() => _selectedIndex = index);
+            if (index != -1) {
+              setState(() => _selectedIndex = index);
+              context.read<ApprovalsCubit>().loadPending();
+            }
           },
         );
       case AppSection.pos:

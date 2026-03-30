@@ -146,19 +146,14 @@ class PosCubit extends Cubit<PosState> {
     final categories = await _productRepository.listCategories();
     final globalMethods = await _settingsRepository.paymentMethods();
     _basePaymentMethods = globalMethods;
-    final selectedEvent =
-        events.where((e) => e.status == BazaarStatus.ongoing).cast<BazaarEvent?>().firstWhere(
-              (e) => e != null,
-              orElse: () => null,
-            );
-    final methods = _methodsForEvent(selectedEvent, globalMethods);
+    final methods = _methodsForEvent(null, globalMethods);
     final categoryNames = {
       for (final category in categories) category.id: category.name,
     };
     emit(
       state.copyWith(
         events: events,
-        selectedEvent: selectedEvent,
+        clearSelectedEvent: true,
         products: products,
         filteredProducts: products,
         paymentMethods: methods,
@@ -168,7 +163,33 @@ class PosCubit extends Cubit<PosState> {
     );
   }
 
-  void selectEvent(BazaarEvent event) {
+  Future<void> selectEvent(BazaarEvent event) async {
+    final allProducts = await _productRepository.listProducts();
+    final allCategories = await _productRepository.listCategories();
+    final allocations = await _eventRepository.allocationsForEventByAllocationKey(
+      event.id,
+    );
+
+    final allocatedProductIds = allocations.entries
+        .where((entry) => entry.value > 0)
+        .map((entry) => int.tryParse(entry.key.split(':').first))
+        .whereType<int>()
+        .toSet();
+
+    final allowedProducts = allocatedProductIds.isEmpty
+        ? <Product>[]
+        : allProducts
+            .where((product) => allocatedProductIds.contains(product.id))
+            .toList();
+
+    final allowedCategoryIds = allowedProducts
+        .map((product) => product.categoryId)
+        .toSet();
+    final categoryNames = {
+      for (final category in allCategories)
+        if (allowedCategoryIds.contains(category.id)) category.id: category.name,
+    };
+
     final methods = _methodsForEvent(
       event,
       _basePaymentMethods.isEmpty ? state.paymentMethods : _basePaymentMethods,
@@ -176,6 +197,10 @@ class PosCubit extends Cubit<PosState> {
     emit(
       state.copyWith(
         selectedEvent: event,
+        products: allowedProducts,
+        filteredProducts: allowedProducts,
+        category: 'All',
+        categoryNames: categoryNames,
         paymentMethods: methods,
         selectedPaymentMethod: methods.isEmpty ? 'CASH' : methods.first.name,
       ),

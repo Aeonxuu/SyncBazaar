@@ -1,6 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../data/repositories/orders_repository.dart';
+import '../../data/repositories/sales_repository.dart';
 import '../../models/order.dart';
 import '../../models/sale.dart';
 import '../../models/user.dart';
@@ -56,16 +57,22 @@ class OrdersState {
 }
 
 class OrdersCubit extends Cubit<OrdersState> {
-  OrdersCubit(this._ordersRepository) : super(const OrdersState());
+  OrdersCubit(this._ordersRepository, this._salesRepository)
+      : super(const OrdersState());
 
   final OrdersRepository _ordersRepository;
+  final SalesRepository _salesRepository;
 
   Future<void> load() async {
     emit(state.copyWith(orders: await _ordersRepository.listOrders()));
   }
 
   Future<void> updateStatus(int orderId, OrderStatus status) async {
+    final order = await _ordersRepository.getOrderById(orderId);
     await _ordersRepository.updateOrderStatus(orderId, status);
+    if (order != null) {
+      await _salesRepository.updateSaleOrderStatus(order.saleId, status);
+    }
     await load();
   }
 

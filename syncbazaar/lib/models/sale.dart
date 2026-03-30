@@ -28,4 +28,24 @@ class Sale {
   final DateTime timestamp;
   final OrderStatus orderStatus;
   final bool synced;
+
+  Sale copyWith({
+    OrderStatus? orderStatus,
+    bool? synced,
+  }) {
+    return Sale(
+      id: id,
+      eventId: eventId,
+      productId: productId,
+      variantOptionId: variantOptionId,
+      customerName: customerName,
+      employeeId: employeeId,
+      paymentMethod: paymentMethod,
+      qty: qty,
+      total: total,
+      timestamp: timestamp,
+      orderStatus: orderStatus ?? this.orderStatus,
+      synced: synced ?? this.synced,
+    );
+  }
 }

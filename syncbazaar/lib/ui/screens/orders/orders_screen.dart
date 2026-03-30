@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../bloc/dashboard/dashboard_cubit.dart';
 import '../../../bloc/orders/orders_cubit.dart';
 import '../../../bloc/pos/pos_cubit.dart';
 import '../../../core/constants/colors.dart';
@@ -422,6 +423,8 @@ class _OrdersScreenState extends State<OrdersScreen> {
                         );
                         if (!ok || !context.mounted) return;
                         await context.read<OrdersCubit>().updateStatus(order.id, newStatus);
+                        if (!context.mounted) return;
+                        await context.read<DashboardCubit>().load(widget.user);
                       },
                     ),
                   ),

@@ -27,6 +27,14 @@ class OrdersRepository {
     _orders[idx] = _orders[idx].copyWith(orderStatus: status, synced: false);
   }
 
+  Future<Order?> getOrderById(int orderId) async {
+    final idx = _orders.indexWhere((o) => o.id == orderId);
+    if (idx == -1) {
+      return null;
+    }
+    return _orders[idx];
+  }
+
   Future<List<Order>> listUnsyncedOrders() async =>
       _orders.where((o) => !o.synced).toList();
 }

@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../data/repositories/approvals_repository.dart';
@@ -38,7 +36,7 @@ class PreBazaarCubit extends Cubit<PreBazaarState> {
   Future<void> submitAllocation({
     required AppUser user,
     required int eventId,
-    required Map<int, int> allocations,
+    required String detailsJson,
   }) async {
     if (user.isAdminOrOwner) {
       return;
@@ -50,7 +48,7 @@ class PreBazaarCubit extends Cubit<PreBazaarState> {
         eventId: eventId,
         requesterId: user.id,
         status: ApprovalStatus.pending,
-        detailsJson: jsonEncode({'allocations': allocations}),
+        detailsJson: detailsJson,
         synced: false,
       ),
     );

@@ -25,7 +25,7 @@ class AuthCubit extends Cubit<AuthState> {
       emit(
         state.copyWith(
           isLoading: false,
-          error: 'Invalid credentials. Use password 123456.',
+          error: 'Invalid credentials.',
         ),
       );
       return;
