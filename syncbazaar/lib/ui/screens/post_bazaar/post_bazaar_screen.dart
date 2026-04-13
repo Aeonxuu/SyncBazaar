@@ -295,39 +295,117 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
     bool compactCardLayout = false,
     required ValueChanged<BazaarEvent> onOpenDetails,
   }) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return GridView.builder(
-          padding: EdgeInsets.symmetric(
-            horizontal: compactCardLayout ? 36 : 16,
-            vertical: 16,
-          ),
-          itemCount: events.length,
-          gridDelegate: compactCardLayout
-              ? const SliverGridDelegateWithMaxCrossAxisExtent(
-                  maxCrossAxisExtent: 300,
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 12,
-                  childAspectRatio: 0.8,
-                )
-              : SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: constraints.maxWidth >= 900 ? 2 : 1,
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 12,
-                  childAspectRatio:
-                      constraints.maxWidth >= 900 ? 0.95 : 0.9,
-                ),
-          itemBuilder: (context, index) {
-            final event = events[index];
-            return _AnimatedEntrance(
-              delayMs: 40 * (index % 8),
-              child: _eventCard(
-                event: event,
-                locationName: locationNameByEventId[event.id] ?? 'Unknown Location',
-                onTap: () => onOpenDetails(event),
+    return ListView.separated(
+      padding: EdgeInsets.symmetric(
+        horizontal: compactCardLayout ? 36 : 16,
+        vertical: 16,
+      ),
+      itemCount: events.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      itemBuilder: (context, index) {
+        final event = events[index];
+        final locationName = locationNameByEventId[event.id] ?? 'Unknown Location';
+
+        return _AnimatedEntrance(
+          delayMs: 40 * (index % 8),
+          child: _InteractiveCard(
+            onTap: () => onOpenDetails(event),
+            borderRadius: BorderRadius.circular(_kCardRadius),
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(_kCardRadius),
+                boxShadow: _kCardShadow,
               ),
-            );
-          },
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          event.name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          locationName,
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Colors.black54,
+                                fontWeight: FontWeight.w600,
+                              ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _formatDateRange(event.startDate, event.endDate),
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Colors.black54,
+                                fontWeight: FontWeight.w600,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _statusBackground(event.status),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          event.status.name.toUpperCase(),
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: _statusForeground(event.status),
+                                fontWeight: FontWeight.w700,
+                              ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF2ECFC),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'View details',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                            ),
+                            const SizedBox(width: 4),
+                            const Icon(
+                              Icons.arrow_forward_rounded,
+                              color: AppColors.primary,
+                              size: 16,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
         );
       },
     );
@@ -607,10 +685,10 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
             onPressed: () {
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('PDF export queued for ${event.name}.')),
+                SnackBar(content: Text('DOCX export queued for ${event.name}.')),
               );
             },
-            child: const Text('Export PDF'),
+            child: const Text('Export DOCX'),
           ),
           const SizedBox(height: 8),
           OutlinedButton(
@@ -715,10 +793,10 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
             onPressed: () {
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Exported order PDF for ${event.name}.')),
+                SnackBar(content: Text('Exported order DOCX for ${event.name}.')),
               );
             },
-            child: const Text('Export PDF'),
+            child: const Text('Export DOCX'),
           ),
           const SizedBox(height: 8),
           OutlinedButton(

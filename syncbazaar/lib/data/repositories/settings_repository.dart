@@ -3,11 +3,11 @@ import '../../models/company.dart';
 class PaymentMethodMeta {
   const PaymentMethodMeta({
     required this.name,
-    this.requiresEmployeeId = false,
+    this.extraFieldLabel,
   });
 
   final String name;
-  final bool requiresEmployeeId;
+  final String? extraFieldLabel;
 }
 
 class SettingsRepository {
@@ -34,7 +34,7 @@ class SettingsRepository {
       address: 'Lucena City, Quezon',
       contact: '',
       incentivePercent: 10,
-      bufferPercent: 10,
+      bufferPercent: 0,
     ),
     const Company(
       id: 4,
@@ -42,7 +42,7 @@ class SettingsRepository {
       address: 'Lucena City, Quezon',
       contact: '',
       incentivePercent: 10,
-      bufferPercent: 10,
+      bufferPercent: 0,
     ),
     const Company(
       id: 5,
@@ -60,30 +60,24 @@ class SettingsRepository {
   final Map<int, List<PaymentMethodMeta>> _locationPaymentMethodsByCompanyId = {
     1: const [
       PaymentMethodMeta(name: 'CASH'),
-      PaymentMethodMeta(name: 'COOP', requiresEmployeeId: true),
       PaymentMethodMeta(name: 'GCASH'),
     ],
     2: const [
       PaymentMethodMeta(name: 'CASH'),
-      PaymentMethodMeta(name: 'COOP', requiresEmployeeId: true),
     ],
     3: const [
       PaymentMethodMeta(name: 'CASH'),
-      PaymentMethodMeta(name: 'COOP', requiresEmployeeId: true),
     ],
     4: const [
       PaymentMethodMeta(name: 'CASH'),
-      PaymentMethodMeta(name: 'COOP', requiresEmployeeId: true),
     ],
     5: const [
       PaymentMethodMeta(name: 'CASH'),
-      PaymentMethodMeta(name: 'COOP', requiresEmployeeId: true),
     ],
   };
 
   final List<PaymentMethodMeta> _paymentMethods = [
     const PaymentMethodMeta(name: 'CASH'),
-    const PaymentMethodMeta(name: 'COOP', requiresEmployeeId: true),
   ];
 
   Future<List<Company>> listCompanies() async => _companies;
@@ -96,7 +90,6 @@ class SettingsRepository {
         company.id,
         () => const [
           PaymentMethodMeta(name: 'CASH'),
-          PaymentMethodMeta(name: 'COOP', requiresEmployeeId: true),
         ],
       );
       return;
@@ -124,7 +117,6 @@ class SettingsRepository {
     _companies.add(created);
     _locationPaymentMethodsByCompanyId[created.id] = const [
       PaymentMethodMeta(name: 'CASH'),
-      PaymentMethodMeta(name: 'COOP', requiresEmployeeId: true),
     ];
     return created;
   }
@@ -141,7 +133,6 @@ class SettingsRepository {
       _locationPaymentMethodsByCompanyId[companyId] ??
           const [
             PaymentMethodMeta(name: 'CASH'),
-            PaymentMethodMeta(name: 'COOP', requiresEmployeeId: true),
           ],
     );
   }
@@ -167,8 +158,16 @@ class SettingsRepository {
         );
         if (idx == -1) {
           methods.add(method);
-        } else if (method.requiresEmployeeId && !methods[idx].requiresEmployeeId) {
-          methods[idx] = method;
+        } else {
+          final existing = methods[idx];
+          final shouldUpgrade =
+              (existing.extraFieldLabel == null ||
+                  existing.extraFieldLabel!.trim().isEmpty) &&
+              method.extraFieldLabel != null &&
+              method.extraFieldLabel!.trim().isNotEmpty;
+          if (shouldUpgrade) {
+            methods[idx] = method;
+          }
         }
       }
     }
@@ -206,7 +205,7 @@ class SettingsRepository {
       );
       final next = PaymentMethodMeta(
         name: name,
-        requiresEmployeeId: item.requiresEmployeeId,
+        extraFieldLabel: _sanitizeExtraFieldLabel(item.extraFieldLabel),
       );
       if (existing == -1) {
         normalized.add(next);
@@ -215,5 +214,19 @@ class SettingsRepository {
       }
     }
     return normalized;
+  }
+
+  String? _sanitizeExtraFieldLabel(String? raw) {
+    if (raw == null) {
+      return null;
+    }
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) {
+      return null;
+    }
+    if (trimmed.length <= 28) {
+      return trimmed;
+    }
+    return trimmed.substring(0, 28);
   }
 }

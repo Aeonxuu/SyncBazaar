@@ -12,23 +12,41 @@ class AuthRepository {
   final List<AppUser> _users = [
     AppUser(
       id: 1,
-      name: 'Admin Demo',
+      name: 'Amrei',
       email: 'admin@syncbazaar.com',
       role: UserRole.admin,
     ),
     AppUser(
       id: 2,
-      name: 'Owner Demo',
+      name: 'Lalaine',
       email: 'owner@syncbazaar.com',
       role: UserRole.owner,
     ),
     AppUser(
       id: 3,
-      name: 'Employee Demo',
+      name: 'Via',
       email: 'employee@syncbazaar.com',
       role: UserRole.employee,
       assignedEventId: 1,
       assignedEventIds: [1],
+    ),
+    AppUser(
+      id: 4,
+      name: 'Missy',
+      email: 'missy@syncbazaar.com',
+      role: UserRole.employee,
+    ),
+    AppUser(
+      id: 5,
+      name: 'TG',
+      email: 'tg@syncbazaar.com',
+      role: UserRole.employee,
+    ),
+    AppUser(
+      id: 6,
+      name: 'Sen',
+      email: 'sen@syncbazaar.com',
+      role: UserRole.employee,
     ),
   ];
 
@@ -36,6 +54,9 @@ class AuthRepository {
     1: _defaultPassword,
     2: _defaultPassword,
     3: _defaultPassword,
+    4: 'missy123',
+    5: 'tg123',
+    6: 'sen123',
   };
 
   Future<List<AppUser>> listUsers() async => List<AppUser>.from(_users);

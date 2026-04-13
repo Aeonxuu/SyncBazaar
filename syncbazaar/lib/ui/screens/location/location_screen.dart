@@ -106,12 +106,11 @@ class LocationScreen extends StatelessWidget {
         ...existingMethods
       else ...const [
         PaymentMethodMeta(name: 'CASH'),
-        PaymentMethodMeta(name: 'COOP', requiresEmployeeId: true),
       ],
     ];
 
     final methodNameController = TextEditingController();
-    var methodRequiresId = false;
+    final methodExtraFieldController = TextEditingController();
     var isPaymentStep = !isCreate;
 
     await showDialog<void>(
@@ -131,7 +130,11 @@ class LocationScreen extends StatelessWidget {
 
             void addMethod() {
               final name = methodNameController.text.trim();
+              final extraField = methodExtraFieldController.text.trim();
               if (name.isEmpty) {
+                return;
+              }
+              if (extraField.length > 28) {
                 return;
               }
               final exists = methods.any(
@@ -144,11 +147,60 @@ class LocationScreen extends StatelessWidget {
                 methods.add(
                   PaymentMethodMeta(
                     name: name,
-                    requiresEmployeeId: methodRequiresId,
+                    extraFieldLabel: extraField.isEmpty ? null : extraField,
                   ),
                 );
                 methodNameController.clear();
-                methodRequiresId = false;
+                methodExtraFieldController.clear();
+              });
+            }
+
+            Future<void> editExtraField(int index) async {
+              final initial = methods[index].extraFieldLabel ?? '';
+              final controller = TextEditingController(text: initial);
+              final saved = await showDialog<bool>(
+                context: context,
+                builder: (context) {
+                  return AlertDialog(
+                    title: Text('Extra field for ${methods[index].name}'),
+                    content: TextField(
+                      controller: controller,
+                      maxLength: 28,
+                      decoration: const InputDecoration(
+                        hintText: 'Optional (e.g. Employee ID)',
+                      ),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Cancel'),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          controller.clear();
+                          Navigator.pop(context, true);
+                        },
+                        child: const Text('Clear'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('Save'),
+                      ),
+                    ],
+                  );
+                },
+              );
+
+              if (saved != true) {
+                return;
+              }
+
+              final nextLabel = controller.text.trim();
+              setState(() {
+                methods[index] = PaymentMethodMeta(
+                  name: methods[index].name,
+                  extraFieldLabel: nextLabel.isEmpty ? null : nextLabel,
+                );
               });
             }
 
@@ -224,8 +276,7 @@ class LocationScreen extends StatelessWidget {
                             final index = entry.key;
                             final method = entry.value;
                             final lockDefault =
-                                method.name.toUpperCase() == 'CASH' ||
-                                method.name.toUpperCase() == 'COOP';
+                                method.name.toUpperCase() == 'CASH';
                             return Container(
                               margin: const EdgeInsets.only(bottom: 8),
                               padding: const EdgeInsets.symmetric(
@@ -239,30 +290,31 @@ class LocationScreen extends StatelessWidget {
                               child: Row(
                                 children: [
                                   Expanded(
-                                    child: Text(
-                                      method.name,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                      ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          method.name,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        if (method.extraFieldLabel != null &&
+                                            method.extraFieldLabel!.trim().isNotEmpty)
+                                          Text(
+                                            'Extra field: ${method.extraFieldLabel}',
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodySmall
+                                                ?.copyWith(color: Colors.black54),
+                                          ),
+                                      ],
                                     ),
                                   ),
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Text('Employee ID'),
-                                      const SizedBox(width: 4),
-                                      Switch.adaptive(
-                                        value: method.requiresEmployeeId,
-                                        onChanged: (value) {
-                                          setState(() {
-                                            methods[index] = PaymentMethodMeta(
-                                              name: method.name,
-                                              requiresEmployeeId: value,
-                                            );
-                                          });
-                                        },
-                                      ),
-                                    ],
+                                  TextButton.icon(
+                                    onPressed: () => editExtraField(index),
+                                    icon: const Icon(Icons.edit_outlined, size: 16),
+                                    label: const Text('Field'),
                                   ),
                                   IconButton(
                                     onPressed: lockDefault
@@ -289,18 +341,11 @@ class LocationScreen extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(width: 8),
-                            Column(
-                              children: [
-                                const Text('Needs ID'),
-                                Switch.adaptive(
-                                  value: methodRequiresId,
-                                  onChanged: (value) {
-                                    setState(() {
-                                      methodRequiresId = value;
-                                    });
-                                  },
-                                ),
-                              ],
+                            Expanded(
+                              child: _field(
+                                methodExtraFieldController,
+                                hintText: 'Extra field label (optional)',
+                              ),
                             ),
                             const SizedBox(width: 8),
                             ElevatedButton(
@@ -312,6 +357,13 @@ class LocationScreen extends StatelessWidget {
                               child: const Text('Add'),
                             ),
                           ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Extra field label max: 28 characters.',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Colors.black54,
+                              ),
                         ),
                         const SizedBox(height: 14),
                         Row(
@@ -397,6 +449,17 @@ class LocationScreen extends StatelessWidget {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text('At least one payment method is required.'),
+                        ),
+                      );
+                      return;
+                    }
+
+                    if (methods.any(
+                      (method) => (method.extraFieldLabel?.length ?? 0) > 28,
+                    )) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Extra field label must be 28 characters or less.'),
                         ),
                       );
                       return;

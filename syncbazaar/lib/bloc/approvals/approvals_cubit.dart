@@ -82,7 +82,7 @@ class ApprovalsCubit extends Cubit<List<ApprovalRequest>> {
       startDate: startDate,
       endDate: endDate,
       acceptedPaymentMethods: acceptedPaymentMethods.isEmpty
-          ? const ['CASH', 'COOP']
+          ? const ['CASH']
           : acceptedPaymentMethods,
       customOtherMethods: customOtherMethods,
       allocationsByAllocationKey: allocationsByAllocationKey,
@@ -120,10 +120,24 @@ class ApprovalsCubit extends Cubit<List<ApprovalRequest>> {
         .map(
           (item) => BazaarPaymentMethod(
             name: item['name']?.toString() ?? 'OTHER',
-            requiresEmployeeId: item['requiresEmployeeId'] == true,
+            extraFieldLabel: _parseExtraFieldLabel(item),
           ),
         )
         .toList();
+  }
+
+  String? _parseExtraFieldLabel(Map<dynamic, dynamic> item) {
+    final raw = item['extraFieldLabel'];
+    if (raw is String && raw.trim().isNotEmpty) {
+      final trimmed = raw.trim();
+      return trimmed.length <= 28 ? trimmed : trimmed.substring(0, 28);
+    }
+
+    if (item['requiresEmployeeId'] == true) {
+      return 'Employee ID';
+    }
+
+    return null;
   }
 
   Map<String, int> _parseAllocations(dynamic raw) {

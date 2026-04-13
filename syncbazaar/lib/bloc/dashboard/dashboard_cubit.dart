@@ -1,11 +1,14 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../data/repositories/event_repository.dart';
+import '../../data/repositories/product_repository.dart';
 import '../../data/repositories/sales_repository.dart';
 import '../../models/bazaar_event.dart';
 import '../../models/sale.dart';
 import '../../models/user.dart';
 import '../../services/dashboard_insights_service.dart';
+
+const String _employeeScopeFilter = 'My bazaars';
 
 class DashboardKpiData {
   const DashboardKpiData({
@@ -159,18 +162,23 @@ class DashboardCubit extends Cubit<DashboardState> {
   DashboardCubit(
     this._eventRepository,
     this._salesRepository, {
+    required ProductRepository productRepository,
     DashboardInsightsService? insightsService,
   }) : _insightsService =
            insightsService ?? const LocalDashboardInsightsService(),
+       _productRepository = productRepository,
        super(const DashboardState());
 
   final EventRepository _eventRepository;
   final SalesRepository _salesRepository;
+  final ProductRepository _productRepository;
   final DashboardInsightsService _insightsService;
 
   List<CustomerHistoryData> _allOrders = const [];
   List<Sale> _visibleSales = const [];
   Map<int, String> _eventNameById = const {};
+  Map<int, String> _productNameById = const {};
+  Map<int, String> _variantLabelByOptionId = const {};
 
   Future<void> load(AppUser user) async {
     final rawEvents = await _eventRepository.listVisibleForUser(user);
@@ -183,13 +191,11 @@ class DashboardCubit extends Cubit<DashboardState> {
     final summaryBazaarNames = summaries.map((s) => s.bazaarName).toList();
     final defaultFilter = user.isAdminOrOwner
         ? 'All bazaars'
-        : (summaryBazaarNames.isNotEmpty
-              ? summaryBazaarNames.first
-              : 'My bazaar');
+      : _employeeScopeFilter;
 
     final filters = user.isAdminOrOwner
         ? <String>{'All bazaars', ...summaryBazaarNames}.toList()
-        : <String>[defaultFilter];
+      : const <String>[_employeeScopeFilter];
 
     final allSales = await _salesRepository.listSales();
     final eventNameById = {for (final event in events) event.id: event.name};
@@ -199,6 +205,17 @@ class DashboardCubit extends Cubit<DashboardState> {
 
     _visibleSales = salesForVisibleEvents;
     _eventNameById = eventNameById;
+
+    final products = await _productRepository.listProducts();
+    _productNameById = {for (final product in products) product.id: product.name};
+    final variantLabels = <int, String>{};
+    for (final product in products) {
+      final options = await _productRepository.variantOptionsForProduct(product.id);
+      for (final option in options) {
+        variantLabels[option.id] = option.value;
+      }
+    }
+    _variantLabelByOptionId = variantLabels;
 
     final metrics = _metricsForFilter(
       selectedFilter: defaultFilter,
@@ -218,6 +235,8 @@ class DashboardCubit extends Cubit<DashboardState> {
         events: events,
         sales: salesForVisibleEvents,
         eventNameById: eventNameById,
+        productNameById: _productNameById,
+        variantLabelByOptionId: _variantLabelByOptionId,
       ),
     );
 
@@ -316,6 +335,8 @@ class DashboardCubit extends Cubit<DashboardState> {
         events: state.events,
         sales: _visibleSales,
         eventNameById: _eventNameById,
+        productNameById: _productNameById,
+        variantLabelByOptionId: _variantLabelByOptionId,
       ),
     );
 
@@ -552,6 +573,7 @@ _DashboardMetrics _metricsForFilter({
       .fold<double>(0, (sum, sale) => sum + sale.total);
 
   final filteredEvents = selectedFilter == 'All bazaars'
+      || selectedFilter == _employeeScopeFilter
       ? events
       : events.where((event) => event.name == selectedFilter).toList();
 
@@ -570,7 +592,8 @@ List<Sale> _filterSalesByBazaar({
   required String selectedFilter,
   required Map<int, String> eventNameById,
 }) {
-  if (selectedFilter == 'All bazaars') {
+  if (selectedFilter == 'All bazaars' ||
+      selectedFilter == _employeeScopeFilter) {
     return sales;
   }
 

@@ -9,6 +9,8 @@ class DashboardInsightsRequest {
     required this.events,
     required this.sales,
     required this.eventNameById,
+    required this.productNameById,
+    required this.variantLabelByOptionId,
   });
 
   final AppUser user;
@@ -16,6 +18,8 @@ class DashboardInsightsRequest {
   final List<BazaarEvent> events;
   final List<Sale> sales;
   final Map<int, String> eventNameById;
+  final Map<int, String> productNameById;
+  final Map<int, String> variantLabelByOptionId;
 }
 
 abstract class DashboardInsightsService {
@@ -24,6 +28,8 @@ abstract class DashboardInsightsService {
 
 class LocalDashboardInsightsService implements DashboardInsightsService {
   const LocalDashboardInsightsService();
+
+  static const String _employeeScopeFilter = 'My bazaars';
 
   @override
   Future<List<String>> generateInsights(
@@ -84,13 +90,50 @@ class LocalDashboardInsightsService implements DashboardInsightsService {
         )
         .fold<double>(0, (sum, sale) => sum + sale.total);
 
-    final scopeLabel = request.selectedFilter == 'All bazaars'
+    final scopeLabel = (request.selectedFilter == 'All bazaars' ||
+            request.selectedFilter == _employeeScopeFilter)
         ? 'across all bazaars'
         : 'for ${request.selectedFilter}';
+
+    final qtyByProductId = <int, int>{};
+    final qtyByVariantOptionId = <int, int>{};
+    for (final sale in filteredSales) {
+      qtyByProductId[sale.productId] =
+          (qtyByProductId[sale.productId] ?? 0) + sale.qty;
+      final optionId = sale.variantOptionId;
+      if (optionId != null) {
+        qtyByVariantOptionId[optionId] =
+            (qtyByVariantOptionId[optionId] ?? 0) + sale.qty;
+      }
+    }
+
+    final topProductEntry = qtyByProductId.entries.reduce(
+      (a, b) => a.value >= b.value ? a : b,
+    );
+    final topProductName =
+        request.productNameById[topProductEntry.key] ??
+        'Product #${topProductEntry.key}';
+
+    String topSizeInsight;
+    if (qtyByVariantOptionId.isEmpty) {
+      topSizeInsight =
+          'Top-selling size: No size-specific sales recorded yet.';
+    } else {
+      final topSizeEntry = qtyByVariantOptionId.entries.reduce(
+        (a, b) => a.value >= b.value ? a : b,
+      );
+      final sizeLabel =
+          request.variantLabelByOptionId[topSizeEntry.key] ??
+          'Size #${topSizeEntry.key}';
+      topSizeInsight =
+          'Top-selling size: $sizeLabel (${topSizeEntry.value} units).';
+    }
 
     return [
       'Revenue $scopeLabel: PHP ${totalRevenue.toStringAsFixed(2)} from ${filteredSales.length} transactions.',
       'Today\'s revenue: PHP ${todayRevenue.toStringAsFixed(2)}.',
+      'Top-selling product: $topProductName (${topProductEntry.value} units).',
+      topSizeInsight,
       'Most used payment method: ${topPayment.key} (${topPayment.value} transactions).',
       'Top grossing bazaar in scope: ${topBazaar.key} (PHP ${topBazaar.value.toStringAsFixed(2)}).',
       'Completion rate: ${completionRate.toStringAsFixed(1)}% ($completedCount/${filteredSales.length}).',
@@ -102,7 +145,8 @@ class LocalDashboardInsightsService implements DashboardInsightsService {
     required String selectedFilter,
     required Map<int, String> eventNameById,
   }) {
-    if (selectedFilter == 'All bazaars') {
+    if (selectedFilter == 'All bazaars' ||
+        selectedFilter == _employeeScopeFilter) {
       return sales;
     }
 

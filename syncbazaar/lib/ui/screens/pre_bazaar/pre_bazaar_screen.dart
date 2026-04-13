@@ -296,7 +296,7 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
               .map(
                 (method) => {
                   'name': method.name,
-                  'requiresEmployeeId': method.requiresEmployeeId,
+                  'extraFieldLabel': method.extraFieldLabel,
                 },
               )
               .toList(),
@@ -391,7 +391,7 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
             .map(
               (method) => BazaarPaymentMethod(
                 name: method.name,
-                requiresEmployeeId: method.requiresEmployeeId,
+                extraFieldLabel: method.extraFieldLabel,
               ),
             )
             .toList(),

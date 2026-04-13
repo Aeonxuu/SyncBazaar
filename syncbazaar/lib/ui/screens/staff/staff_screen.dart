@@ -20,6 +20,8 @@ class _StaffScreenState extends State<StaffScreen> {
   static final RegExp _emailPattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
   String _selectedRole = 'ALL';
 
+  bool get _isAdmin => widget.currentUser.role == UserRole.admin;
+
   @override
   Widget build(BuildContext context) {
     if (widget.currentUser.role == UserRole.employee) {
@@ -38,11 +40,12 @@ class _StaffScreenState extends State<StaffScreen> {
                 'Staff List',
                 style: Theme.of(context).textTheme.headlineSmall,
               ),
-              ElevatedButton.icon(
-                onPressed: () => _showUserDialog(context),
-                icon: const Icon(Icons.person_add_alt_1),
-                label: const Text('Add user'),
-              ),
+              if (_isAdmin)
+                ElevatedButton.icon(
+                  onPressed: () => _showUserDialog(context),
+                  icon: const Icon(Icons.person_add_alt_1),
+                  label: const Text('Add user'),
+                ),
             ],
           ),
           const SizedBox(height: 12),
@@ -130,7 +133,7 @@ class _StaffScreenState extends State<StaffScreen> {
         Expanded(flex: 3, child: Text('Name', style: style)),
         Expanded(flex: 4, child: Text('Email', style: style)),
         Expanded(flex: 2, child: Text('Role', style: style)),
-        Expanded(flex: 2, child: Text('Bazaar', style: style)),
+        Expanded(flex: 2, child: Text('Bazaars', style: style)),
         Expanded(flex: 3, child: Text('Actions', style: style)),
       ],
     );
@@ -138,6 +141,9 @@ class _StaffScreenState extends State<StaffScreen> {
 
   Widget _staffRow(BuildContext context, AppUser user) {
     final textStyle = Theme.of(context).textTheme.bodyMedium;
+    final assignedCount = user.role == UserRole.employee
+        ? user.assignedEventIdsEffective.length
+        : 0;
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 10),
       decoration: const BoxDecoration(
@@ -153,21 +159,26 @@ class _StaffScreenState extends State<StaffScreen> {
           ),
           Expanded(
             flex: 2,
-            child: Text(user.assignedEventId?.toString() ?? '-', style: textStyle),
+            child: Text(
+              assignedCount == 0 ? '-' : '$assignedCount',
+              style: textStyle,
+            ),
           ),
           Expanded(
             flex: 3,
             child: Wrap(
               spacing: 4,
               children: [
-                IconButton(
-                  onPressed: () => _showUserDialog(context, user: user),
-                  icon: const Icon(Icons.edit_outlined),
-                ),
-                IconButton(
-                  onPressed: () => _deleteUser(context, user),
-                  icon: const Icon(Icons.delete_outline_rounded),
-                ),
+                if (_isAdmin)
+                  IconButton(
+                    onPressed: () => _showUserDialog(context, user: user),
+                    icon: const Icon(Icons.edit_outlined),
+                  ),
+                if (_isAdmin)
+                  IconButton(
+                    onPressed: () => _deleteUser(context, user),
+                    icon: const Icon(Icons.delete_outline_rounded),
+                  ),
               ],
             ),
           ),

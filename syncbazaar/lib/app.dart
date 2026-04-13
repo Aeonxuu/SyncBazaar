@@ -98,6 +98,7 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
             create: (_) => DashboardCubit(
               _eventRepository,
               _salesRepository,
+              productRepository: _productRepository,
               insightsService: const LocalDashboardInsightsService(),
             ),
           ),
@@ -228,11 +229,12 @@ class _MainShellState extends State<MainShell> {
         label: 'Dashboard',
         icon: Icons.home_outlined,
       ),
-      const AppNavItem(
-        section: AppSection.inventory,
-        label: 'Master Inventory',
-        icon: Icons.inventory_2_outlined,
-      ),
+      if (user.role == UserRole.owner)
+        const AppNavItem(
+          section: AppSection.inventory,
+          label: 'Master Inventory',
+          icon: Icons.inventory_2_outlined,
+        ),
       const AppNavItem(
         section: AppSection.preBazaar,
         label: 'Preparations',
@@ -240,7 +242,7 @@ class _MainShellState extends State<MainShell> {
       ),
       const AppNavItem(
         section: AppSection.pos,
-        label: 'POS',
+        label: 'Sales',
         icon: Icons.point_of_sale_outlined,
       ),
       const AppNavItem(
@@ -295,6 +297,7 @@ class _MainShellState extends State<MainShell> {
             onSelect: _handleSectionSelect,
             isCollapsed: _isNavCollapsed,
             onToggle: () => setState(() => _isNavCollapsed = !_isNavCollapsed),
+            onLogout: () => context.read<AuthCubit>().logout(),
           ),
           Expanded(
             child: Column(

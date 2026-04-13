@@ -69,10 +69,17 @@ class OrdersCubit extends Cubit<OrdersState> {
 
   Future<void> updateStatus(int orderId, OrderStatus status) async {
     final order = await _ordersRepository.getOrderById(orderId);
-    await _ordersRepository.updateOrderStatus(orderId, status);
-    if (order != null) {
-      await _salesRepository.updateSaleOrderStatus(order.saleId, status);
+    if (order == null) {
+      return;
     }
+    if (order.orderStatus == OrderStatus.completed) {
+      return;
+    }
+    if (order.orderStatus == status) {
+      return;
+    }
+    await _ordersRepository.updateOrderStatus(orderId, status);
+    await _salesRepository.updateSaleOrderStatus(order.saleId, status);
     await load();
   }
 

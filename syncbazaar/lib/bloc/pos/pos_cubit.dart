@@ -48,7 +48,7 @@ class PosState {
     this.paymentMethods = const [],
     this.selectedPaymentMethod = 'CASH',
     this.customerName = '',
-    this.employeeId = '',
+    this.paymentExtraFieldValue = '',
     this.quantity = 1,
     this.discountPercent = 0,
     this.category = 'All',
@@ -63,7 +63,7 @@ class PosState {
   final List<PaymentMethodMeta> paymentMethods;
   final String selectedPaymentMethod;
   final String customerName;
-  final String employeeId;
+  final String paymentExtraFieldValue;
   final int quantity;
   final int discountPercent;
   final String category;
@@ -78,14 +78,23 @@ class PosState {
   double get discountAmount => subtotal * (discountPercent / 100);
   double get total => subtotal - discountAmount;
 
-  bool get requiresEmployeeId {
+  PaymentMethodMeta? get selectedPaymentMethodMeta {
     final selected = selectedPaymentMethod.trim().toUpperCase();
-    final method = paymentMethods
+    return paymentMethods
         .where((m) => m.name.trim().toUpperCase() == selected)
         .cast<PaymentMethodMeta?>()
         .firstWhere((m) => m != null, orElse: () => null);
-    return method?.requiresEmployeeId ?? false;
   }
+
+  String? get selectedExtraFieldLabel {
+    final label = selectedPaymentMethodMeta?.extraFieldLabel?.trim();
+    if (label == null || label.isEmpty) {
+      return null;
+    }
+    return label;
+  }
+
+  bool get requiresPaymentExtraField => selectedExtraFieldLabel != null;
 
   PosState copyWith({
     List<BazaarEvent>? events,
@@ -96,7 +105,7 @@ class PosState {
     List<PaymentMethodMeta>? paymentMethods,
     String? selectedPaymentMethod,
     String? customerName,
-    String? employeeId,
+    String? paymentExtraFieldValue,
     int? quantity,
     int? discountPercent,
     String? category,
@@ -115,7 +124,8 @@ class PosState {
       selectedPaymentMethod:
           selectedPaymentMethod ?? this.selectedPaymentMethod,
       customerName: customerName ?? this.customerName,
-      employeeId: employeeId ?? this.employeeId,
+        paymentExtraFieldValue:
+          paymentExtraFieldValue ?? this.paymentExtraFieldValue,
       quantity: quantity ?? this.quantity,
       discountPercent: discountPercent ?? this.discountPercent,
       category: category ?? this.category,
@@ -238,12 +248,16 @@ class PosCubit extends Cubit<PosState> {
     );
   }
 
-  void updatePaymentMethod(String value) =>
-      emit(state.copyWith(selectedPaymentMethod: value));
+  void updatePaymentMethod(String value) => emit(
+    state.copyWith(
+      selectedPaymentMethod: value,
+      paymentExtraFieldValue: '',
+    ),
+  );
   void updateCustomerName(String value) =>
       emit(state.copyWith(customerName: value));
-  void updateEmployeeId(String value) =>
-      emit(state.copyWith(employeeId: value));
+  void updatePaymentExtraFieldValue(String value) =>
+      emit(state.copyWith(paymentExtraFieldValue: value));
   void setQuantity(int value) =>
       emit(state.copyWith(quantity: value.clamp(1, 99)));
 
@@ -353,7 +367,7 @@ class PosCubit extends Cubit<PosState> {
       state.copyWith(
         cart: const [],
         customerName: '',
-        employeeId: '',
+        paymentExtraFieldValue: '',
         quantity: 1,
         discountPercent: 0,
         selectedPaymentMethod:
@@ -459,7 +473,7 @@ class PosCubit extends Cubit<PosState> {
         customerName: state.customerName.isEmpty
             ? 'Walk-in'
             : state.customerName,
-        employeeId: state.employeeId,
+        employeeId: state.paymentExtraFieldValue,
         paymentMethod: state.selectedPaymentMethod,
         qty: item.quantity,
         total: item.lineTotal * ratio,
@@ -489,7 +503,7 @@ class PosCubit extends Cubit<PosState> {
       state.copyWith(
         cart: const [],
         customerName: '',
-        employeeId: '',
+        paymentExtraFieldValue: '',
         discountPercent: 0,
         selectedPaymentMethod:
             state.paymentMethods.isEmpty ? 'CASH' : state.paymentMethods.first.name,
@@ -521,7 +535,7 @@ class PosCubit extends Cubit<PosState> {
         result.add(
           PaymentMethodMeta(
             name: method.name,
-            requiresEmployeeId: custom?.requiresEmployeeId ?? method.requiresEmployeeId,
+            extraFieldLabel: custom?.extraFieldLabel ?? method.extraFieldLabel,
           ),
         );
       }
@@ -534,7 +548,7 @@ class PosCubit extends Cubit<PosState> {
         result.add(
           PaymentMethodMeta(
             name: custom.name,
-            requiresEmployeeId: custom.requiresEmployeeId,
+            extraFieldLabel: custom.extraFieldLabel,
           ),
         );
       }

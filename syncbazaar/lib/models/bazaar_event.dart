@@ -3,11 +3,11 @@ enum BazaarStatus { upcoming, ongoing, ended }
 class BazaarPaymentMethod {
   const BazaarPaymentMethod({
     required this.name,
-    this.requiresEmployeeId = false,
+    this.extraFieldLabel,
   });
 
   final String name;
-  final bool requiresEmployeeId;
+  final String? extraFieldLabel;
 }
 
 class BazaarEvent {
@@ -18,7 +18,7 @@ class BazaarEvent {
     required this.startDate,
     required this.endDate,
     required this.status,
-    this.acceptedPaymentMethods = const ['CASH', 'COOP'],
+    this.acceptedPaymentMethods = const ['CASH'],
     this.customOtherMethods = const [],
   });
 

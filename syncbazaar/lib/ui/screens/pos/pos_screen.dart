@@ -16,10 +16,23 @@ import '../../widgets/confirmation_dialog.dart';
 import '../../widgets/custom_card.dart';
 import 'widgets/pos_product_card.dart';
 
-class PosScreen extends StatelessWidget {
+class PosScreen extends StatefulWidget {
   const PosScreen({super.key, required this.user});
 
   final AppUser user;
+
+  @override
+  State<PosScreen> createState() => _PosScreenState();
+}
+
+class _PosScreenState extends State<PosScreen> {
+  final TextEditingController _bazaarSearchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _bazaarSearchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -44,28 +57,96 @@ class PosScreen extends StatelessWidget {
   }
 
   Widget _eventSelector(BuildContext context, PosState state) {
-    final width = MediaQuery.sizeOf(context).width;
-    final cardSize = width >= 1200 ? 320.0 : 280.0;
+    final query = _bazaarSearchController.text.trim().toLowerCase();
+    final filteredEvents = state.events.where((event) {
+      if (query.isEmpty) {
+        return true;
+      }
+      final nameMatch = event.name.toLowerCase().contains(query);
+      final statusMatch = event.status.name.toLowerCase().contains(query);
+      final startDateMatch = _formatDate(event.startDate)
+          .toLowerCase()
+          .contains(query);
+      final endDateMatch = _formatDate(event.endDate)
+          .toLowerCase()
+          .contains(query);
+      return nameMatch || statusMatch || startDateMatch || endDateMatch;
+    }).toList();
 
     return Padding(
       padding: const EdgeInsets.all(16),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          return SingleChildScrollView(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minWidth: constraints.maxWidth),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Select Active Bazaar',
-                    style: Theme.of(context).textTheme.headlineSmall,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Select Active Bazaar',
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Search Bazaar',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Colors.black.withOpacity(0.45),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 6),
+          SizedBox(
+            width: 420,
+            child: TextField(
+              controller: _bazaarSearchController,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                hintText: 'Search by bazaar name',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _bazaarSearchController.text.isEmpty
+                    ? null
+                    : IconButton(
+                        onPressed: () {
+                          _bazaarSearchController.clear();
+                          setState(() {});
+                        },
+                        icon: const Icon(Icons.close),
+                      ),
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 11,
+                ),
+                filled: true,
+                fillColor: const Color(0xFFF5F1FB),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide.none,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(
+                    color: AppColors.primary,
+                    width: 1.5,
                   ),
-                  const SizedBox(height: 16),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: state.events.map((event) {
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Expanded(
+            child: filteredEvents.isEmpty
+                ? const Card(
+                    child: Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Text('No bazaars matched your search.'),
+                    ),
+                  )
+                : ListView.separated(
+                    itemCount: filteredEvents.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemBuilder: (context, index) {
+                      final event = filteredEvents[index];
               final enabled = event.status == BazaarStatus.ongoing;
               final statusColor = event.status == BazaarStatus.ongoing
                   ? const Color(0xFF2E7D32)
@@ -75,117 +156,70 @@ class PosScreen extends StatelessWidget {
 
               return Opacity(
                 opacity: enabled ? 1 : 0.5,
-                child: SizedBox(
-                  width: cardSize,
-                  child: CustomCard(
-                    child: AspectRatio(
-                      aspectRatio: 1,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x14000000),
+                        blurRadius: 12,
+                        offset: Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              event.name,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: statusColor.withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                event.status.name.toUpperCase(),
+                                style: TextStyle(
+                                  color: statusColor,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Start: ${_formatDate(event.startDate)}',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Finish: ${_formatDate(event.endDate)}',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  event.name,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(
-                                    context,
-                                  ).textTheme.titleMedium,
-                                ),
-                              ),
-                              if (user.isAdminOrOwner)
-                                PopupMenuButton<String>(
-                                  icon: const Icon(Icons.settings_outlined),
-                                  onSelected: (value) async {
-                                    if (value == 'edit') {
-                                      await _showEditEventDialog(
-                                        context,
-                                        state,
-                                        event,
-                                      );
-                                      return;
-                                    }
-                                    final confirmed = await showConfirmationDialog(
-                                      context: context,
-                                      title: 'Delete Bazaar',
-                                      message:
-                                          'Are you sure you want to delete "${event.name}"?',
-                                      confirmLabel: 'Delete',
-                                    );
-                                    if (confirmed != true || !context.mounted) {
-                                      return;
-                                    }
-                                    await context
-                                        .read<PosCubit>()
-                                        .deleteEventFromPos(
-                                          user: user,
-                                          event: event,
-                                        );
-                                    if (context.mounted) {
-                                      await context.read<DashboardCubit>().load(
-                                        user,
-                                      );
-                                      await context
-                                          .read<InventoryCubit>()
-                                          .load();
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        const SnackBar(
-                                          content: Text(
-                                            'Bazaar deleted successfully.',
-                                          ),
-                                        ),
-                                      );
-                                    }
-                                  },
-                                  itemBuilder: (context) => const [
-                                    PopupMenuItem<String>(
-                                      value: 'edit',
-                                      child: Text('Edit'),
-                                    ),
-                                    PopupMenuItem<String>(
-                                      value: 'delete',
-                                      child: Text('Delete'),
-                                    ),
-                                  ],
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 5,
-                            ),
-                            decoration: BoxDecoration(
-                              color: statusColor.withOpacity(0.12),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              event.status.name.toUpperCase(),
-                              style: TextStyle(
-                                color: statusColor,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            'Start: ${_formatDate(event.startDate)}',
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Finish: ${_formatDate(event.endDate)}',
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          ),
-                          const Spacer(),
                           SizedBox(
-                            width: double.infinity,
+                            width: 140,
                             height: 44,
                             child: DecoratedBox(
                               decoration: BoxDecoration(
@@ -221,19 +255,70 @@ class PosScreen extends StatelessWidget {
                               ),
                             ),
                           ),
+                          if (widget.user.isAdminOrOwner)
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: PopupMenuButton<String>(
+                                icon: const Icon(Icons.settings_outlined),
+                                onSelected: (value) async {
+                                  if (value == 'edit') {
+                                    await _showEditEventDialog(
+                                      context,
+                                      state,
+                                      event,
+                                    );
+                                    return;
+                                  }
+                                  final confirmed = await showConfirmationDialog(
+                                    context: context,
+                                    title: 'Delete Bazaar',
+                                    message:
+                                        'Are you sure you want to delete "${event.name}"?',
+                                    confirmLabel: 'Delete',
+                                  );
+                                  if (confirmed != true || !context.mounted) {
+                                    return;
+                                  }
+                                  await context.read<PosCubit>().deleteEventFromPos(
+                                    user: widget.user,
+                                    event: event,
+                                  );
+                                  if (context.mounted) {
+                                    await context.read<DashboardCubit>().load(
+                                      widget.user,
+                                    );
+                                    await context.read<InventoryCubit>().load();
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Bazaar deleted successfully.',
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                },
+                                itemBuilder: (context) => const [
+                                  PopupMenuItem<String>(
+                                    value: 'edit',
+                                    child: Text('Edit'),
+                                  ),
+                                  PopupMenuItem<String>(
+                                    value: 'delete',
+                                    child: Text('Delete'),
+                                  ),
+                                ],
+                              ),
+                            ),
                         ],
                       ),
-                    ),
+                    ],
                   ),
                 ),
               );
-                    }).toList(),
+                    },
                   ),
-                ],
-              ),
-            ),
-          );
-        },
+          ),
+        ],
       ),
     );
   }
@@ -299,7 +384,8 @@ class PosScreen extends StatelessWidget {
   }
 
   Widget _cartPanel(BuildContext context, PosState state) {
-    final requiresEmployeeId = state.requiresEmployeeId;
+    final requiresPaymentExtraField = state.requiresPaymentExtraField;
+    final extraFieldLabel = state.selectedExtraFieldLabel;
     const subtleInputBg = Color(0xFFF5F1FB);
 
     return CustomCard(
@@ -382,12 +468,12 @@ class PosScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          if (requiresEmployeeId)
+          if (requiresPaymentExtraField)
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Employee ID',
+                  extraFieldLabel ?? 'Additional info',
                   style: Theme.of(
                     context,
                   ).textTheme.bodySmall?.copyWith(color: Colors.black45),
@@ -411,7 +497,9 @@ class PosScreen extends StatelessWidget {
                       borderSide: BorderSide.none,
                     ),
                   ),
-                  onChanged: context.read<PosCubit>().updateEmployeeId,
+                  onChanged: context
+                      .read<PosCubit>()
+                      .updatePaymentExtraFieldValue,
                 ),
               ],
             ),
@@ -559,12 +647,12 @@ class PosScreen extends StatelessWidget {
                   onPressed: state.cart.isEmpty
                       ? null
                       : () async {
-                          if (state.requiresEmployeeId &&
-                              state.employeeId.trim().isEmpty) {
+                          if (state.requiresPaymentExtraField &&
+                              state.paymentExtraFieldValue.trim().isEmpty) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
+                              SnackBar(
                                 content: Text(
-                                  'Employee ID is required for selected payment method.',
+                                  '${state.selectedExtraFieldLabel ?? 'Additional field'} is required for selected payment method.',
                                 ),
                               ),
                             );
@@ -576,7 +664,7 @@ class PosScreen extends StatelessWidget {
                           );
                           if (status == null) return;
                           final sold = await context.read<PosCubit>().completeSale(
-                            user: user,
+                                user: widget.user,
                             status: status,
                           );
                           if (!sold && context.mounted) {
@@ -590,7 +678,7 @@ class PosScreen extends StatelessWidget {
                             return;
                           }
                           if (context.mounted) {
-                            await context.read<DashboardCubit>().load(user);
+                            await context.read<DashboardCubit>().load(widget.user);
                             await context.read<OrdersCubit>().load();
                           }
                         },
@@ -760,7 +848,7 @@ class PosScreen extends StatelessWidget {
     }
 
     final ok = await cubit.updateEventFromPos(
-      user: user,
+      user: widget.user,
       event: event,
       name: nameController.text.trim().isEmpty
           ? event.name
@@ -785,7 +873,7 @@ class PosScreen extends StatelessWidget {
       return;
     }
 
-    await context.read<DashboardCubit>().load(user);
+    await context.read<DashboardCubit>().load(widget.user);
     await context.read<InventoryCubit>().load();
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -844,7 +932,7 @@ class PosScreen extends StatelessWidget {
                         const SizedBox(height: 4),
                         DropdownButtonFormField<OrderStatus>(
                           initialValue: selected,
-                          items: OrderStatus.values
+                          items: const [OrderStatus.completed, OrderStatus.pending]
                               .map(
                                 (s) => DropdownMenuItem<OrderStatus>(
                                   value: s,

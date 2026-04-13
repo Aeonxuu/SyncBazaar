@@ -418,6 +418,7 @@ class ProductRepository {
       final price = (item['price'] as num?)?.toDouble() ?? 0;
       final variants = (item['variants'] as List<dynamic>? ?? const []);
       final categoryId = categoryIdForBrand(brand);
+      final imagePath = _defaultImagePathForProduct(name);
 
       _products.add(
         Product(
@@ -426,7 +427,7 @@ class ProductRepository {
           description: brand,
           categoryId: categoryId,
           basePrice: price,
-          imagePath: null,
+          imagePath: imagePath,
         ),
       );
 
@@ -462,6 +463,14 @@ class ProductRepository {
 
     _nextCategoryId = nextSeedCategoryId;
     _nextProductId = maxProductId + 1;
+  }
+
+  String? _defaultImagePathForProduct(String name) {
+    final slug = name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+    if (slug.isEmpty) {
+      return null;
+    }
+    return 'assets/images/default_shoes/$slug.png';
   }
 
   void _replaceVariantsForProduct({

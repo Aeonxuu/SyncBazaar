@@ -50,29 +50,6 @@ class TopBar extends StatelessWidget {
                         child: const Icon(Icons.notifications_outlined),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    PopupMenuButton<String>(
-                      itemBuilder: (context) => [
-                        PopupMenuItem<String>(
-                          enabled: false,
-                          value: 'user',
-                          child: Text('${user.name} (${user.role.name})'),
-                        ),
-                        const PopupMenuDivider(),
-                        const PopupMenuItem<String>(
-                          value: 'logout',
-                          child: Text('Logout'),
-                        ),
-                      ],
-                      onSelected: (value) {
-                        if (value == 'logout') {
-                          onLogout();
-                        }
-                      },
-                      child: CircleAvatar(
-                        child: Text(user.name.substring(0, 1).toUpperCase()),
-                      ),
-                    ),
                   ],
                 ),
               ),

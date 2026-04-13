@@ -79,7 +79,6 @@ class SettingsCubit extends Cubit<SettingsState> {
           paymentMethods ??
           const [
             PaymentMethodMeta(name: 'CASH'),
-            PaymentMethodMeta(name: 'COOP', requiresEmployeeId: true),
           ],
     );
     await load();

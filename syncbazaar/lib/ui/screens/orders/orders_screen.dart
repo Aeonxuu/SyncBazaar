@@ -46,6 +46,11 @@ class _OrdersScreenState extends State<OrdersScreen> {
           return _bazaarSelector(context);
         }
 
+        final paymentFilterOptions = <String>{
+          'All',
+          ...state.orders.map((order) => order.paymentMethod.trim()),
+        }.where((value) => value.isNotEmpty).toList();
+
         final orders = state.visibleOrders(widget.user);
         return Padding(
           padding: const EdgeInsets.all(16),
@@ -68,80 +73,83 @@ class _OrdersScreenState extends State<OrdersScreen> {
               Expanded(
                 child: DashboardSectionCard(
                   title: 'Transaction History',
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
+                  trailing: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      SizedBox(
-                        width: 180,
-                        child: DropdownButtonFormField<String>(
-                          initialValue: state.paymentMethod,
-                          icon: const Icon(Icons.keyboard_arrow_down_rounded),
-                          isExpanded: true,
-                          decoration: InputDecoration(
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 10,
-                            ),
-                            filled: true,
-                            fillColor: AppColors.surface,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: BorderSide.none,
-                            ),
-                          ),
-                          items: const [
-                            DropdownMenuItem(value: 'All', child: Text('ALL')),
-                            DropdownMenuItem(value: 'CASH', child: Text('CASH')),
-                            DropdownMenuItem(value: 'COOP', child: Text('COOP')),
-                            DropdownMenuItem(value: 'OTHER', child: Text('OTHER')),
-                          ],
-                          onChanged: (value) {
-                            if (value != null) {
-                              context.read<OrdersCubit>().filterByPayment(value);
-                            }
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      SizedBox(
-                        width: 160,
-                        child: DropdownButtonFormField<String>(
-                          initialValue: state.status,
-                          icon: const Icon(Icons.keyboard_arrow_down_rounded),
-                          isExpanded: true,
-                          decoration: InputDecoration(
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 10,
-                            ),
-                            filled: true,
-                            fillColor: AppColors.surface,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: BorderSide.none,
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 180,
+                            child: DropdownButtonFormField<String>(
+                              initialValue: state.paymentMethod,
+                              icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                              isExpanded: true,
+                              decoration: InputDecoration(
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 10,
+                                ),
+                                filled: true,
+                                fillColor: AppColors.surface,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: BorderSide.none,
+                                ),
+                              ),
+                              items: paymentFilterOptions
+                                  .map(
+                                    (method) => DropdownMenuItem(
+                                      value: method,
+                                      child: Text(method.toUpperCase()),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: (value) {
+                                if (value != null) {
+                                  context.read<OrdersCubit>().filterByPayment(value);
+                                }
+                              },
                             ),
                           ),
-                          items: const [
-                            DropdownMenuItem(value: 'All', child: Text('ALL')),
-                            DropdownMenuItem(
-                              value: 'Completed',
-                              child: Text('COMPLETED'),
+                          const SizedBox(width: 10),
+                          SizedBox(
+                            width: 160,
+                            child: DropdownButtonFormField<String>(
+                              initialValue: state.status,
+                              icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                              isExpanded: true,
+                              decoration: InputDecoration(
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 10,
+                                ),
+                                filled: true,
+                                fillColor: AppColors.surface,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: BorderSide.none,
+                                ),
+                              ),
+                              items: const [
+                                DropdownMenuItem(value: 'All', child: Text('ALL')),
+                                DropdownMenuItem(
+                                  value: 'Completed',
+                                  child: Text('COMPLETED'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'Pending',
+                                  child: Text('PENDING'),
+                                ),
+                              ],
+                              onChanged: (value) {
+                                if (value != null) {
+                                  context.read<OrdersCubit>().filterByStatus(value);
+                                }
+                              },
                             ),
-                            DropdownMenuItem(
-                              value: 'Pending',
-                              child: Text('PENDING'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'Incomplete',
-                              child: Text('INCOMPLETE'),
-                            ),
-                          ],
-                          onChanged: (value) {
-                            if (value != null) {
-                              context.read<OrdersCubit>().filterByStatus(value);
-                            }
-                          },
-                        ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -172,7 +180,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
   Widget _bazaarSelector(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
-    final cardSize = width >= 1200 ? 320.0 : 280.0;
+    final cardSize = width >= 1200 ? 270.0 : 230.0;
 
     return BlocBuilder<PosCubit, PosState>(
       builder: (context, state) {
@@ -340,11 +348,8 @@ class _OrdersScreenState extends State<OrdersScreen> {
   }
 
   Widget _orderRow(BuildContext context, Order order, int index) {
+    final isLockedCompleted = order.orderStatus == OrderStatus.completed;
     final textStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
-          fontWeight: FontWeight.w600,
-        );
-    final subStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
-          color: Colors.black54,
           fontWeight: FontWeight.w600,
         );
 
@@ -398,13 +403,15 @@ class _OrdersScreenState extends State<OrdersScreen> {
                           vertical: 10,
                         ),
                         filled: true,
-                        fillColor: const Color(0xFFF5F1FB),
+                        fillColor: isLockedCompleted
+                            ? const Color(0xFFF1F3F5)
+                            : const Color(0xFFF5F1FB),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
                           borderSide: BorderSide.none,
                         ),
                       ),
-                      items: OrderStatus.values
+                      items: const [OrderStatus.completed, OrderStatus.pending]
                           .map(
                             (status) => DropdownMenuItem<OrderStatus>(
                               value: status,
@@ -412,28 +419,25 @@ class _OrdersScreenState extends State<OrdersScreen> {
                             ),
                           )
                           .toList(),
-                      onChanged: (newStatus) async {
-                        if (newStatus == null || newStatus == order.orderStatus) {
-                          return;
-                        }
-                        final ok = await showConfirmationDialog(
-                          context: context,
-                          title: 'Confirm status change',
-                          message: 'Are you sure?',
-                        );
-                        if (!ok || !context.mounted) return;
-                        await context.read<OrdersCubit>().updateStatus(order.id, newStatus);
-                        if (!context.mounted) return;
-                        await context.read<DashboardCubit>().load(widget.user);
-                      },
+                      onChanged: isLockedCompleted
+                          ? null
+                          : (newStatus) async {
+                              if (newStatus == null || newStatus == order.orderStatus) {
+                                return;
+                              }
+                              final ok = await showConfirmationDialog(
+                                context: context,
+                                title: 'Confirm status change',
+                                message: 'Are you sure?',
+                              );
+                              if (!ok || !context.mounted) return;
+                              await context.read<OrdersCubit>().updateStatus(order.id, newStatus);
+                              if (!context.mounted) return;
+                              await context.read<DashboardCubit>().load(widget.user);
+                            },
                     ),
                   ),
                 ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Update order status using the selector.',
-                style: subStyle,
               ),
             ],
           ),

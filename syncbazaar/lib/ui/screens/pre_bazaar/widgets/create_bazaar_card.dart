@@ -179,8 +179,9 @@ class CreateBazaarCard extends StatelessWidget {
                   .map(
                     (method) => Chip(
                       label: Text(
-                        method.requiresEmployeeId
-                            ? '${method.name} (Needs Employee ID)'
+                        method.extraFieldLabel != null &&
+                                method.extraFieldLabel!.trim().isNotEmpty
+                            ? '${method.name} (${method.extraFieldLabel})'
                             : method.name,
                       ),
                       backgroundColor: const Color(0xFFF5F1FB),

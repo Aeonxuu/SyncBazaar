@@ -47,14 +47,28 @@ class DashboardScreen extends StatelessWidget {
                       Row(
                         children: [
                           Expanded(
-                            child: Text(
-                              'Dashboard',
-                              style: Theme.of(context).textTheme.headlineSmall,
+                            child: Text.rich(
+                              TextSpan(
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .headlineMedium
+                                    ?.copyWith(fontWeight: FontWeight.w600),
+                                children: [
+                                  const TextSpan(text: 'Hello, '),
+                                  TextSpan(
+                                    text: user.name,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  const TextSpan(text: '!'),
+                                ],
+                              ),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
                           if (user.isAdminOrOwner) ...[
-                            const SizedBox(width: 12),
+                            const SizedBox(width: 8),
                             PopupMenuButton<String>(
                               onSelected: (selected) {
                                 dashboardCubit.updateGlobalFilter(
@@ -140,7 +154,7 @@ class DashboardScreen extends StatelessWidget {
                           ],
                         ],
                       ),
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 8),
                       _buildKpiSection(width, state),
                       const SizedBox(height: 14),
                       _buildMiddleSection(context, width, state),

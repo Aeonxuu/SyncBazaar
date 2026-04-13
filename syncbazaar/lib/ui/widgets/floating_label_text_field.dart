@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-class FloatingLabelTextField extends StatelessWidget {
+class FloatingLabelTextField extends StatefulWidget {
   const FloatingLabelTextField({
     super.key,
     required this.labelText,
@@ -19,6 +19,19 @@ class FloatingLabelTextField extends StatelessWidget {
   final IconData? prefixIcon;
 
   @override
+  State<FloatingLabelTextField> createState() => _FloatingLabelTextFieldState();
+}
+
+class _FloatingLabelTextFieldState extends State<FloatingLabelTextField> {
+  late bool _isObscured;
+
+  @override
+  void initState() {
+    super.initState();
+    _isObscured = widget.obscureText;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
@@ -28,22 +41,38 @@ class FloatingLabelTextField extends StatelessWidget {
     return SizedBox(
       height: 56,
       child: TextFormField(
-        controller: controller,
-        obscureText: obscureText,
-        keyboardType: keyboardType,
-        validator: validator,
+        controller: widget.controller,
+        obscureText: _isObscured,
+        keyboardType: widget.keyboardType,
+        validator: widget.validator,
         cursorColor: colorScheme.primary,
         style: theme.textTheme.bodyLarge?.copyWith(color: colorScheme.primary),
         decoration: InputDecoration(
-          labelText: labelText,
+          labelText: widget.labelText,
           floatingLabelBehavior: FloatingLabelBehavior.auto,
           floatingLabelAlignment: FloatingLabelAlignment.start,
           alignLabelWithHint: false,
           filled: true,
           fillColor: fillColor,
-          prefixIcon: prefixIcon == null
+          prefixIcon: widget.prefixIcon == null
               ? null
-              : Icon(prefixIcon, color: colorScheme.primary),
+              : Icon(widget.prefixIcon, color: colorScheme.primary),
+          suffixIcon: widget.obscureText
+              ? IconButton(
+                  tooltip: _isObscured ? 'Show password' : 'Hide password',
+                  onPressed: () {
+                    setState(() {
+                      _isObscured = !_isObscured;
+                    });
+                  },
+                  icon: Icon(
+                    _isObscured
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
+                    color: colorScheme.primary,
+                  ),
+                )
+              : null,
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 14,
             vertical: 18,

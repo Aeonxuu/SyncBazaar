@@ -23,6 +23,7 @@ class SideNavigationRail extends StatelessWidget {
     required this.onSelect,
     required this.isCollapsed,
     required this.onToggle,
+    required this.onLogout,
   });
 
   final List<AppNavItem> items;
@@ -30,6 +31,7 @@ class SideNavigationRail extends StatelessWidget {
   final ValueChanged<int> onSelect;
   final bool isCollapsed;
   final VoidCallback onToggle;
+  final VoidCallback onLogout;
 
   @override
   Widget build(BuildContext context) {
@@ -152,6 +154,44 @@ class SideNavigationRail extends StatelessWidget {
                     ),
                   );
                 },
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 8, 8, 12),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: onLogout,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    height: 40,
+                    padding: const EdgeInsets.symmetric(horizontal: 9),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.logout_rounded,
+                          size: 18,
+                          color: Colors.white.withOpacity(0.9),
+                        ),
+                        if (!isCollapsed) ...[
+                          const SizedBox(width: 6),
+                          Text(
+                            'Logout',
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.9),
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ),
           ],

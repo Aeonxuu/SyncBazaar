@@ -5,27 +5,66 @@ class EventRepository {
   final List<BazaarEvent> _events = [
     BazaarEvent(
       id: 1,
-      name: 'March Campus Bazaar',
-      companyId: 1,
-      startDate: DateTime(2026, 3, 25),
-      endDate: DateTime(2026, 3, 31),
-      status: BazaarStatus.ongoing,
-      acceptedPaymentMethods: ['CASH', 'COOP', 'GCASH'],
+      name: 'Pasayahan Festival',
+      companyId: 4,
+      startDate: DateTime(2026, 5, 15),
+      endDate: DateTime(2026, 5, 22),
+      status: BazaarStatus.upcoming,
+      acceptedPaymentMethods: ['CASH', 'GCASH'],
       customOtherMethods: [
-        const BazaarPaymentMethod(name: 'GCASH', requiresEmployeeId: false),
+        const BazaarPaymentMethod(name: 'GCASH', extraFieldLabel: 'Reference Number'),
       ],
     ),
     BazaarEvent(
       id: 2,
-      name: 'April Trade Fair',
-      companyId: 1,
-      startDate: DateTime(2026, 4, 5),
-      endDate: DateTime(2026, 4, 8),
+      name: 'MSEUF Festival',
+      companyId: 3,
+      startDate: DateTime(2026, 4, 14),
+      endDate: DateTime(2026, 4, 17),
       status: BazaarStatus.upcoming,
-      acceptedPaymentMethods: ['CASH', 'COOP'],
+      acceptedPaymentMethods: ['CASH'],
     ),
   ];
-  final Map<int, Map<String, int>> _allocationsByEventId = {};
+  final Map<int, Map<String, int>> _allocationsByEventId = {
+    1: {
+      '1:9000': 6,
+      '1:9001': 6,
+      '4:9014': 6,
+      '4:9016': 6,
+      '7:9032': 5,
+      '7:9033': 5,
+      '10:9044': 5,
+      '10:9046': 5,
+      '13:9056': 6,
+      '13:9058': 6,
+      '2:9005': 5,
+      '2:9007': 5,
+      '5:9021': 5,
+      '5:9023': 5,
+      '8:9036': 4,
+      '8:9038': 4,
+      '11:9048': 4,
+      '11:9050': 4,
+      '14:9061': 4,
+      '14:9063': 4,
+    },
+    2: {
+      '3:9010': 5,
+      '3:9012': 5,
+      '6:9027': 5,
+      '6:9029': 5,
+      '9:9040': 5,
+      '9:9042': 5,
+      '12:9053': 5,
+      '12:9055': 5,
+      '15:9065': 5,
+      '15:9067': 5,
+      '1:9002': 5,
+      '1:9003': 5,
+      '4:9015': 5,
+      '4:9017': 5,
+    },
+  };
 
   BazaarStatus _statusFor(DateTime startDate, DateTime endDate) {
     final now = DateTime.now();
@@ -39,14 +78,37 @@ class EventRepository {
     return BazaarStatus.ongoing;
   }
 
-  Future<List<BazaarEvent>> listAll() async => _events;
+  void _refreshStatuses() {
+    for (var i = 0; i < _events.length; i++) {
+      final event = _events[i];
+      final nextStatus = _statusFor(event.startDate, event.endDate);
+      if (event.status == nextStatus) {
+        continue;
+      }
+      _events[i] = BazaarEvent(
+        id: event.id,
+        name: event.name,
+        companyId: event.companyId,
+        startDate: event.startDate,
+        endDate: event.endDate,
+        status: nextStatus,
+        acceptedPaymentMethods: event.acceptedPaymentMethods,
+        customOtherMethods: event.customOtherMethods,
+      );
+    }
+  }
+
+  Future<List<BazaarEvent>> listAll() async {
+    _refreshStatuses();
+    return _events;
+  }
 
   Future<BazaarEvent> createEvent({
     required String name,
     required int companyId,
     required DateTime startDate,
     required DateTime endDate,
-    List<String> acceptedPaymentMethods = const ['CASH', 'COOP'],
+    List<String> acceptedPaymentMethods = const ['CASH'],
     List<BazaarPaymentMethod> customOtherMethods = const [],
     Map<String, int> allocationsByAllocationKey = const {},
   }) async {
@@ -73,6 +135,7 @@ class EventRepository {
   }
 
   Future<List<BazaarEvent>> listVisibleForUser(AppUser user) async {
+    _refreshStatuses();
     if (user.isAdminOrOwner) {
       return _events;
     }
