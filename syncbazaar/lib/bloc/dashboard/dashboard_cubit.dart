@@ -174,15 +174,7 @@ class DashboardCubit extends Cubit<DashboardState> {
 
   Future<void> load(AppUser user) async {
     final rawEvents = await _eventRepository.listVisibleForUser(user);
-    final events = user.role == UserRole.employee
-        ? rawEvents
-              .where(
-                (e) =>
-                    user.assignedEventId == null ||
-                    e.id == user.assignedEventId,
-              )
-              .toList()
-        : rawEvents;
+    final events = rawEvents;
     final summaryEvents = events
         .where((e) => e.status != BazaarStatus.ended)
         .toList();
@@ -379,13 +371,13 @@ class DashboardCubit extends Cubit<DashboardState> {
     final scopeSuffix = user.isAdminOrOwner ? '' : ' (My Bazaar)';
     return [
       DashboardKpiData(
-        title: 'Total Revenue$scopeSuffix',
+        title: 'Total Sale$scopeSuffix',
         value: 'PHP ${totalRevenue.toStringAsFixed(2)}',
         trendText: totalRevenueTrendText,
         trendIsPositive: totalRevenueTrendIsPositive,
       ),
       DashboardKpiData(
-        title: 'Today\'s Revenue$scopeSuffix',
+        title: 'Today\'s Sale$scopeSuffix',
         value: 'PHP ${todayRevenue.toStringAsFixed(2)}',
         trendText: todayRevenueTrendText,
         trendIsPositive: todayRevenueTrendIsPositive,

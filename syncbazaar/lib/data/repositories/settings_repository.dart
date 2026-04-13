@@ -28,10 +28,34 @@ class SettingsRepository {
       incentivePercent: 10,
       bufferPercent: 10,
     ),
+    const Company(
+      id: 3,
+      name: 'MSEUF Lucena',
+      address: 'Lucena City, Quezon',
+      contact: '',
+      incentivePercent: 10,
+      bufferPercent: 10,
+    ),
+    const Company(
+      id: 4,
+      name: 'Perez Park',
+      address: 'Lucena City, Quezon',
+      contact: '',
+      incentivePercent: 10,
+      bufferPercent: 10,
+    ),
+    const Company(
+      id: 5,
+      name: 'Tagaytay Picnic Grove',
+      address: 'Tagaytay City, Cavite',
+      contact: '',
+      incentivePercent: 10,
+      bufferPercent: 10,
+    ),
   ];
 
   bool _autoSyncOnReconnect = true;
-  int _nextCompanyId = 3;
+  int _nextCompanyId = 6;
 
   final Map<int, List<PaymentMethodMeta>> _locationPaymentMethodsByCompanyId = {
     1: const [
@@ -40,6 +64,18 @@ class SettingsRepository {
       PaymentMethodMeta(name: 'GCASH'),
     ],
     2: const [
+      PaymentMethodMeta(name: 'CASH'),
+      PaymentMethodMeta(name: 'COOP', requiresEmployeeId: true),
+    ],
+    3: const [
+      PaymentMethodMeta(name: 'CASH'),
+      PaymentMethodMeta(name: 'COOP', requiresEmployeeId: true),
+    ],
+    4: const [
+      PaymentMethodMeta(name: 'CASH'),
+      PaymentMethodMeta(name: 'COOP', requiresEmployeeId: true),
+    ],
+    5: const [
       PaymentMethodMeta(name: 'CASH'),
       PaymentMethodMeta(name: 'COOP', requiresEmployeeId: true),
     ],

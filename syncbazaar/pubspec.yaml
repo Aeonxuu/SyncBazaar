@@ -69,6 +69,7 @@ flutter:
   # Place future custom navigation icons under assets/icons/ and register here.
   assets:
     - assets/icons/
+    - assets/data/sample_products.json
 
   # To add assets to your application, add an assets section, like this:
   # assets:

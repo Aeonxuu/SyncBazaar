@@ -130,26 +130,6 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
     }
   }
 
-  void _resetCreateBazaar() {
-    setState(() {
-      _eventName.clear();
-      _dateRange = null;
-      _selectedCompanyId = _locationItems.isEmpty ? null : _locationItems.first.value;
-      _stockAllocationUnlocked = false;
-      _assignedEmployeeIds.clear();
-      _selectedEmployeeId = null;
-    });
-  }
-
-  void _resetAllocation() {
-    setState(() {
-      _allocations.updateAll((_, __) => 0);
-      _masterStockByItem
-        ..clear()
-        ..addAll(_availableStockAtDraftStart);
-    });
-  }
-
   Future<void> _resetPreBazaarForm() async {
     setState(() {
       _eventName.clear();
@@ -330,6 +310,7 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
           detailsJson: details,
         );
 
+        await _resetPreBazaarForm();
         await context.read<ApprovalsCubit>().loadPending();
         widget.onOpenApprovals();
       }
@@ -499,7 +480,9 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
               setState(() => _selectedCompanyId = value);
             },
             onPickDates: _pickDateRange,
-            onCancel: _resetCreateBazaar,
+            onCancel: () {
+              _resetPreBazaarForm();
+            },
             onNext: _onNextFromCreate,
             isNextEnabled: canGoNext,
           );
@@ -537,7 +520,9 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
             isAdminOrOwner: isAdminOrOwner,
             isAllocationEnabled: canUseStockAllocation,
             onAllocationChanged: _handleAllocationChanged,
-            onCancel: _resetAllocation,
+            onCancel: () {
+              _resetPreBazaarForm();
+            },
             onSubmit: _handleSubmit,
             isSubmitEnabled: canFinish,
           );

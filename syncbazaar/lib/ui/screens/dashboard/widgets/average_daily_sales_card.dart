@@ -37,7 +37,7 @@ class AverageDailySalesCard extends StatelessWidget {
             SizedBox(
               width: 170,
               child: DropdownButtonFormField<String>(
-                value: filterOptions.contains(selectedFilter)
+                initialValue: filterOptions.contains(selectedFilter)
                     ? selectedFilter
                     : (filterOptions.isNotEmpty ? filterOptions.first : null),
                 isExpanded: true,

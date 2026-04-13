@@ -17,6 +17,7 @@ class StaffScreen extends StatefulWidget {
 }
 
 class _StaffScreenState extends State<StaffScreen> {
+  static final RegExp _emailPattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
   String _selectedRole = 'ALL';
 
   @override
@@ -347,9 +348,33 @@ class _StaffScreenState extends State<StaffScreen> {
                                 final email = emailController.text.trim();
                                 final password = passwordController.text.trim();
                                 if (name.isEmpty || email.isEmpty) {
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(this.context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Name and email are required.'),
+                                      ),
+                                    );
+                                  }
+                                  return;
+                                }
+                                if (!_emailPattern.hasMatch(email)) {
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(this.context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Please enter a valid email address.'),
+                                      ),
+                                    );
+                                  }
                                   return;
                                 }
                                 if (!isEdit && password.isEmpty) {
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(this.context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Password is required for new users.'),
+                                      ),
+                                    );
+                                  }
                                   return;
                                 }
 

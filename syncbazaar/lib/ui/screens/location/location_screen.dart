@@ -112,6 +112,7 @@ class LocationScreen extends StatelessWidget {
 
     final methodNameController = TextEditingController();
     var methodRequiresId = false;
+    var isPaymentStep = !isCreate;
 
     await showDialog<void>(
       context: context,
@@ -162,186 +163,197 @@ class LocationScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _label(context, 'Location name'),
-                      const SizedBox(height: 4),
-                      _field(nameController),
-                      const SizedBox(height: 12),
-                      _label(context, 'Address (optional)'),
-                      const SizedBox(height: 4),
-                      _field(addressController),
-                      const SizedBox(height: 12),
-                      _label(context, 'Contact (optional)'),
-                      const SizedBox(height: 4),
-                      _field(contactController),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _label(context, 'Incentive deduction %'),
-                                const SizedBox(height: 4),
-                                _field(
-                                  incentiveController,
-                                  keyboardType: const TextInputType.numberWithOptions(
-                                    decimal: true,
+                      if (!isPaymentStep) ...[
+                        _label(context, 'Location name'),
+                        const SizedBox(height: 4),
+                        _field(nameController),
+                        const SizedBox(height: 12),
+                        _label(context, 'Address (optional)'),
+                        const SizedBox(height: 4),
+                        _field(addressController),
+                        const SizedBox(height: 12),
+                        _label(context, 'Contact (optional)'),
+                        const SizedBox(height: 4),
+                        _field(contactController),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _label(context, 'Incentive deduction %'),
+                                  const SizedBox(height: 4),
+                                  _field(
+                                    incentiveController,
+                                    keyboardType: const TextInputType.numberWithOptions(
+                                      decimal: true,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _label(context, 'Buffer deduction %'),
-                                const SizedBox(height: 4),
-                                _field(
-                                  bufferController,
-                                  keyboardType: const TextInputType.numberWithOptions(
-                                    decimal: true,
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _label(context, 'Buffer deduction %'),
+                                  const SizedBox(height: 4),
+                                  _field(
+                                    bufferController,
+                                    keyboardType: const TextInputType.numberWithOptions(
+                                      decimal: true,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 14),
-                      Row(
-                        children: [
-                          Text(
-                            'QR code',
-                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                ),
-                          ),
-                          const Spacer(),
-                          OutlinedButton.icon(
-                            onPressed: pickQr,
-                            icon: const Icon(Icons.qr_code_2),
-                            label: Text(
-                              qrImagePath == null ? 'Upload QR' : 'Change QR',
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (qrImagePath != null && qrImagePath!.isNotEmpty)
+                          ],
+                        ),
+                      ] else ...[
                         Text(
-                          'QR ready: ${qrImagePath!.split('\\').last}',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Colors.black54,
+                          'Accepted payment methods',
+                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w700,
                               ),
                         ),
-                      const SizedBox(height: 14),
-                      Text(
-                        'Accepted payment methods',
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
-                      ),
-                      const SizedBox(height: 8),
-                      ...methods.asMap().entries.map(
-                        (entry) {
-                          final index = entry.key;
-                          final method = entry.value;
-                          final lockDefault =
-                              method.name.toUpperCase() == 'CASH' ||
-                              method.name.toUpperCase() == 'COOP';
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    method.name,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w600,
+                        const SizedBox(height: 8),
+                        ...methods.asMap().entries.map(
+                          (entry) {
+                            final index = entry.key;
+                            final method = entry.value;
+                            final lockDefault =
+                                method.name.toUpperCase() == 'CASH' ||
+                                method.name.toUpperCase() == 'COOP';
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      method.name,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
                                   ),
-                                ),
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Text('Employee ID'),
-                                    const SizedBox(width: 4),
-                                    Switch.adaptive(
-                                      value: method.requiresEmployeeId,
-                                      onChanged: (value) {
-                                        setState(() {
-                                          methods[index] = PaymentMethodMeta(
-                                            name: method.name,
-                                            requiresEmployeeId: value,
-                                          );
-                                        });
-                                      },
-                                    ),
-                                  ],
-                                ),
-                                IconButton(
-                                  onPressed: lockDefault
-                                      ? null
-                                      : () {
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Text('Employee ID'),
+                                      const SizedBox(width: 4),
+                                      Switch.adaptive(
+                                        value: method.requiresEmployeeId,
+                                        onChanged: (value) {
                                           setState(() {
-                                            methods.removeAt(index);
+                                            methods[index] = PaymentMethodMeta(
+                                              name: method.name,
+                                              requiresEmployeeId: value,
+                                            );
                                           });
                                         },
-                                  icon: const Icon(Icons.delete_outline),
+                                      ),
+                                    ],
+                                  ),
+                                  IconButton(
+                                    onPressed: lockDefault
+                                        ? null
+                                        : () {
+                                            setState(() {
+                                              methods.removeAt(index);
+                                            });
+                                          },
+                                    icon: const Icon(Icons.delete_outline),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _field(
+                                methodNameController,
+                                hintText: 'Add payment method',
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Column(
+                              children: [
+                                const Text('Needs ID'),
+                                Switch.adaptive(
+                                  value: methodRequiresId,
+                                  onChanged: (value) {
+                                    setState(() {
+                                      methodRequiresId = value;
+                                    });
+                                  },
                                 ),
                               ],
                             ),
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _field(
-                              methodNameController,
-                              hintText: 'Add payment method',
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Column(
-                            children: [
-                              const Text('Needs ID'),
-                              Switch.adaptive(
-                                value: methodRequiresId,
-                                onChanged: (value) {
-                                  setState(() {
-                                    methodRequiresId = value;
-                                  });
-                                },
+                            const SizedBox(width: 8),
+                            ElevatedButton(
+                              onPressed: addMethod,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                foregroundColor: Colors.white,
                               ),
-                            ],
-                          ),
-                          const SizedBox(width: 8),
-                          ElevatedButton(
-                            onPressed: addMethod,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primary,
-                              foregroundColor: Colors.white,
+                              child: const Text('Add'),
                             ),
-                            child: const Text('Add'),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        Row(
+                          children: [
+                            Text(
+                              'QR code',
+                              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                            ),
+                            const Spacer(),
+                            OutlinedButton.icon(
+                              onPressed: pickQr,
+                              icon: const Icon(Icons.qr_code_2),
+                              label: Text(
+                                qrImagePath == null ? 'Upload QR' : 'Change QR',
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (qrImagePath != null && qrImagePath!.isNotEmpty)
+                          Text(
+                            'QR ready: ${qrImagePath!.split('\\').last}',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: Colors.black54,
+                                ),
                           ),
-                        ],
-                      ),
+                      ],
                     ],
                   ),
                 ),
               ),
               actions: [
+                if (isCreate && isPaymentStep)
+                  TextButton(
+                    onPressed: () {
+                      setState(() {
+                        isPaymentStep = false;
+                      });
+                    },
+                    child: const Text('Back'),
+                  ),
                 TextButton(
                   onPressed: () => Navigator.pop(context),
                   child: const Text('Cancel'),
@@ -352,6 +364,24 @@ class LocationScreen extends StatelessWidget {
                     final incentive =
                         double.tryParse(incentiveController.text.trim());
                     final buffer = double.tryParse(bufferController.text.trim());
+
+                    if (isCreate && !isPaymentStep) {
+                      if (name.isEmpty || incentive == null || buffer == null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Location name, incentive, and buffer are required.',
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+                      setState(() {
+                        isPaymentStep = true;
+                      });
+                      return;
+                    }
+
                     if (name.isEmpty || incentive == null || buffer == null) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
@@ -385,7 +415,7 @@ class LocationScreen extends StatelessWidget {
                       );
                     } else {
                       await cubit.saveLocationConfiguration(
-                        company: existing!.copyWith(
+                        company: existing.copyWith(
                           name: name,
                           address: addressController.text.trim(),
                           contact: contactController.text.trim(),
@@ -405,7 +435,7 @@ class LocationScreen extends StatelessWidget {
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
                   ),
-                  child: const Text('Save'),
+                  child: Text(isCreate && !isPaymentStep ? 'Next' : 'Save'),
                 ),
               ],
             );

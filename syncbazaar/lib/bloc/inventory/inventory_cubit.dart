@@ -36,6 +36,21 @@ class InventoryCubit extends Cubit<List<Product>> {
     await load();
   }
 
+  Future<void> updateCategoryName({
+    required int categoryId,
+    required String name,
+  }) async {
+    await _productRepository.updateCategoryName(
+      categoryId: categoryId,
+      name: name,
+    );
+    await load();
+  }
+
+  Future<List<ProductAllocationItem>> allocationItems() {
+    return _productRepository.allocationItems();
+  }
+
   Future<ProductVariantGroup?> variantGroupForProduct(int productId) {
     return _productRepository.variantGroupForProduct(productId);
   }

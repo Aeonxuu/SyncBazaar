@@ -76,7 +76,8 @@ class EventRepository {
     if (user.isAdminOrOwner) {
       return _events;
     }
-    return _events.where((e) => e.id == user.assignedEventId).toList();
+    final assignedEventIds = user.assignedEventIdsEffective.toSet();
+    return _events.where((e) => assignedEventIds.contains(e.id)).toList();
   }
 
   Future<void> finalizeEvent(int eventId) async {

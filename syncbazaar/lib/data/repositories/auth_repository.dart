@@ -28,6 +28,7 @@ class AuthRepository {
       email: 'employee@syncbazaar.com',
       role: UserRole.employee,
       assignedEventId: 1,
+      assignedEventIds: [1],
     ),
   ];
 
@@ -95,16 +96,24 @@ class AuthRepository {
     required List<int> employeeIds,
   }) async {
     final employeeIdSet = employeeIds.toSet();
-    for (var i = 0; i < _users.length; i++) {
-      final user = _users[i];
-      if (user.role != UserRole.employee) {
+    for (final employeeId in employeeIdSet) {
+      final index = _users.indexWhere(
+        (user) => user.id == employeeId && user.role == UserRole.employee,
+      );
+      if (index == -1) {
         continue;
       }
-      _users[i] = user.copyWith(
-        assignedEventId: employeeIdSet.contains(user.id) ? eventId : null,
-        clearAssignedEventId: !employeeIdSet.contains(user.id),
+      final user = _users[index];
+      final mergedAssignedEventIds = {
+        ...user.assignedEventIdsEffective,
+        eventId,
+      }.toList();
+
+      _users[index] = user.copyWith(
+        assignedEventId: eventId,
+        assignedEventIds: mergedAssignedEventIds,
       );
-      await _syncRememberedUserIfAffected(_users[i]);
+      await _syncRememberedUserIfAffected(_users[index]);
     }
   }
 

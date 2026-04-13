@@ -97,7 +97,7 @@ class _AiAnalyticsCardState extends State<AiAnalyticsCard> {
         const SizedBox(width: 8),
         Expanded(
           child: Text(
-            'Analyze by AI Assist',
+            'Analyze',
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
               color: AppColors.text,
               fontWeight: FontWeight.w600,

@@ -1,3 +1,7 @@
+import 'dart:convert';
+
+import 'package:flutter/services.dart';
+
 import '../../models/category.dart';
 import '../../models/product.dart';
 import '../../models/product_variant.dart';
@@ -26,76 +30,22 @@ class ProductAllocationItem {
 }
 
 class ProductRepository {
-  final List<Category> _categories = [
-    const Category(id: 1, name: 'Shoes'),
-    const Category(id: 2, name: 'Watches'),
-    const Category(id: 3, name: 'Bags'),
-  ];
+  ProductRepository() {
+    _seedFuture = _loadSeedProducts();
+  }
 
-  final List<Product> _products = [
-    const Product(
-      id: 1,
-      name: 'Runner Pro',
-      categoryId: 1,
-      basePrice: 2499,
-      imagePath: null,
-    ),
-    const Product(
-      id: 2,
-      name: 'Street Lite',
-      categoryId: 1,
-      basePrice: 1899,
-      imagePath: null,
-    ),
-    const Product(
-      id: 3,
-      name: 'Classic Watch',
-      categoryId: 2,
-      basePrice: 3299,
-      imagePath: null,
-    ),
-    const Product(
-      id: 4,
-      name: 'Carry Mini',
-      categoryId: 3,
-      basePrice: 1599,
-      imagePath: null,
-    ),
-  ];
+  final List<Category> _categories = [];
 
-  final Map<int, ProductVariantGroup> _variantGroupByProductId = {
-    1: const ProductVariantGroup(id: 1001, productId: 1, name: 'Size'),
-    3: const ProductVariantGroup(id: 1002, productId: 3, name: 'Color'),
-  };
-
-  final Map<int, List<ProductVariantOption>> _variantOptionsByGroupId = {
-    1001: const [
-      ProductVariantOption(id: 2001, variantGroupId: 1001, value: '41'),
-      ProductVariantOption(id: 2002, variantGroupId: 1001, value: '42'),
-      ProductVariantOption(id: 2003, variantGroupId: 1001, value: '43'),
-    ],
-    1002: const [
-      ProductVariantOption(id: 2011, variantGroupId: 1002, value: 'Gold'),
-      ProductVariantOption(id: 2012, variantGroupId: 1002, value: 'Silver'),
-      ProductVariantOption(id: 2013, variantGroupId: 1002, value: 'Copper'),
-    ],
-  };
-
-  final Map<String, int> _stockByAllocationKey = {
-    '1:2001': 20,
-    '1:2002': 20,
-    '1:2003': 20,
-    '2:0': 20,
-    '3:2011': 10,
-    '3:2012': 10,
-    '3:2013': 10,
-    '4:0': 20,
-  };
+  final List<Product> _products = [];
+  final Map<int, ProductVariantGroup> _variantGroupByProductId = {};
+  final Map<int, List<ProductVariantOption>> _variantOptionsByGroupId = {};
+  final Map<String, int> _stockByAllocationKey = {};
 
   int _nextCategoryId = 100;
   int _nextProductId = 1000;
   int _nextVariantGroupId = 5000;
   int _nextVariantOptionId = 9000;
+  Future<void>? _seedFuture;
 
   String allocationKey(int productId, int? variantOptionId) {
     return '$productId:${variantOptionId ?? 0}';
@@ -115,15 +65,20 @@ class ProductRepository {
   }
 
   Future<List<Product>> listProducts() async {
+    await _ensureSeeded();
     return _products.map(_withComputedStock).toList();
   }
 
-  Future<List<Category>> listCategories() async => List<Category>.from(_categories);
+  Future<List<Category>> listCategories() async {
+    await _ensureSeeded();
+    return List<Category>.from(_categories);
+  }
 
   Future<Category> addCategory({
     required String name,
     String? description,
   }) async {
+    await _ensureSeeded();
     final category = Category(
       id: _nextCategoryId++,
       name: name.trim(),
@@ -134,8 +89,26 @@ class ProductRepository {
   }
 
   Future<void> deleteCategory(int categoryId) async {
+    await _ensureSeeded();
     _categories.removeWhere((c) => c.id == categoryId);
     _products.removeWhere((p) => p.categoryId == categoryId);
+  }
+
+  Future<void> updateCategoryName({
+    required int categoryId,
+    required String name,
+  }) async {
+    await _ensureSeeded();
+    final index = _categories.indexWhere((category) => category.id == categoryId);
+    if (index == -1) {
+      return;
+    }
+    final current = _categories[index];
+    _categories[index] = Category(
+      id: current.id,
+      name: name.trim(),
+      description: current.description,
+    );
   }
 
   Future<void> saveProduct({
@@ -149,6 +122,7 @@ class ProductRepository {
     List<ProductVariantOption> variantOptions = const [],
     int stockQuantity = 0,
   }) async {
+    await _ensureSeeded();
     final normalizedName = name.trim();
     final normalizedDescription =
         description?.trim().isEmpty == true ? null : description?.trim();
@@ -180,6 +154,7 @@ class ProductRepository {
   }
 
   Future<void> deleteProduct(int id) async {
+    await _ensureSeeded();
     _products.removeWhere((p) => p.id == id);
     final group = _variantGroupByProductId.remove(id);
     if (group != null) {
@@ -192,10 +167,12 @@ class ProductRepository {
   }
 
   Future<ProductVariantGroup?> variantGroupForProduct(int productId) async {
+    await _ensureSeeded();
     return _variantGroupByProductId[productId];
   }
 
   Future<List<ProductVariantOption>> variantOptionsForProduct(int productId) async {
+    await _ensureSeeded();
     final group = _variantGroupByProductId[productId];
     if (group == null) {
       return const [];
@@ -219,10 +196,12 @@ class ProductRepository {
     required int productId,
     required int? variantOptionId,
   }) async {
+    await _ensureSeeded();
     return _stockByAllocationKey[allocationKey(productId, variantOptionId)] ?? 0;
   }
 
   Future<Map<int, int>> variantStocksByOptionId(int productId) async {
+    await _ensureSeeded();
     final group = _variantGroupByProductId[productId];
     if (group == null) {
       return const {};
@@ -235,6 +214,7 @@ class ProductRepository {
   }
 
   Future<List<ProductAllocationItem>> allocationItems() async {
+    await _ensureSeeded();
     final items = <ProductAllocationItem>[];
     final products = await listProducts();
     for (final product in products) {
@@ -269,10 +249,12 @@ class ProductRepository {
   }
 
   Future<Map<String, int>> stockByAllocationKey() async {
+    await _ensureSeeded();
     return Map<String, int>.from(_stockByAllocationKey);
   }
 
   Future<Map<int, int>> stockByProductId() async {
+    await _ensureSeeded();
     final result = <int, int>{};
     for (final product in _products) {
       final group = _variantGroupByProductId[product.id];
@@ -291,6 +273,7 @@ class ProductRepository {
   }
 
   Future<bool> reserveStocksByAllocationKey(Map<String, int> allocations) async {
+    await _ensureSeeded();
     for (final entry in allocations.entries) {
       final current = _stockByAllocationKey[entry.key];
       if (current == null || entry.value < 0 || current < entry.value) {
@@ -306,6 +289,7 @@ class ProductRepository {
   }
 
   Future<bool> adjustStocksByAllocationKey(Map<String, int> deltasByAllocationKey) async {
+    await _ensureSeeded();
     for (final entry in deltasByAllocationKey.entries) {
       final current = _stockByAllocationKey[entry.key];
       if (current == null) {
@@ -329,6 +313,7 @@ class ProductRepository {
     required int? variantOptionId,
     required int quantity,
   }) async {
+    await _ensureSeeded();
     final key = allocationKey(productId, variantOptionId);
     final current = _stockByAllocationKey[key];
     if (current == null || quantity <= 0 || current < quantity) {
@@ -339,6 +324,7 @@ class ProductRepository {
   }
 
   Future<String> categoryNameForProduct(Product product) async {
+    await _ensureSeeded();
     final category = _categories.where((c) => c.id == product.categoryId).cast<Category?>().firstWhere(
       (c) => c != null,
       orElse: () => null,
@@ -347,6 +333,7 @@ class ProductRepository {
   }
 
   Future<List<String>> categoryNames() async {
+    await _ensureSeeded();
     return _categories.map((c) => c.name).toList();
   }
 
@@ -379,6 +366,102 @@ class ProductRepository {
       imagePath: product.imagePath,
       stockQuantity: total,
     );
+  }
+
+  Future<void> _ensureSeeded() async {
+    final seedFuture = _seedFuture;
+    if (seedFuture == null) {
+      return;
+    }
+    await seedFuture;
+    _seedFuture = null;
+  }
+
+  Future<void> _loadSeedProducts() async {
+    final raw = await rootBundle.loadString('assets/data/sample_products.json');
+    final decoded = jsonDecode(raw) as Map<String, dynamic>;
+    final items = (decoded['master_inventory'] as List<dynamic>? ?? const []);
+
+    _categories.clear();
+    _products.clear();
+    _variantGroupByProductId.clear();
+    _variantOptionsByGroupId.clear();
+    _stockByAllocationKey.clear();
+
+    final brandToCategoryId = <String, int>{};
+    var nextSeedCategoryId = 1;
+
+    int categoryIdForBrand(String brand) {
+      final existing = brandToCategoryId[brand];
+      if (existing != null) {
+        return existing;
+      }
+      final createdId = nextSeedCategoryId++;
+      brandToCategoryId[brand] = createdId;
+      _categories.add(Category(id: createdId, name: brand));
+      return createdId;
+    }
+
+    var maxProductId = 0;
+    for (final item in items) {
+      if (item is! Map<String, dynamic>) {
+        continue;
+      }
+      final productId = (item['id'] as num?)?.toInt() ?? 0;
+      final name = (item['shoe_name'] as String?)?.trim() ?? '';
+      if (productId <= 0 || name.isEmpty) {
+        continue;
+      }
+      final brand = ((item['brand'] as String?)?.trim().isNotEmpty ?? false)
+          ? (item['brand'] as String).trim()
+          : 'Unbranded';
+      final price = (item['price'] as num?)?.toDouble() ?? 0;
+      final variants = (item['variants'] as List<dynamic>? ?? const []);
+      final categoryId = categoryIdForBrand(brand);
+
+      _products.add(
+        Product(
+          id: productId,
+          name: name,
+          description: brand,
+          categoryId: categoryId,
+          basePrice: price,
+          imagePath: null,
+        ),
+      );
+
+      final group = ProductVariantGroup(
+        id: _nextVariantGroupId++,
+        productId: productId,
+        name: 'Size',
+      );
+      _variantGroupByProductId[productId] = group;
+
+      final options = <ProductVariantOption>[];
+      for (final variant in variants) {
+        if (variant is! Map<String, dynamic>) {
+          continue;
+        }
+        final size = variant['size'];
+        final stock = (variant['stock'] as num?)?.toInt() ?? 0;
+        if (size == null) {
+          continue;
+        }
+        final option = ProductVariantOption(
+          id: _nextVariantOptionId++,
+          variantGroupId: group.id,
+          value: size.toString(),
+          stockQuantity: stock,
+        );
+        options.add(option);
+        _stockByAllocationKey[allocationKey(productId, option.id)] = stock;
+      }
+      _variantOptionsByGroupId[group.id] = options;
+      maxProductId = productId > maxProductId ? productId : maxProductId;
+    }
+
+    _nextCategoryId = nextSeedCategoryId;
+    _nextProductId = maxProductId + 1;
   }
 
   void _replaceVariantsForProduct({

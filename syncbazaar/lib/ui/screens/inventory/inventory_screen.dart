@@ -4,19 +4,35 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../bloc/inventory/inventory_cubit.dart';
 import '../../../core/constants/colors.dart';
+import '../../../data/repositories/product_repository.dart' show ProductAllocationItem;
 import '../../../models/category.dart';
 import '../../../models/product.dart';
 import '../../../models/product_variant.dart';
 import '../../../models/user.dart';
 import '../../widgets/confirmation_dialog.dart';
 
-class InventoryScreen extends StatelessWidget {
+class InventoryScreen extends StatefulWidget {
   const InventoryScreen({super.key, required this.user});
 
   final AppUser user;
 
   @override
+  State<InventoryScreen> createState() => _InventoryScreenState();
+}
+
+class _InventoryScreenState extends State<InventoryScreen> {
+  int? _selectedCategoryId;
+  final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final query = _searchController.text.trim().toLowerCase();
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -29,7 +45,7 @@ class InventoryScreen extends StatelessWidget {
                 'Master Inventory',
                 style: Theme.of(context).textTheme.headlineSmall,
               ),
-              if (user.isAdminOrOwner)
+              if (widget.user.isAdminOrOwner)
                 Wrap(
                   spacing: 8,
                   children: [
@@ -59,62 +75,207 @@ class InventoryScreen extends StatelessWidget {
                       for (final category in categories) category.id: category.name,
                     };
 
-                    return RefreshIndicator(
-                      onRefresh: () async {
-                        await context.read<InventoryCubit>().load();
-                      },
-                      child: ListView.builder(
-                        itemCount: products.length,
-                        itemBuilder: (context, i) {
-                          final p = products[i];
-                          final categoryName =
-                              categoryNameById[p.categoryId] ?? 'Uncategorized';
-                          return Card(
-                            child: ListTile(
-                              leading: const CircleAvatar(
-                                child: Icon(Icons.inventory_2_outlined),
-                              ),
-                              title: Text(p.name),
-                              subtitle: Text(
-                                '$categoryName • PHP ${p.basePrice.toStringAsFixed(2)} • Stock ${p.stockQuantity}',
-                              ),
-                              trailing: user.isAdminOrOwner
-                                  ? Wrap(
-                                      spacing: 8,
-                                      children: [
-                                        IconButton(
-                                          onPressed: () => _showProductDialog(
-                                            context,
-                                            product: p,
-                                          ),
-                                          icon: const Icon(Icons.edit_outlined),
+                    return FutureBuilder<List<ProductAllocationItem>>(
+                      future: context.read<InventoryCubit>().allocationItems(),
+                      builder: (context, allocationSnap) {
+                        final allocationItems =
+                            allocationSnap.data ?? const <ProductAllocationItem>[];
+                        final variantValuesByProductId = <int, Set<String>>{};
+                        for (final item in allocationItems) {
+                          final optionValue = item.option?.value.trim();
+                          if (optionValue == null || optionValue.isEmpty) {
+                            continue;
+                          }
+                          variantValuesByProductId
+                              .putIfAbsent(item.product.id, () => <String>{})
+                              .add(optionValue.toLowerCase());
+                        }
+
+                        final filtered = products.where((product) {
+                          if (_selectedCategoryId != null &&
+                              product.categoryId != _selectedCategoryId) {
+                            return false;
+                          }
+                          if (query.isEmpty) {
+                            return true;
+                          }
+                          final productNameMatch =
+                              product.name.toLowerCase().contains(query);
+                          if (productNameMatch) {
+                            return true;
+                          }
+                          final variantValues =
+                              variantValuesByProductId[product.id] ?? const <String>{};
+                          return variantValues.any((value) => value.contains(query));
+                        }).toList();
+
+                        return RefreshIndicator(
+                          onRefresh: () async {
+                            await context.read<InventoryCubit>().load();
+                            if (!context.mounted) {
+                              return;
+                            }
+                            setState(() {});
+                          },
+                          child: ListView(
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    flex: 2,
+                                    child: DropdownButtonFormField<int?>(
+                                      initialValue: _selectedCategoryId,
+                                      decoration: InputDecoration(
+                                        labelText: 'Category filter',
+                                        isDense: true,
+                                        contentPadding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 11,
                                         ),
-                                        IconButton(
-                                          onPressed: () async {
-                                            final confirmed = await showConfirmationDialog(
-                                              context: context,
-                                              title: 'Delete Product',
-                                              message: 'Delete "${p.name}"?',
-                                              confirmLabel: 'Delete',
-                                            );
-                                            if (confirmed && context.mounted) {
-                                              await context
-                                                  .read<InventoryCubit>()
-                                                  .delete(p.id);
-                                            }
-                                          },
-                                        icon: const Icon(
-                                          Icons.delete_outline,
-                                          color: Color(0xFFFF5252),
+                                        filled: true,
+                                        fillColor: const Color(0xFFF5F1FB),
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(6),
+                                          borderSide: BorderSide.none,
+                                        ),
+                                        enabledBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(6),
+                                          borderSide: BorderSide.none,
+                                        ),
+                                        focusedBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(6),
+                                          borderSide: const BorderSide(
+                                            color: AppColors.primary,
+                                            width: 1.5,
+                                          ),
                                         ),
                                       ),
-                                    ],
-                                  )
-                                : null,
-                            ),
-                          );
-                        },
-                      ),
+                                      items: [
+                                        const DropdownMenuItem<int?>(
+                                          value: null,
+                                          child: Text('All categories'),
+                                        ),
+                                        ...categories.map(
+                                          (category) => DropdownMenuItem<int?>(
+                                            value: category.id,
+                                            child: Text(category.name),
+                                          ),
+                                        ),
+                                      ],
+                                      onChanged: (value) {
+                                        setState(() {
+                                          _selectedCategoryId = value;
+                                        });
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    flex: 3,
+                                    child: TextField(
+                                      controller: _searchController,
+                                      onChanged: (_) => setState(() {}),
+                                      decoration: InputDecoration(
+                                        labelText: 'Search name or size',
+                                        prefixIcon: const Icon(Icons.search),
+                                        suffixIcon: _searchController.text.isEmpty
+                                            ? null
+                                            : IconButton(
+                                                onPressed: () {
+                                                  _searchController.clear();
+                                                  setState(() {});
+                                                },
+                                                icon: const Icon(Icons.close),
+                                              ),
+                                        isDense: true,
+                                        contentPadding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 11,
+                                        ),
+                                        filled: true,
+                                        fillColor: const Color(0xFFF5F1FB),
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(6),
+                                          borderSide: BorderSide.none,
+                                        ),
+                                        enabledBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(6),
+                                          borderSide: BorderSide.none,
+                                        ),
+                                        focusedBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(6),
+                                          borderSide: const BorderSide(
+                                            color: AppColors.primary,
+                                            width: 1.5,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              if (filtered.isEmpty)
+                                const Card(
+                                  child: Padding(
+                                    padding: EdgeInsets.all(16),
+                                    child: Text('No products matched your filter.'),
+                                  ),
+                                )
+                              else
+                                ...filtered.map((p) {
+                                  final categoryName =
+                                      categoryNameById[p.categoryId] ?? 'Uncategorized';
+                                  return Card(
+                                    child: ListTile(
+                                      leading: const CircleAvatar(
+                                        child: Icon(Icons.inventory_2_outlined),
+                                      ),
+                                      title: Text(p.name),
+                                      subtitle: Text(
+                                        '$categoryName • PHP ${p.basePrice.toStringAsFixed(2)} • Stock ${p.stockQuantity}',
+                                      ),
+                                      trailing: widget.user.isAdminOrOwner
+                                          ? Wrap(
+                                              spacing: 8,
+                                              children: [
+                                                IconButton(
+                                                  onPressed: () => _showProductDialog(
+                                                    context,
+                                                    product: p,
+                                                  ),
+                                                  icon: const Icon(Icons.edit_outlined),
+                                                ),
+                                                IconButton(
+                                                  onPressed: () async {
+                                                    final confirmed =
+                                                        await showConfirmationDialog(
+                                                      context: context,
+                                                      title: 'Delete Product',
+                                                      message: 'Delete "${p.name}"?',
+                                                      confirmLabel: 'Delete',
+                                                    );
+                                                    if (confirmed && context.mounted) {
+                                                      await context
+                                                          .read<InventoryCubit>()
+                                                          .delete(p.id);
+                                                    }
+                                                  },
+                                                  icon: const Icon(
+                                                    Icons.delete_outline,
+                                                    color: Color(0xFFFF5252),
+                                                  ),
+                                                ),
+                                              ],
+                                            )
+                                          : null,
+                                    ),
+                                  );
+                                }),
+                            ],
+                          ),
+                        );
+                      },
                     );
                   },
                 );
@@ -825,26 +986,110 @@ class InventoryScreen extends StatelessWidget {
                       subtitle: category.description != null
                           ? Text(category.description!)
                           : null,
-                      trailing: IconButton(
-                        onPressed: () async {
-                          Navigator.pop(context);
-                          final confirmed = await showConfirmationDialog(
-                            context: context,
-                            title: 'Delete Category',
-                            message: 'Delete "${category.name}"? All products will be removed.',
-                            confirmLabel: 'Delete',
-                          );
-                          if (confirmed && context.mounted) {
-                            await cubit.deleteCategory(category.id);
-                            if (context.mounted) {
+                      trailing: Wrap(
+                        spacing: 4,
+                        children: [
+                          IconButton(
+                            onPressed: () async {
+                              final controller = TextEditingController(
+                                text: category.name,
+                              );
+                              final updated = await showDialog<String>(
+                                context: context,
+                                builder: (context) {
+                                  return AlertDialog(
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    title: const Text('Edit Category'),
+                                    content: TextField(
+                                      controller: controller,
+                                      decoration: InputDecoration(
+                                        isDense: true,
+                                        contentPadding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 11,
+                                        ),
+                                        filled: true,
+                                        fillColor: const Color(0xFFF5F1FB),
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(6),
+                                          borderSide: BorderSide.none,
+                                        ),
+                                        enabledBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(6),
+                                          borderSide: BorderSide.none,
+                                        ),
+                                        focusedBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(6),
+                                          borderSide: const BorderSide(
+                                            color: AppColors.primary,
+                                            width: 1.5,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(context),
+                                        child: const Text('Cancel'),
+                                      ),
+                                      ElevatedButton(
+                                        onPressed: () {
+                                          Navigator.pop(
+                                            context,
+                                            controller.text.trim(),
+                                          );
+                                        },
+                                        child: const Text('Save'),
+                                      ),
+                                    ],
+                                  );
+                                },
+                              );
+
+                              final nextName = (updated ?? '').trim();
+                              if (nextName.isEmpty ||
+                                  nextName.toUpperCase() ==
+                                      category.name.trim().toUpperCase()) {
+                                return;
+                              }
+
+                              await cubit.updateCategoryName(
+                                categoryId: category.id,
+                                name: nextName,
+                              );
+                              if (!context.mounted) {
+                                return;
+                              }
+                              Navigator.pop(context);
                               _showCategoriesDialog(context);
-                            }
-                          }
-                        },
-                        icon: const Icon(
-                          Icons.delete_outline,
-                          color: Color(0xFFFF5252),
-                        ),
+                            },
+                            icon: const Icon(Icons.edit_outlined),
+                          ),
+                          IconButton(
+                            onPressed: () async {
+                              Navigator.pop(context);
+                              final confirmed = await showConfirmationDialog(
+                                context: context,
+                                title: 'Delete Category',
+                                message:
+                                    'Delete "${category.name}"? All products will be removed.',
+                                confirmLabel: 'Delete',
+                              );
+                              if (confirmed && context.mounted) {
+                                await cubit.deleteCategory(category.id);
+                                if (context.mounted) {
+                                  _showCategoriesDialog(context);
+                                }
+                              }
+                            },
+                            icon: const Icon(
+                              Icons.delete_outline,
+                              color: Color(0xFFFF5252),
+                            ),
+                          ),
+                        ],
                       ),
                     );
                   },
