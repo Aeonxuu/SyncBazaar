@@ -2,6 +2,9 @@ import 'dart:typed_data';
 
 import '../../models/product.dart';
 import '../../models/product_variant.dart';
+import '../remote/api_client.dart';
+import '../remote/product_api_mapper.dart';
+import 'auth_repository.dart';
 
 /// One value a product's variant category can hold, e.g. "Ivory White" for a
 /// "Color" category, paired with its stock for the parent product's other
@@ -57,9 +60,43 @@ class ProductAllocationItem {
 }
 
 class ProductRepository {
-  ProductRepository() {
+  /// Backed by the vendor's catalogue when [auth] is supplied, and by whatever
+  /// `saveProduct` is given otherwise.
+  ///
+  /// One class rather than two implementations because only the *source* of the
+  /// data changes: every method below reads the same in-memory maps either way,
+  /// so no screen can tell the difference. Writes are still local-only —
+  /// `saveProduct` and `deleteProduct` do not POST yet.
+  ///
+  /// Takes the repository rather than an [ApiClient] and a vendor id because
+  /// neither exists yet when this is constructed: `app.dart` builds every
+  /// repository in `initState`, and the token and vendor only arrive at login.
+  /// Reading them from the session at first use is what lets one long-lived
+  /// instance serve both states.
+  ProductRepository({AuthRepository? auth}) : _auth = auth {
     _seedFuture = _loadSeedProducts();
   }
+
+  final AuthRepository? _auth;
+
+  /// Which vendor the loaded catalogue belongs to, so signing in as a different
+  /// one refetches instead of showing the previous vendor's stock.
+  int? _loadedVendorId;
+
+  /// The in-flight catalogue fetch, shared by concurrent callers.
+  ///
+  /// Not an optimisation: `InventoryCubit.load()` calls into this repository
+  /// around fifty times per screen load, and without a shared future that is
+  /// fifty identical HTTP requests.
+  Future<void>? _apiLoad;
+
+  /// Allocation key to the server's `ProductVariant` id, empty until loaded
+  /// from the API. Uploading a sale needs it: the server names what was sold by
+  /// variant, never by the client's composite key.
+  final Map<String, int> _variantIdByAllocationKey = {};
+
+  int? variantIdFor(String allocationKey) =>
+      _variantIdByAllocationKey[allocationKey];
 
   final List<Product> _products = [];
 
@@ -465,15 +502,104 @@ class ProductRepository {
 
   Future<void> _ensureSeeded() async {
     final seedFuture = _seedFuture;
-    if (seedFuture == null) {
+    if (seedFuture != null) {
+      await seedFuture;
+      _seedFuture = null;
+    }
+    await _ensureLoadedFromApi();
+  }
+
+  /// Fetches the catalogue once the session knows which vendor to ask for.
+  ///
+  /// Returns immediately when there is no session — before login, and in the
+  /// mock-seeded and test paths — so the in-memory behaviour is unchanged.
+  Future<void> _ensureLoadedFromApi() async {
+    final auth = _auth;
+    final vendorId = auth?.vendorId;
+    if (auth == null || vendorId == null || _loadedVendorId == vendorId) {
       return;
     }
-    await seedFuture;
-    _seedFuture = null;
+
+    // Cleared in `whenComplete` rather than on success, so a failed fetch is
+    // retried by the next caller instead of leaving the catalogue permanently
+    // empty behind a future that already completed.
+    final existing = _apiLoad;
+    if (existing != null) {
+      await existing;
+      return;
+    }
+    final load = _loadFromApi(auth.api, vendorId).then((_) {
+      _loadedVendorId = vendorId;
+    });
+    _apiLoad = load.whenComplete(() => _apiLoad = null);
+    await _apiLoad;
   }
 
   Future<void> _loadSeedProducts() async {
     // Starts empty — products are added via saveProduct.
+  }
+
+  /// Fills the same maps `saveProduct` would, from the vendor's catalogue.
+  ///
+  /// Failure is deliberately not swallowed: an empty inventory and an
+  /// unreachable server look identical on screen, and a cashier told "no
+  /// products" will go looking for the products rather than for the wifi. The
+  /// [ApiException] surfaces through `_ensureSeeded` to whichever cubit
+  /// triggered the load.
+  Future<void> _loadFromApi(ApiClient api, int vendorId) async {
+    final payload =
+        await api.get('/api/core/vendor/$vendorId/product/') as List;
+    final bundle = mapProductsResponse(payload);
+
+    _products
+      ..clear()
+      ..addAll(bundle.products);
+    _variantGroupsByProductId
+      ..clear()
+      ..addAll(bundle.groupsByProductId);
+    _variantOptionsByGroupId
+      ..clear()
+      ..addAll(bundle.optionsByGroupId);
+    _stockByAllocationKey
+      ..clear()
+      ..addAll(bundle.stockByAllocationKey);
+    _variantIdByAllocationKey
+      ..clear()
+      ..addAll(bundle.variantIdByAllocationKey);
+
+    // Ids come from the server now, so a locally created product must not be
+    // handed one the server might also issue.
+    _nextProductId = _above(_products.map((product) => product.id), 1000);
+    _nextVariantGroupId = _above(
+      _variantGroupsByProductId.values.expand((g) => g).map((g) => g.id),
+      5000,
+    );
+    _nextVariantOptionId = _above(
+      _variantOptionsByGroupId.values.expand((o) => o).map((o) => o.id),
+      9000,
+    );
+  }
+
+  /// Re-fetches the catalogue, discarding what is held now.
+  ///
+  /// Does nothing without a session, so calling it from a shared refresh
+  /// control is safe in the mock-seeded build.
+  Future<void> refresh() async {
+    if (_auth?.vendorId == null) {
+      return;
+    }
+    _loadedVendorId = null;
+    await _ensureLoadedFromApi();
+  }
+
+  static int _above(Iterable<int> ids, int floor) {
+    var highest = floor;
+    for (final id in ids) {
+      if (id >= highest) {
+        highest = id + 1;
+      }
+    }
+    return highest;
   }
 
   /// Builds the key used in [saveProduct]'s `combinationStocks` map: the
