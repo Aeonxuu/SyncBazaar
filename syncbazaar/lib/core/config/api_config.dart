@@ -23,6 +23,19 @@
 class ApiConfig {
   const ApiConfig._();
 
+  /// Whether this build talks to the backend instead of the mock dataset.
+  ///
+  /// Off by default, so an ordinary `flutter run` still boots the seeded demo
+  /// data with no server involved. Turn it on with
+  /// `--dart-define=USE_BACKEND=true`.
+  ///
+  /// The two are exclusive on purpose. Debug builds are also the only ones
+  /// allowed to speak plain http (see the debug AndroidManifest), so the build
+  /// used for testing against a laptop is exactly the build that seeds mock
+  /// data — and a screen showing twelve server products beside twelve seeded
+  /// ones is worse than either alone.
+  static const bool useBackend = bool.fromEnvironment('USE_BACKEND');
+
   /// Defaults to the desktop/web host, since that is where this app is
   /// developed day to day. Compile-time rather than runtime so no build ships
   /// pointing at a laptop by accident.

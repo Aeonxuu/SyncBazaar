@@ -1,4 +1,6 @@
 import 'package:flutter/foundation.dart';
+
+import 'core/config/api_config.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -45,12 +47,20 @@ import 'ui/screens/staff/staff_screen.dart';
 import 'ui/widgets/navigation_rail.dart';
 
 class SyncBazaarApp extends StatefulWidget {
-  const SyncBazaarApp({super.key, this.seedMockData = kDebugMode});
+  const SyncBazaarApp({
+    super.key,
+    this.seedMockData = kDebugMode && !ApiConfig.useBackend,
+  });
 
   /// Whether to load `assets/dev/mock_data.json` on boot.
   ///
   /// Defaults to on in debug builds and off in release, which is what the app
-  /// itself always wants. It exists as a parameter for widget tests: the
+  /// itself always wants — except when the build is pointed at the backend, in
+  /// which case seeding is off in debug too and the repositories read from the
+  /// server instead. Otherwise the tablet would show every product twice, once
+  /// from each source.
+  ///
+  /// It is also a parameter for widget tests: the
   /// seeder reads the asset through `rootBundle`, and that is real I/O which
   /// never completes inside `testWidgets`' fake-async zone — so a test that
   /// boots the app with seeding on hangs in `pumpAndSettle` until it times
