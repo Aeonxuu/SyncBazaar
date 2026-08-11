@@ -95,8 +95,22 @@ class ProductRepository {
   /// variant, never by the client's composite key.
   final Map<String, int> _variantIdByAllocationKey = {};
 
+  /// The same mapping read the other way.
+  ///
+  /// Needed because traffic runs in both directions: a sale upload turns a
+  /// combination into a variant id, while an event's stock allocation arrives
+  /// from the server as variant ids that have to become combinations again.
+  final Map<int, String> _allocationKeyByVariantId = {};
+
   int? variantIdFor(String allocationKey) =>
       _variantIdByAllocationKey[allocationKey];
+
+  String? allocationKeyForVariant(int variantId) =>
+      _allocationKeyByVariantId[variantId];
+
+  /// Whether the catalogue has been fetched, so callers that depend on the
+  /// variant mapping can make sure it is there first.
+  Future<void> ensureLoaded() => _ensureSeeded();
 
   final List<Product> _products = [];
 
@@ -566,6 +580,12 @@ class ProductRepository {
     _variantIdByAllocationKey
       ..clear()
       ..addAll(bundle.variantIdByAllocationKey);
+    _allocationKeyByVariantId
+      ..clear()
+      ..addAll({
+        for (final entry in bundle.variantIdByAllocationKey.entries)
+          entry.value: entry.key,
+      });
 
     // Ids come from the server now, so a locally created product must not be
     // handed one the server might also issue.

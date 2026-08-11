@@ -79,13 +79,15 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
     super.initState();
     _seeding = widget.seedMockData;
     _authRepository = AuthRepository();
-    _eventRepository = EventRepository();
-    // Handed the session rather than an API client: the vendor whose catalogue
-    // to fetch is only known once someone signs in, and this is built before
-    // that. With mock seeding on there is no session, so the repository stays
-    // in memory and the seeder fills it as before.
-    _productRepository = ProductRepository(
-      auth: widget.seedMockData ? null : _authRepository,
+    // Handed the session rather than an API client: the vendor whose data to
+    // fetch is only known once someone signs in, and these are built before
+    // that. With mock seeding on there is no session, so both stay in memory
+    // and the seeder fills them as before.
+    final session = widget.seedMockData ? null : _authRepository;
+    _productRepository = ProductRepository(auth: session);
+    _eventRepository = EventRepository(
+      auth: session,
+      products: _productRepository,
     );
     _salesRepository = SalesRepository();
     _ordersRepository = OrdersRepository();

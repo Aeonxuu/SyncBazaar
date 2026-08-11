@@ -1,7 +1,30 @@
 import '../../models/bazaar_event.dart';
 import '../../models/user.dart';
+import '../remote/event_api_mapper.dart';
+import 'auth_repository.dart';
+import 'product_repository.dart';
 
 class EventRepository {
+  /// Backed by the vendor's bazaars when [auth] is supplied.
+  ///
+  /// [products] is required alongside it, not optional: the server allocates
+  /// stock against variant ids, and only the catalogue knows which combination
+  /// each one stands for. Follows [ProductRepository] in reading the session at
+  /// first use rather than at construction, since `app.dart` builds every
+  /// repository before anyone has signed in.
+  ///
+  /// Reads only. Creating, editing, finalizing and clearing allocations still
+  /// happen in memory and do not reach the server yet.
+  EventRepository({AuthRepository? auth, ProductRepository? products})
+    : _auth = auth,
+      _products = products;
+
+  final AuthRepository? _auth;
+  final ProductRepository? _products;
+
+  int? _loadedVendorId;
+  Future<void>? _load;
+
   final List<BazaarEvent> _events = [];
   final Map<int, Map<String, int>> _allocationsByEventId = {};
 
@@ -44,7 +67,109 @@ class EventRepository {
     }
   }
 
+  /// Fetches the vendor's bazaars and their allocations once signed in.
+  ///
+  /// Returns immediately without a session, so the mock-seeded and test paths
+  /// keep their in-memory behaviour.
+  Future<void> _ensureLoaded() async {
+    final auth = _auth;
+    final products = _products;
+    final vendorId = auth?.vendorId;
+    if (auth == null ||
+        products == null ||
+        vendorId == null ||
+        _loadedVendorId == vendorId) {
+      return;
+    }
+
+    final existing = _load;
+    if (existing != null) {
+      await existing;
+      return;
+    }
+    final load = _loadFromApi(auth, products).then((_) {
+      _loadedVendorId = vendorId;
+    });
+    _load = load.whenComplete(() => _load = null);
+    await _load;
+  }
+
+  Future<void> _loadFromApi(
+    AuthRepository auth,
+    ProductRepository products,
+  ) async {
+    // The catalogue first: an allocation is a variant id until the products are
+    // loaded, and a variant id means nothing on its own.
+    await products.ensureLoaded();
+
+    final methods = await _paymentMethods(auth);
+    final payload = await auth.api.get('/api/bazaar/event/') as List;
+    final events = mapEventsResponse(
+      payload,
+      statusFor: _statusFor,
+      fallbackMethods: methods.$1,
+      fallbackCustomMethods: methods.$2,
+    );
+
+    _events
+      ..clear()
+      ..addAll(events);
+
+    _allocationsByEventId.clear();
+    for (final event in events) {
+      final stock =
+          await auth.api.get('/api/bazaar/event/${event.id}/stock/') as List;
+      _allocationsByEventId[event.id] = mapEventStockResponse(
+        stock,
+        allocationKeyForVariant: products.allocationKeyForVariant,
+      );
+    }
+  }
+
+  /// The vendor-wide payment methods, standing in for per-venue ones.
+  ///
+  /// Which methods a bazaar accepts belongs to its `Establishment`, whose
+  /// endpoint currently 500s, so this falls back to the global list. Failing
+  /// soft rather than throwing: a wrong payment menu is recoverable, an event
+  /// list that will not load is not.
+  Future<(List<String>, List<BazaarPaymentMethod>)> _paymentMethods(
+    AuthRepository auth,
+  ) async {
+    try {
+      final payload = await auth.api.get('/api/core/mode-of-payment/') as List;
+      final names = <String>[];
+      final custom = <BazaarPaymentMethod>[];
+      for (final entry in payload) {
+        final map = entry as Map<String, dynamic>;
+        final name = map['name'] as String? ?? '';
+        if (name.isEmpty) {
+          continue;
+        }
+        names.add(name.toUpperCase());
+        final label = map['required_information_name'] as String?;
+        if (label != null && label.trim().isNotEmpty) {
+          custom.add(
+            BazaarPaymentMethod(name: name.toUpperCase(), extraFieldLabel: label),
+          );
+        }
+      }
+      return (names.isEmpty ? const ['CASH'] : names, custom);
+    } on Object {
+      return (const ['CASH'], const <BazaarPaymentMethod>[]);
+    }
+  }
+
+  /// Re-fetches bazaars and allocations, discarding what is held now.
+  Future<void> refresh() async {
+    if (_auth?.vendorId == null) {
+      return;
+    }
+    _loadedVendorId = null;
+    await _ensureLoaded();
+  }
+
   Future<List<BazaarEvent>> listAll() async {
+    await _ensureLoaded();
     _refreshStatuses();
     return _events;
   }
@@ -81,6 +206,7 @@ class EventRepository {
   }
 
   Future<List<BazaarEvent>> listVisibleForUser(AppUser user) async {
+    await _ensureLoaded();
     _refreshStatuses();
     if (user.isAdminOrOwner) {
       return _events;
@@ -112,6 +238,7 @@ class EventRepository {
   Future<Map<String, int>> allocationsForEventByAllocationKey(
     int eventId,
   ) async {
+    await _ensureLoaded();
     return Map<String, int>.from(_allocationsByEventId[eventId] ?? const {});
   }
 
