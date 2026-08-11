@@ -43,3 +43,8 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Gradle's own build output. `/build/` above is anchored to this directory, so
+# it misses this one and a Gradle problems-report.html kept showing up as an
+# untracked file to commit.
+/android/build/

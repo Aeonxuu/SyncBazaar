@@ -1,0 +1,10 @@
+# Local tooling, not part of the app. Claude Code's skills and settings are
+# per-machine setup rather than project source, and versioning them puts a diff
+# in front of every commit that has nothing to do with SyncBazaar.
+.agents/
+.claude/
+
+# A snapshot of the backend repo, shared once for reference. It goes stale the
+# moment that repo moves -- it already lists a package the live backend has
+# removed -- so the clone at ../syncbazaar_backend is the only thing to trust.
+collected_code.md
