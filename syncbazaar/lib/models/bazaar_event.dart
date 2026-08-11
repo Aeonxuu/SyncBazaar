@@ -1,10 +1,7 @@
 enum BazaarStatus { upcoming, ongoing, ended }
 
 class BazaarPaymentMethod {
-  const BazaarPaymentMethod({
-    required this.name,
-    this.extraFieldLabel,
-  });
+  const BazaarPaymentMethod({required this.name, this.extraFieldLabel});
 
   final String name;
   final String? extraFieldLabel;

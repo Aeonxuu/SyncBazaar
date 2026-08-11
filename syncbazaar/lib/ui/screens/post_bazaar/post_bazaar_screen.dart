@@ -12,6 +12,7 @@ import '../../../models/order.dart';
 import '../../../models/product.dart';
 import '../../../models/sale.dart';
 import '../../widgets/confirmation_dialog.dart';
+import '../../../core/utils/formatters.dart';
 
 class PostBazaarScreen extends StatefulWidget {
   const PostBazaarScreen({super.key});
@@ -26,11 +27,7 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
 
   static const _kCardRadius = 12.0;
   static const _kCardShadow = [
-    BoxShadow(
-      color: Color(0x11000000),
-      blurRadius: 20,
-      offset: Offset(0, 4),
-    ),
+    BoxShadow(color: Color(0x11000000), blurRadius: 20, offset: Offset(0, 4)),
   ];
 
   @override
@@ -52,13 +49,15 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
     final events = await eventRepository.listAll();
     final allocationsByEventId = <int, Map<String, int>>{};
     for (final event in events) {
-      allocationsByEventId[event.id] =
-          await eventRepository.allocationsForEventByAllocationKey(event.id);
+      allocationsByEventId[event.id] = await eventRepository
+          .allocationsForEventByAllocationKey(event.id);
     }
     final eventNameById = {for (final event in events) event.id: event.name};
     final companies = await settingsRepository.listCompanies();
     final companyById = {for (final company in companies) company.id: company};
-    final companyNameById = {for (final company in companies) company.id: company.name};
+    final companyNameById = {
+      for (final company in companies) company.id: company.name,
+    };
     return _PostBazaarData(
       sales: sales,
       orders: orders,
@@ -68,7 +67,7 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
       eventNameById: eventNameById,
       locationNameByEventId: {
         for (final event in events)
-          event.id: companyNameById[event.companyId] ?? 'Unknown Location',
+          event.id: companyNameById[event.companyId] ?? 'Unknown venue',
       },
       incentivePercentByEventId: {
         for (final event in events)
@@ -111,9 +110,9 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
               ),
               labelColor: AppColors.primary,
               unselectedLabelColor: Colors.black54,
-              labelStyle: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+              labelStyle: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w700),
               tabs: const [
                 Tab(text: 'SOA Draft'),
                 Tab(text: 'List of Orders'),
@@ -129,7 +128,8 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
                   return const Center(child: CircularProgressIndicator());
                 }
                 final data = snapshot.data!;
-                if (_selectedReconciliationEventId == null && data.events.isNotEmpty) {
+                if (_selectedReconciliationEventId == null &&
+                    data.events.isNotEmpty) {
                   WidgetsBinding.instance.addPostFrameCallback((_) {
                     if (mounted && _selectedReconciliationEventId == null) {
                       setState(() {
@@ -193,11 +193,16 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
       orElse: () => data.events.first,
     );
     final allocations = data.allocationsByEventId[selectedEvent.id] ?? const {};
-    final allocatedQty = allocations.values.fold<int>(0, (sum, qty) => sum + qty);
-    final salesCount =
-      data.sales.where((sale) => sale.eventId == selectedEvent.id).length;
-    final ordersCount =
-      data.orders.where((order) => order.eventId == selectedEvent.id).length;
+    final allocatedQty = allocations.values.fold<int>(
+      0,
+      (sum, qty) => sum + qty,
+    );
+    final salesCount = data.sales
+        .where((sale) => sale.eventId == selectedEvent.id)
+        .length;
+    final ordersCount = data.orders
+        .where((order) => order.eventId == selectedEvent.id)
+        .length;
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -215,9 +220,9 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
               Text(
                 'Choose Bazaar',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Colors.black54,
-                      fontWeight: FontWeight.w700,
-                    ),
+                  color: Colors.black54,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<int>(
@@ -238,7 +243,10 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
                 },
                 decoration: InputDecoration(
                   isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 11,
+                  ),
                   filled: true,
                   fillColor: const Color(0xFFF5F1FB),
                   border: OutlineInputBorder(
@@ -251,7 +259,10 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(6),
-                    borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+                    borderSide: const BorderSide(
+                      color: AppColors.primary,
+                      width: 1.5,
+                    ),
                   ),
                 ),
               ),
@@ -264,14 +275,16 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
             width: 300,
             child: _eventCard(
               event: selectedEvent,
-              locationName: data.locationNameByEventId[selectedEvent.id] ??
-                  'Unknown Location',
+              locationName:
+                  data.locationNameByEventId[selectedEvent.id] ??
+                  'Unknown venue',
               quickMeta: [
                 'Allocated lines: ${allocations.length}',
                 'Allocated qty: $allocatedQty',
                 'Sales: $salesCount • Orders: $ordersCount',
               ],
-              onTap: () => _openReconciliationDetails(context, data, selectedEvent),
+              onTap: () =>
+                  _openReconciliationDetails(context, data, selectedEvent),
             ),
           ),
         ),
@@ -280,9 +293,9 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
             padding: const EdgeInsets.only(top: 10),
             child: Text(
               'This bazaar has no allocated stock yet. Open details to review and finalize when ready.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Colors.black54,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: Colors.black54),
             ),
           ),
       ],
@@ -304,7 +317,7 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
       separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
         final event = events[index];
-        final locationName = locationNameByEventId[event.id] ?? 'Unknown Location';
+        final locationName = locationNameByEventId[event.id] ?? 'Unknown venue';
 
         return _AnimatedEntrance(
           delayMs: 40 * (index % 8),
@@ -329,14 +342,14 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
                           event.name,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w700,
-                              ),
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w700),
                         ),
                         const SizedBox(height: 6),
                         Text(
                           locationName,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
                                 color: Colors.black54,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -344,7 +357,8 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
                         const SizedBox(height: 8),
                         Text(
                           _formatDateRange(event.startDate, event.endDate),
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
                                 color: Colors.black54,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -368,7 +382,8 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
                         ),
                         child: Text(
                           event.status.name.toUpperCase(),
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
                                 color: _statusForeground(event.status),
                                 fontWeight: FontWeight.w700,
                               ),
@@ -376,7 +391,10 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
                       ),
                       const SizedBox(height: 8),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xFFF2ECFC),
                           borderRadius: BorderRadius.circular(999),
@@ -386,7 +404,8 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
                           children: [
                             Text(
                               'View details',
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
                                     color: AppColors.primary,
                                     fontWeight: FontWeight.w700,
                                   ),
@@ -418,18 +437,18 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
     required VoidCallback onTap,
   }) {
     final titleStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
-          color: Colors.black54,
-          fontWeight: FontWeight.w600,
-        );
+      color: Colors.black54,
+      fontWeight: FontWeight.w600,
+    );
     final valueStyle = Theme.of(context).textTheme.headlineSmall?.copyWith(
-          color: AppColors.text,
-          fontWeight: FontWeight.w700,
-          height: 1,
-        );
+      color: AppColors.text,
+      fontWeight: FontWeight.w700,
+      height: 1,
+    );
     final metaStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
-          color: Colors.black54,
-          fontWeight: FontWeight.w600,
-        );
+      color: Colors.black54,
+      fontWeight: FontWeight.w600,
+    );
 
     return _InteractiveCard(
       onTap: onTap,
@@ -480,14 +499,19 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: _statusBackground(event.status),
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(
                     event.status.name.toUpperCase(),
-                    style: metaStyle?.copyWith(color: _statusForeground(event.status)),
+                    style: metaStyle?.copyWith(
+                      color: _statusForeground(event.status),
+                    ),
                   ),
                 ),
               ],
@@ -502,10 +526,7 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
               ...quickMeta.map(
                 (line) => Padding(
                   padding: const EdgeInsets.only(bottom: 2),
-                  child: Text(
-                    line,
-                    style: metaStyle,
-                  ),
+                  child: Text(line, style: metaStyle),
                 ),
               ),
             ],
@@ -515,7 +536,10 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 220),
                 curve: Curves.easeOut,
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF2ECFC),
                   borderRadius: BorderRadius.circular(999),
@@ -604,9 +628,9 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
                 child: Text(
                   message,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.black54,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    color: Colors.black54,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ],
@@ -621,9 +645,14 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
     _PostBazaarData data,
     BazaarEvent event,
   ) async {
-    final eventSales = data.sales.where((sale) => sale.eventId == event.id).toList();
-    final grossSales = eventSales.fold<double>(0, (sum, sale) => sum + sale.total);
-    final location = data.locationNameByEventId[event.id] ?? 'Unknown Location';
+    final eventSales = data.sales
+        .where((sale) => sale.eventId == event.id)
+        .toList();
+    final grossSales = eventSales.fold<double>(
+      0,
+      (sum, sale) => sum + sale.total,
+    );
+    final location = data.locationNameByEventId[event.id] ?? 'Unknown venue';
     final incentivePct = data.incentivePercentByEventId[event.id] ?? 10;
     final bufferPct = data.bufferPercentByEventId[event.id] ?? 10;
     final incentive = grossSales * (incentivePct / 100);
@@ -638,23 +667,23 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
         _receiptRow(
           context,
           label: 'Gross sales',
-          value: 'PHP ${grossSales.toStringAsFixed(2)}',
+          value: formatPeso(grossSales),
         ),
         _receiptRow(
           context,
           label: 'Incentive (${incentivePct.toStringAsFixed(1)}%)',
-          value: 'PHP ${incentive.toStringAsFixed(2)}',
+          value: formatPeso(incentive),
         ),
         _receiptRow(
           context,
           label: 'Buffer (${bufferPct.toStringAsFixed(1)}%)',
-          value: 'PHP ${buffer.toStringAsFixed(2)}',
+          value: formatPeso(buffer),
         ),
         const Divider(height: 18),
         _receiptRow(
           context,
           label: 'Net amount',
-          value: 'PHP ${net.toStringAsFixed(2)}',
+          value: formatPeso(net),
           emphasize: true,
         ),
         _receiptRow(
@@ -670,7 +699,9 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
             onPressed: () {
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Draft SOA generated for ${event.name}.')),
+                SnackBar(
+                  content: Text('Draft SOA generated for ${event.name}.'),
+                ),
               );
             },
             icon: const Icon(Icons.description_outlined),
@@ -685,7 +716,9 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
             onPressed: () {
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('DOCX export queued for ${event.name}.')),
+                SnackBar(
+                  content: Text('DOCX export queued for ${event.name}.'),
+                ),
               );
             },
             child: const Text('Export DOCX'),
@@ -710,27 +743,32 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
     _PostBazaarData data,
     BazaarEvent event,
   ) async {
-    final eventOrders = data.orders.where((order) => order.eventId == event.id).toList();
-    final cashCount = eventOrders.where((order) => order.paymentMethod == 'CASH').length;
-    final coopCount = eventOrders.where((order) => order.paymentMethod == 'COOP').length;
+    final eventOrders = data.orders
+        .where((order) => order.eventId == event.id)
+        .toList();
+    final cashCount = eventOrders
+        .where((order) => order.paymentMethod == 'CASH')
+        .length;
+    final coopCount = eventOrders
+        .where((order) => order.paymentMethod == 'COOP')
+        .length;
     final customCount = eventOrders
         .where(
           (order) =>
-              order.paymentMethod != 'CASH' &&
-              order.paymentMethod != 'COOP',
+              order.paymentMethod != 'CASH' && order.paymentMethod != 'COOP',
         )
         .length;
-    final completedCount =
-        eventOrders.where((order) => order.orderStatus == OrderStatus.completed).length;
-    final pendingCount =
-        eventOrders.where((order) => order.orderStatus == OrderStatus.pending).length;
-    final incompleteCount =
-        eventOrders.where((order) => order.orderStatus == OrderStatus.incomplete).length;
+    final completedCount = eventOrders
+        .where((order) => order.orderStatus == OrderStatus.completed)
+        .length;
+    final returnedCount = eventOrders
+        .where((order) => order.orderStatus == OrderStatus.returned)
+        .length;
 
     await _showDetailsDialog(
       context: context,
       title: event.name,
-      subtitle: data.locationNameByEventId[event.id] ?? 'Unknown Location',
+      subtitle: data.locationNameByEventId[event.id] ?? 'Unknown venue',
       content: [
         _receiptRow(
           context,
@@ -739,37 +777,12 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
           emphasize: true,
         ),
         const Divider(height: 18),
-        _receiptRow(
-          context,
-          label: 'CASH',
-          value: '$cashCount',
-        ),
-        _receiptRow(
-          context,
-          label: 'COOP',
-          value: '$coopCount',
-        ),
-        _receiptRow(
-          context,
-          label: 'Custom methods',
-          value: '$customCount',
-        ),
+        _receiptRow(context, label: 'CASH', value: '$cashCount'),
+        _receiptRow(context, label: 'COOP', value: '$coopCount'),
+        _receiptRow(context, label: 'Custom methods', value: '$customCount'),
         const Divider(height: 18),
-        _receiptRow(
-          context,
-          label: 'Completed',
-          value: '$completedCount',
-        ),
-        _receiptRow(
-          context,
-          label: 'Pending',
-          value: '$pendingCount',
-        ),
-        _receiptRow(
-          context,
-          label: 'Incomplete',
-          value: '$incompleteCount',
-        ),
+        _receiptRow(context, label: 'Completed', value: '$completedCount'),
+        _receiptRow(context, label: 'Returned', value: '$returnedCount'),
       ],
       footer: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -778,7 +791,9 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
             onPressed: () {
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Order list generated for ${event.name}.')),
+                SnackBar(
+                  content: Text('Order list generated for ${event.name}.'),
+                ),
               );
             },
             icon: const Icon(Icons.receipt_long_outlined),
@@ -793,7 +808,9 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
             onPressed: () {
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Exported order DOCX for ${event.name}.')),
+                SnackBar(
+                  content: Text('Exported order DOCX for ${event.name}.'),
+                ),
               );
             },
             child: const Text('Export DOCX'),
@@ -803,7 +820,9 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
             onPressed: () {
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Exported order CSV for ${event.name}.')),
+                SnackBar(
+                  content: Text('Exported order CSV for ${event.name}.'),
+                ),
               );
             },
             child: const Text('Export CSV'),
@@ -818,21 +837,28 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
     _PostBazaarData data,
     BazaarEvent event,
   ) async {
-    final eventSales = data.sales.where((sale) => sale.eventId == event.id).toList();
-    final eventOrders = data.orders.where((order) => order.eventId == event.id).toList();
+    final eventSales = data.sales
+        .where((sale) => sale.eventId == event.id)
+        .toList();
+    final eventOrders = data.orders
+        .where((order) => order.eventId == event.id)
+        .toList();
     final allocations = await context
         .read<EventRepository>()
         .allocationsForEventByAllocationKey(event.id);
     if (!context.mounted) {
       return;
     }
-    final totalAllocated = allocations.values.fold<int>(0, (sum, qty) => sum + qty);
+    final totalAllocated = allocations.values.fold<int>(
+      0,
+      (sum, qty) => sum + qty,
+    );
     final canFinalize = event.status != BazaarStatus.ended;
 
     await _showDetailsDialog(
       context: context,
       title: event.name,
-      subtitle: data.locationNameByEventId[event.id] ?? 'Unknown Location',
+      subtitle: data.locationNameByEventId[event.id] ?? 'Unknown venue',
       content: [
         Text('Status: ${event.status.name.toUpperCase()}'),
         Text('Allocated stock items: ${allocations.length}'),
@@ -859,9 +885,8 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
 
                     final productRepository = context.read<ProductRepository>();
                     final eventRepository = context.read<EventRepository>();
-                    final released = await productRepository.adjustStocksByAllocationKey(
-                      allocations,
-                    );
+                    final released = await productRepository
+                        .adjustStocksByAllocationKey(allocations);
                     if (!released) {
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -892,7 +917,9 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
                   },
             icon: const Icon(Icons.flag_circle_outlined),
             color: const Color(0xFF2E7D32),
-            tooltip: canFinalize ? 'Finalize Bazaar' : 'Bazaar already finalized',
+            tooltip: canFinalize
+                ? 'Finalize Bazaar'
+                : 'Bazaar already finalized',
           ),
         ],
       ),
@@ -939,16 +966,18 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
                             children: [
                               Text(
                                 title,
-                                style: Theme.of(dialogContext).textTheme.titleMedium?.copyWith(
-                                      fontWeight: FontWeight.w700,
-                                    ),
+                                style: Theme.of(dialogContext)
+                                    .textTheme
+                                    .titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w700),
                               ),
                               const SizedBox(height: 2),
                               Text(
                                 subtitle,
-                                style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
-                                      color: Colors.black54,
-                                    ),
+                                style: Theme.of(dialogContext)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(color: Colors.black54),
                               ),
                             ],
                           ),
@@ -981,13 +1010,13 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
     bool emphasize = false,
   }) {
     final labelStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
-          color: Colors.black54,
-          fontWeight: FontWeight.w600,
-        );
+      color: Colors.black54,
+      fontWeight: FontWeight.w600,
+    );
     final valueStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
-          color: AppColors.text,
-          fontWeight: emphasize ? FontWeight.w700 : FontWeight.w600,
-        );
+      color: AppColors.text,
+      fontWeight: emphasize ? FontWeight.w700 : FontWeight.w600,
+    );
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
@@ -1003,10 +1032,7 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
 }
 
 class _AnimatedEntrance extends StatefulWidget {
-  const _AnimatedEntrance({
-    required this.child,
-    required this.delayMs,
-  });
+  const _AnimatedEntrance({required this.child, required this.delayMs});
 
   final Widget child;
   final int delayMs;

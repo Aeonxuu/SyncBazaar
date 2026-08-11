@@ -7,16 +7,13 @@ import '../../../bloc/approvals/approvals_cubit.dart';
 import '../../../core/constants/colors.dart';
 import '../../../models/approval_request.dart';
 import '../../widgets/confirmation_dialog.dart';
+import '../../../core/utils/formatters.dart';
 
 class ApprovalsScreen extends StatelessWidget {
   const ApprovalsScreen({super.key});
 
   static const _kCardShadow = [
-    BoxShadow(
-      color: Color(0x11000000),
-      blurRadius: 20,
-      offset: Offset(0, 4),
-    ),
+    BoxShadow(color: Color(0x11000000), blurRadius: 20, offset: Offset(0, 4)),
   ];
 
   @override
@@ -42,9 +39,9 @@ class ApprovalsScreen extends StatelessWidget {
               ),
               labelColor: AppColors.primary,
               unselectedLabelColor: Colors.black54,
-              labelStyle: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+              labelStyle: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w700),
               tabs: const [
                 Tab(text: 'Stock Allocations'),
                 Tab(text: 'SOA Drafts'),
@@ -81,11 +78,7 @@ class _ApprovalList extends StatelessWidget {
   final List<ApprovalRequest> requests;
 
   static const _kCardShadow = [
-    BoxShadow(
-      color: Color(0x11000000),
-      blurRadius: 20,
-      offset: Offset(0, 4),
-    ),
+    BoxShadow(color: Color(0x11000000), blurRadius: 20, offset: Offset(0, 4)),
   ];
 
   @override
@@ -121,9 +114,9 @@ class _ApprovalList extends StatelessWidget {
                   child: Text(
                     'No pending requests',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.black54,
-                          fontWeight: FontWeight.w600,
-                        ),
+                      color: Colors.black54,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ],
@@ -180,14 +173,14 @@ class _ApprovalList extends StatelessWidget {
                         children: [
                           Text(
                             title,
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                ),
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(fontWeight: FontWeight.w700),
                           ),
                           const SizedBox(height: 2),
                           Text(
                             locationName,
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
                                   color: Colors.black54,
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -198,7 +191,8 @@ class _ApprovalList extends StatelessWidget {
                             const SizedBox(height: 2),
                             Text(
                               eventDateRange,
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
                                     color: Colors.black45,
                                     fontWeight: FontWeight.w500,
                                   ),
@@ -236,21 +230,15 @@ class _ApprovalList extends StatelessWidget {
       child: Text(
         isStock ? 'STOCK' : 'SOA',
         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: isStock ? const Color(0xFF2E7D32) : const Color(0xFFB45309),
-            ),
+          fontWeight: FontWeight.w700,
+          color: isStock ? const Color(0xFF2E7D32) : const Color(0xFFB45309),
+        ),
       ),
     );
   }
 
-  Widget _animatedTableCell({
-    required int delayMs,
-    required Widget child,
-  }) {
-    return _AnimatedEntrance(
-      delayMs: delayMs,
-      child: child,
-    );
+  Widget _animatedTableCell({required int delayMs, required Widget child}) {
+    return _AnimatedEntrance(delayMs: delayMs, child: child);
   }
 
   String _getTitle(ApprovalRequest req) {
@@ -293,9 +281,9 @@ class _ApprovalList extends StatelessWidget {
     }
     final companyId = decoded?['companyId'];
     if (companyId is int) {
-      return 'Location ID: $companyId';
+      return 'Venue ID: $companyId';
     }
-    return 'Location not specified';
+    return 'Venue not specified';
   }
 
   String _formatDate(DateTime date) {
@@ -304,7 +292,10 @@ class _ApprovalList extends StatelessWidget {
     return '${date.year}-$month-$day';
   }
 
-  Future<void> _showDetailsModal(BuildContext context, ApprovalRequest req) async {
+  Future<void> _showDetailsModal(
+    BuildContext context,
+    ApprovalRequest req,
+  ) async {
     await showDialog(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.5),
@@ -339,14 +330,14 @@ class _ApprovalList extends StatelessWidget {
                               children: [
                                 Text(
                                   'Approval Details',
-                                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                        fontWeight: FontWeight.w700,
-                                      ),
+                                  style: Theme.of(context).textTheme.titleLarge
+                                      ?.copyWith(fontWeight: FontWeight.w700),
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
                                   _getTitle(req),
-                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
                                         color: Colors.black54,
                                         fontWeight: FontWeight.w600,
                                       ),
@@ -359,7 +350,7 @@ class _ApprovalList extends StatelessWidget {
                             icon: const Icon(Icons.close_rounded, size: 20),
                           ),
                         ],
-                    ),
+                      ),
                       const Divider(height: 18),
                       _buildProductTable(context, req),
                       const SizedBox(height: 18),
@@ -368,7 +359,9 @@ class _ApprovalList extends StatelessWidget {
                           Expanded(
                             child: OutlinedButton.icon(
                               onPressed: () async {
-                                await context.read<ApprovalsCubit>().reject(req);
+                                await context.read<ApprovalsCubit>().reject(
+                                  req,
+                                );
                                 if (!context.mounted) {
                                   return;
                                 }
@@ -382,8 +375,12 @@ class _ApprovalList extends StatelessWidget {
                               icon: const Icon(Icons.close_rounded, size: 18),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: const Color(0xFFC62828),
-                                side: const BorderSide(color: Color(0xFFC62828)),
-                                padding: const EdgeInsets.symmetric(vertical: 11),
+                                side: const BorderSide(
+                                  color: Color(0xFFC62828),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 11,
+                                ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(6),
                                 ),
@@ -395,6 +392,14 @@ class _ApprovalList extends StatelessWidget {
                           Expanded(
                             child: ElevatedButton.icon(
                               onPressed: () async {
+                                // Taken before the confirmation dialog: this
+                                // sheet is popped on success, so the messenger
+                                // must not be looked up through a context
+                                // that is on its way out.
+                                final messenger = ScaffoldMessenger.of(context);
+                                final navigator = Navigator.of(context);
+                                final approvals = context
+                                    .read<ApprovalsCubit>();
                                 final confirmed = await showConfirmationDialog(
                                   context: context,
                                   title: 'Confirm Stock Allocation',
@@ -407,12 +412,9 @@ class _ApprovalList extends StatelessWidget {
                                   return;
                                 }
 
-                                final approved = await context.read<ApprovalsCubit>().approve(req);
-                                if (!context.mounted) {
-                                  return;
-                                }
+                                final approved = await approvals.approve(req);
                                 if (!approved) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
+                                  messenger.showSnackBar(
                                     const SnackBar(
                                       content: Text(
                                         'Unable to approve. Please review requested allocations.',
@@ -421,10 +423,12 @@ class _ApprovalList extends StatelessWidget {
                                   );
                                   return;
                                 }
-                                Navigator.pop(context);
-                                ScaffoldMessenger.of(context).showSnackBar(
+                                navigator.pop();
+                                messenger.showSnackBar(
                                   const SnackBar(
-                                    content: Text('Request approved and synced to POS.'),
+                                    content: Text(
+                                      'Request approved and synced to POS.',
+                                    ),
                                   ),
                                 );
                               },
@@ -432,7 +436,9 @@ class _ApprovalList extends StatelessWidget {
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFF2E7D32),
                                 foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 11),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 11,
+                                ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(6),
                                 ),
@@ -459,9 +465,9 @@ class _ApprovalList extends StatelessWidget {
       return Text(
         'Unable to parse details: ${req.detailsJson}',
         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Colors.black54,
-              fontWeight: FontWeight.w600,
-            ),
+          color: Colors.black54,
+          fontWeight: FontWeight.w600,
+        ),
       );
     }
 
@@ -481,21 +487,17 @@ class _ApprovalList extends StatelessWidget {
             children: [
               Table(
                 columnWidths: const {
-                  0: FlexColumnWidth(2.3),
-                  1: FlexColumnWidth(1.5),
-                  2: FlexColumnWidth(1.1),
-                  3: FlexColumnWidth(0.9),
-                  4: FlexColumnWidth(0.8),
+                  0: FlexColumnWidth(2.6),
+                  1: FlexColumnWidth(1.6),
+                  2: FlexColumnWidth(0.9),
+                  3: FlexColumnWidth(0.8),
                 },
                 border: TableBorder(
                   horizontalInside: BorderSide(
                     color: Colors.grey.shade300,
                     width: 1,
                   ),
-                  bottom: BorderSide(
-                    color: Colors.grey.shade300,
-                    width: 1,
-                  ),
+                  bottom: BorderSide(color: Colors.grey.shade300, width: 1),
                 ),
                 children: [
                   TableRow(
@@ -505,28 +507,36 @@ class _ApprovalList extends StatelessWidget {
                     children: const [
                       Padding(
                         padding: EdgeInsets.all(8),
-                        child: Text('Name', style: TextStyle(fontWeight: FontWeight.bold)),
+                        child: Text(
+                          'Name',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
                       ),
                       Padding(
                         padding: EdgeInsets.all(8),
-                        child: Text('Category', style: TextStyle(fontWeight: FontWeight.bold)),
-                      ),
-                      Padding(
-                        padding: EdgeInsets.all(8),
-                        child: Text('Variant', style: TextStyle(fontWeight: FontWeight.bold)),
-                      ),
-                      Padding(
-                        padding: EdgeInsets.all(8),
-                        child: Align(
-                          alignment: Alignment.centerRight,
-                          child: Text('Price', style: TextStyle(fontWeight: FontWeight.bold)),
+                        child: Text(
+                          'Variant',
+                          style: TextStyle(fontWeight: FontWeight.bold),
                         ),
                       ),
                       Padding(
                         padding: EdgeInsets.all(8),
                         child: Align(
                           alignment: Alignment.centerRight,
-                          child: Text('QTY', style: TextStyle(fontWeight: FontWeight.bold)),
+                          child: Text(
+                            'Price',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                      Padding(
+                        padding: EdgeInsets.all(8),
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                            'QTY',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
                         ),
                       ),
                     ],
@@ -538,9 +548,13 @@ class _ApprovalList extends StatelessWidget {
                       return const TableRow(children: [SizedBox()]);
                     }
                     final name = item['name'] ?? '—';
-                    final category = item['category'] ?? '—';
                     final variant = item['variant'] ?? '—';
-                    final price = item['price'] ?? '—';
+                    // Tolerates both shapes: requests raised before the
+                    // payload switched to a raw number still carry a string.
+                    final rawPrice = item['price'];
+                    final price = rawPrice is num
+                        ? formatAmount(rawPrice)
+                        : (rawPrice ?? '—');
                     final qty = item['qty'] ?? '—';
                     return TableRow(
                       children: [
@@ -549,13 +563,6 @@ class _ApprovalList extends StatelessWidget {
                           child: Padding(
                             padding: const EdgeInsets.all(8),
                             child: Text(name.toString()),
-                          ),
-                        ),
-                        _animatedTableCell(
-                          delayMs: 35 * (rowIndex + 1) + 6,
-                          child: Padding(
-                            padding: const EdgeInsets.all(8),
-                            child: Text(category.toString()),
                           ),
                         ),
                         _animatedTableCell(
@@ -610,67 +617,70 @@ class _ApprovalList extends StatelessWidget {
           ),
           padding: const EdgeInsets.all(10),
           child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Table(
-                columnWidths: const {
-                  0: FlexColumnWidth(3),
-                  1: FlexColumnWidth(1),
-                },
-                border: TableBorder(
-                  horizontalInside: BorderSide(
-                    color: Colors.grey.shade300,
-                    width: 1,
-                  ),
-                  bottom: BorderSide(
-                    color: Colors.grey.shade300,
-                    width: 1,
-                  ),
-                ),
-                children: [
-                  TableRow(
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.1),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Table(
+                  columnWidths: const {
+                    0: FlexColumnWidth(3),
+                    1: FlexColumnWidth(1),
+                  },
+                  border: TableBorder(
+                    horizontalInside: BorderSide(
+                      color: Colors.grey.shade300,
+                      width: 1,
                     ),
-                    children: const [
-                      Padding(
-                        padding: EdgeInsets.all(8),
-                        child: Text('Item', style: TextStyle(fontWeight: FontWeight.bold)),
-                      ),
-                      Padding(
-                        padding: EdgeInsets.all(8),
-                        child: Text('QTY', style: TextStyle(fontWeight: FontWeight.bold)),
-                      ),
-                    ],
+                    bottom: BorderSide(color: Colors.grey.shade300, width: 1),
                   ),
-                  ...entries.asMap().entries.map<TableRow>((mapEntry) {
-                    final rowIndex = mapEntry.key;
-                    final entry = mapEntry.value;
-                    return TableRow(
-                      children: [
-                        _animatedTableCell(
-                          delayMs: 35 * (rowIndex + 1),
-                          child: Padding(
-                            padding: const EdgeInsets.all(8),
-                            child: Text(entry.key.toString()),
+                  children: [
+                    TableRow(
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.1),
+                      ),
+                      children: const [
+                        Padding(
+                          padding: EdgeInsets.all(8),
+                          child: Text(
+                            'Item',
+                            style: TextStyle(fontWeight: FontWeight.bold),
                           ),
                         ),
-                        _animatedTableCell(
-                          delayMs: 35 * (rowIndex + 1) + 10,
-                          child: Padding(
-                            padding: const EdgeInsets.all(8),
-                            child: Text(entry.value.toString()),
+                        Padding(
+                          padding: EdgeInsets.all(8),
+                          child: Text(
+                            'QTY',
+                            style: TextStyle(fontWeight: FontWeight.bold),
                           ),
                         ),
                       ],
-                    );
-                  }),
-                ],
-              ),
-            ],
+                    ),
+                    ...entries.asMap().entries.map<TableRow>((mapEntry) {
+                      final rowIndex = mapEntry.key;
+                      final entry = mapEntry.value;
+                      return TableRow(
+                        children: [
+                          _animatedTableCell(
+                            delayMs: 35 * (rowIndex + 1),
+                            child: Padding(
+                              padding: const EdgeInsets.all(8),
+                              child: Text(entry.key.toString()),
+                            ),
+                          ),
+                          _animatedTableCell(
+                            delayMs: 35 * (rowIndex + 1) + 10,
+                            child: Padding(
+                              padding: const EdgeInsets.all(8),
+                              child: Text(entry.value.toString()),
+                            ),
+                          ),
+                        ],
+                      );
+                    }),
+                  ],
+                ),
+              ],
+            ),
           ),
-        ),
         ),
       );
     }
@@ -678,9 +688,9 @@ class _ApprovalList extends StatelessWidget {
     return Text(
       'No product details available',
       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: Colors.black54,
-            fontWeight: FontWeight.w600,
-          ),
+        color: Colors.black54,
+        fontWeight: FontWeight.w600,
+      ),
     );
   }
 
@@ -691,9 +701,7 @@ class _ApprovalList extends StatelessWidget {
         return decoded;
       }
       if (decoded is Map) {
-        return decoded.map(
-          (key, value) => MapEntry(key.toString(), value),
-        );
+        return decoded.map((key, value) => MapEntry(key.toString(), value));
       }
     } catch (_) {
       return null;
@@ -703,10 +711,7 @@ class _ApprovalList extends StatelessWidget {
 }
 
 class _AnimatedEntrance extends StatefulWidget {
-  const _AnimatedEntrance({
-    required this.child,
-    required this.delayMs,
-  });
+  const _AnimatedEntrance({required this.child, required this.delayMs});
 
   final Widget child;
   final int delayMs;

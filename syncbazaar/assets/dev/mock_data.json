@@ -1,0 +1,5050 @@
+{
+  "companies": [
+    {
+      "id": "c1",
+      "name": "Amkor Technology",
+      "address": "Bicutan, Taguig City",
+      "contact": "0917-100-2000",
+      "incentive_percent": 10,
+      "buffer_percent": 10
+    },
+    {
+      "id": "c2",
+      "name": "SM City Lucena",
+      "address": "Lucena City, Quezon",
+      "contact": "0917-200-3000",
+      "incentive_percent": 10,
+      "buffer_percent": 5
+    },
+    {
+      "id": "c3",
+      "name": "MSEUF Campus",
+      "address": "Lucena City, Quezon",
+      "contact": "0917-300-4000",
+      "incentive_percent": 8,
+      "buffer_percent": 10
+    }
+  ],
+  "products": [
+    {
+      "id": "p1",
+      "name": "Nike Air Max SC",
+      "image": "assets/images/default_shoes/airmaxsc.png",
+      "base_price": 1900.0,
+      "colors": [
+        "Triple White",
+        "Triple Black",
+        "Light Orewood Brown"
+      ],
+      "sizes": [
+        "36",
+        "38",
+        "39",
+        "40",
+        "41",
+        "42"
+      ],
+      "stock": [
+        {
+          "color": "Triple White",
+          "size": "36",
+          "qty": 20
+        },
+        {
+          "color": "Triple White",
+          "size": "38",
+          "qty": 14
+        },
+        {
+          "color": "Triple White",
+          "size": "39",
+          "qty": 18
+        },
+        {
+          "color": "Triple White",
+          "size": "40",
+          "qty": 17
+        },
+        {
+          "color": "Triple White",
+          "size": "41",
+          "qty": 19
+        },
+        {
+          "color": "Triple White",
+          "size": "42",
+          "qty": 19
+        },
+        {
+          "color": "Triple Black",
+          "size": "36",
+          "qty": 12
+        },
+        {
+          "color": "Triple Black",
+          "size": "38",
+          "qty": 20
+        },
+        {
+          "color": "Triple Black",
+          "size": "39",
+          "qty": 17
+        },
+        {
+          "color": "Triple Black",
+          "size": "40",
+          "qty": 17
+        },
+        {
+          "color": "Triple Black",
+          "size": "41",
+          "qty": 12
+        },
+        {
+          "color": "Triple Black",
+          "size": "42",
+          "qty": 13
+        },
+        {
+          "color": "Light Orewood Brown",
+          "size": "36",
+          "qty": 19
+        },
+        {
+          "color": "Light Orewood Brown",
+          "size": "38",
+          "qty": 18
+        },
+        {
+          "color": "Light Orewood Brown",
+          "size": "39",
+          "qty": 14
+        },
+        {
+          "color": "Light Orewood Brown",
+          "size": "40",
+          "qty": 18
+        },
+        {
+          "color": "Light Orewood Brown",
+          "size": "41",
+          "qty": 15
+        },
+        {
+          "color": "Light Orewood Brown",
+          "size": "42",
+          "qty": 14
+        }
+      ]
+    },
+    {
+      "id": "p2",
+      "name": "Nike Air Jordan 1 Low",
+      "image": "assets/images/default_shoes/airjordan1low.png",
+      "base_price": 2600.0,
+      "colors": [
+        "Black/White",
+        "University Blue",
+        "Bred Toe"
+      ],
+      "sizes": [
+        "37",
+        "38",
+        "39",
+        "40",
+        "41",
+        "42",
+        "43"
+      ],
+      "stock": [
+        {
+          "color": "Black/White",
+          "size": "37",
+          "qty": 20
+        },
+        {
+          "color": "Black/White",
+          "size": "38",
+          "qty": 12
+        },
+        {
+          "color": "Black/White",
+          "size": "39",
+          "qty": 12
+        },
+        {
+          "color": "Black/White",
+          "size": "40",
+          "qty": 15
+        },
+        {
+          "color": "Black/White",
+          "size": "41",
+          "qty": 13
+        },
+        {
+          "color": "Black/White",
+          "size": "42",
+          "qty": 18
+        },
+        {
+          "color": "Black/White",
+          "size": "43",
+          "qty": 13
+        },
+        {
+          "color": "University Blue",
+          "size": "37",
+          "qty": 14
+        },
+        {
+          "color": "University Blue",
+          "size": "38",
+          "qty": 12
+        },
+        {
+          "color": "University Blue",
+          "size": "39",
+          "qty": 12
+        },
+        {
+          "color": "University Blue",
+          "size": "40",
+          "qty": 18
+        },
+        {
+          "color": "University Blue",
+          "size": "41",
+          "qty": 17
+        },
+        {
+          "color": "University Blue",
+          "size": "42",
+          "qty": 16
+        },
+        {
+          "color": "University Blue",
+          "size": "43",
+          "qty": 17
+        },
+        {
+          "color": "Bred Toe",
+          "size": "37",
+          "qty": 18
+        },
+        {
+          "color": "Bred Toe",
+          "size": "38",
+          "qty": 14
+        },
+        {
+          "color": "Bred Toe",
+          "size": "39",
+          "qty": 17
+        },
+        {
+          "color": "Bred Toe",
+          "size": "40",
+          "qty": 18
+        },
+        {
+          "color": "Bred Toe",
+          "size": "41",
+          "qty": 15
+        },
+        {
+          "color": "Bred Toe",
+          "size": "42",
+          "qty": 12
+        },
+        {
+          "color": "Bred Toe",
+          "size": "43",
+          "qty": 17
+        }
+      ]
+    },
+    {
+      "id": "p3",
+      "name": "Nike ZoomX Vaporfly",
+      "image": "assets/images/default_shoes/zoomxvaporfly.png",
+      "base_price": 2300.0,
+      "colors": [
+        "Panda",
+        "University Red",
+        "Grey Fog"
+      ],
+      "sizes": [
+        "37",
+        "38",
+        "39",
+        "40",
+        "41",
+        "42",
+        "43"
+      ],
+      "stock": [
+        {
+          "color": "Panda",
+          "size": "37",
+          "qty": 13
+        },
+        {
+          "color": "Panda",
+          "size": "38",
+          "qty": 18
+        },
+        {
+          "color": "Panda",
+          "size": "39",
+          "qty": 15
+        },
+        {
+          "color": "Panda",
+          "size": "40",
+          "qty": 13
+        },
+        {
+          "color": "Panda",
+          "size": "41",
+          "qty": 13
+        },
+        {
+          "color": "Panda",
+          "size": "42",
+          "qty": 18
+        },
+        {
+          "color": "Panda",
+          "size": "43",
+          "qty": 19
+        },
+        {
+          "color": "University Red",
+          "size": "37",
+          "qty": 13
+        },
+        {
+          "color": "University Red",
+          "size": "38",
+          "qty": 17
+        },
+        {
+          "color": "University Red",
+          "size": "39",
+          "qty": 13
+        },
+        {
+          "color": "University Red",
+          "size": "40",
+          "qty": 15
+        },
+        {
+          "color": "University Red",
+          "size": "41",
+          "qty": 13
+        },
+        {
+          "color": "University Red",
+          "size": "42",
+          "qty": 14
+        },
+        {
+          "color": "University Red",
+          "size": "43",
+          "qty": 12
+        },
+        {
+          "color": "Grey Fog",
+          "size": "37",
+          "qty": 12
+        },
+        {
+          "color": "Grey Fog",
+          "size": "38",
+          "qty": 18
+        },
+        {
+          "color": "Grey Fog",
+          "size": "39",
+          "qty": 13
+        },
+        {
+          "color": "Grey Fog",
+          "size": "40",
+          "qty": 20
+        },
+        {
+          "color": "Grey Fog",
+          "size": "41",
+          "qty": 15
+        },
+        {
+          "color": "Grey Fog",
+          "size": "42",
+          "qty": 14
+        },
+        {
+          "color": "Grey Fog",
+          "size": "43",
+          "qty": 12
+        }
+      ]
+    },
+    {
+      "id": "p4",
+      "name": "Adidas Samba OG",
+      "image": "assets/images/default_shoes/sambaog.png",
+      "base_price": 1900.0,
+      "colors": [
+        "Cloud White/Core Black/Gum",
+        "Core Black/Cloud White"
+      ],
+      "sizes": [
+        "37",
+        "38",
+        "39",
+        "40",
+        "41",
+        "42",
+        "43"
+      ],
+      "stock": [
+        {
+          "color": "Cloud White/Core Black/Gum",
+          "size": "37",
+          "qty": 20
+        },
+        {
+          "color": "Cloud White/Core Black/Gum",
+          "size": "38",
+          "qty": 12
+        },
+        {
+          "color": "Cloud White/Core Black/Gum",
+          "size": "39",
+          "qty": 19
+        },
+        {
+          "color": "Cloud White/Core Black/Gum",
+          "size": "40",
+          "qty": 16
+        },
+        {
+          "color": "Cloud White/Core Black/Gum",
+          "size": "41",
+          "qty": 16
+        },
+        {
+          "color": "Cloud White/Core Black/Gum",
+          "size": "42",
+          "qty": 20
+        },
+        {
+          "color": "Cloud White/Core Black/Gum",
+          "size": "43",
+          "qty": 14
+        },
+        {
+          "color": "Core Black/Cloud White",
+          "size": "37",
+          "qty": 15
+        },
+        {
+          "color": "Core Black/Cloud White",
+          "size": "38",
+          "qty": 16
+        },
+        {
+          "color": "Core Black/Cloud White",
+          "size": "39",
+          "qty": 15
+        },
+        {
+          "color": "Core Black/Cloud White",
+          "size": "40",
+          "qty": 17
+        },
+        {
+          "color": "Core Black/Cloud White",
+          "size": "41",
+          "qty": 14
+        },
+        {
+          "color": "Core Black/Cloud White",
+          "size": "42",
+          "qty": 16
+        },
+        {
+          "color": "Core Black/Cloud White",
+          "size": "43",
+          "qty": 17
+        }
+      ]
+    },
+    {
+      "id": "p5",
+      "name": "Adidas Gazelle",
+      "image": "assets/images/default_shoes/gazellebold.png",
+      "base_price": 1800.0,
+      "colors": [
+        "Hazy Green/Off White",
+        "Core Black/Ftwr White"
+      ],
+      "sizes": [
+        "37",
+        "38",
+        "39",
+        "40",
+        "41",
+        "42",
+        "43"
+      ],
+      "stock": [
+        {
+          "color": "Hazy Green/Off White",
+          "size": "37",
+          "qty": 20
+        },
+        {
+          "color": "Hazy Green/Off White",
+          "size": "38",
+          "qty": 20
+        },
+        {
+          "color": "Hazy Green/Off White",
+          "size": "39",
+          "qty": 14
+        },
+        {
+          "color": "Hazy Green/Off White",
+          "size": "40",
+          "qty": 19
+        },
+        {
+          "color": "Hazy Green/Off White",
+          "size": "41",
+          "qty": 19
+        },
+        {
+          "color": "Hazy Green/Off White",
+          "size": "42",
+          "qty": 13
+        },
+        {
+          "color": "Hazy Green/Off White",
+          "size": "43",
+          "qty": 13
+        },
+        {
+          "color": "Core Black/Ftwr White",
+          "size": "37",
+          "qty": 19
+        },
+        {
+          "color": "Core Black/Ftwr White",
+          "size": "38",
+          "qty": 17
+        },
+        {
+          "color": "Core Black/Ftwr White",
+          "size": "39",
+          "qty": 19
+        },
+        {
+          "color": "Core Black/Ftwr White",
+          "size": "40",
+          "qty": 14
+        },
+        {
+          "color": "Core Black/Ftwr White",
+          "size": "41",
+          "qty": 14
+        },
+        {
+          "color": "Core Black/Ftwr White",
+          "size": "42",
+          "qty": 16
+        },
+        {
+          "color": "Core Black/Ftwr White",
+          "size": "43",
+          "qty": 17
+        }
+      ]
+    },
+    {
+      "id": "p6",
+      "name": "Adidas Ultraboost 1.0",
+      "image": "assets/images/default_shoes/ultraboost10.png",
+      "base_price": 2500.0,
+      "colors": [
+        "Core Black",
+        "Cloud White",
+        "Solar Red"
+      ],
+      "sizes": [
+        "38",
+        "39",
+        "40",
+        "41",
+        "42",
+        "43"
+      ],
+      "stock": [
+        {
+          "color": "Core Black",
+          "size": "38",
+          "qty": 18
+        },
+        {
+          "color": "Core Black",
+          "size": "39",
+          "qty": 20
+        },
+        {
+          "color": "Core Black",
+          "size": "40",
+          "qty": 18
+        },
+        {
+          "color": "Core Black",
+          "size": "41",
+          "qty": 19
+        },
+        {
+          "color": "Core Black",
+          "size": "42",
+          "qty": 17
+        },
+        {
+          "color": "Core Black",
+          "size": "43",
+          "qty": 12
+        },
+        {
+          "color": "Cloud White",
+          "size": "38",
+          "qty": 14
+        },
+        {
+          "color": "Cloud White",
+          "size": "39",
+          "qty": 14
+        },
+        {
+          "color": "Cloud White",
+          "size": "40",
+          "qty": 13
+        },
+        {
+          "color": "Cloud White",
+          "size": "41",
+          "qty": 18
+        },
+        {
+          "color": "Cloud White",
+          "size": "42",
+          "qty": 12
+        },
+        {
+          "color": "Cloud White",
+          "size": "43",
+          "qty": 19
+        },
+        {
+          "color": "Solar Red",
+          "size": "38",
+          "qty": 12
+        },
+        {
+          "color": "Solar Red",
+          "size": "39",
+          "qty": 20
+        },
+        {
+          "color": "Solar Red",
+          "size": "40",
+          "qty": 12
+        },
+        {
+          "color": "Solar Red",
+          "size": "41",
+          "qty": 17
+        },
+        {
+          "color": "Solar Red",
+          "size": "42",
+          "qty": 16
+        },
+        {
+          "color": "Solar Red",
+          "size": "43",
+          "qty": 19
+        }
+      ]
+    },
+    {
+      "id": "p7",
+      "name": "On Cloud Cloud 5",
+      "image": "assets/images/default_shoes/cloud5.png",
+      "base_price": 2700.0,
+      "colors": [
+        "All Black",
+        "Frost/White",
+        "Ivory/Frost"
+      ],
+      "sizes": [
+        "36",
+        "37",
+        "38",
+        "39",
+        "40",
+        "41",
+        "42"
+      ],
+      "stock": [
+        {
+          "color": "All Black",
+          "size": "36",
+          "qty": 18
+        },
+        {
+          "color": "All Black",
+          "size": "37",
+          "qty": 15
+        },
+        {
+          "color": "All Black",
+          "size": "38",
+          "qty": 20
+        },
+        {
+          "color": "All Black",
+          "size": "39",
+          "qty": 14
+        },
+        {
+          "color": "All Black",
+          "size": "40",
+          "qty": 16
+        },
+        {
+          "color": "All Black",
+          "size": "41",
+          "qty": 13
+        },
+        {
+          "color": "All Black",
+          "size": "42",
+          "qty": 12
+        },
+        {
+          "color": "Frost/White",
+          "size": "36",
+          "qty": 17
+        },
+        {
+          "color": "Frost/White",
+          "size": "37",
+          "qty": 14
+        },
+        {
+          "color": "Frost/White",
+          "size": "38",
+          "qty": 18
+        },
+        {
+          "color": "Frost/White",
+          "size": "39",
+          "qty": 19
+        },
+        {
+          "color": "Frost/White",
+          "size": "40",
+          "qty": 17
+        },
+        {
+          "color": "Frost/White",
+          "size": "41",
+          "qty": 13
+        },
+        {
+          "color": "Frost/White",
+          "size": "42",
+          "qty": 15
+        },
+        {
+          "color": "Ivory/Frost",
+          "size": "36",
+          "qty": 16
+        },
+        {
+          "color": "Ivory/Frost",
+          "size": "37",
+          "qty": 19
+        },
+        {
+          "color": "Ivory/Frost",
+          "size": "38",
+          "qty": 13
+        },
+        {
+          "color": "Ivory/Frost",
+          "size": "39",
+          "qty": 17
+        },
+        {
+          "color": "Ivory/Frost",
+          "size": "40",
+          "qty": 16
+        },
+        {
+          "color": "Ivory/Frost",
+          "size": "41",
+          "qty": 16
+        },
+        {
+          "color": "Ivory/Frost",
+          "size": "42",
+          "qty": 15
+        }
+      ]
+    },
+    {
+      "id": "p8",
+      "name": "On Cloud Cloudrunner",
+      "image": "assets/images/default_shoes/cloudrunner.png",
+      "base_price": 2600.0,
+      "colors": [
+        "Frost/Wash",
+        "All Black"
+      ],
+      "sizes": [
+        "36",
+        "38",
+        "39",
+        "40",
+        "41",
+        "42"
+      ],
+      "stock": [
+        {
+          "color": "Frost/Wash",
+          "size": "36",
+          "qty": 20
+        },
+        {
+          "color": "Frost/Wash",
+          "size": "38",
+          "qty": 19
+        },
+        {
+          "color": "Frost/Wash",
+          "size": "39",
+          "qty": 15
+        },
+        {
+          "color": "Frost/Wash",
+          "size": "40",
+          "qty": 19
+        },
+        {
+          "color": "Frost/Wash",
+          "size": "41",
+          "qty": 14
+        },
+        {
+          "color": "Frost/Wash",
+          "size": "42",
+          "qty": 18
+        },
+        {
+          "color": "All Black",
+          "size": "36",
+          "qty": 14
+        },
+        {
+          "color": "All Black",
+          "size": "38",
+          "qty": 16
+        },
+        {
+          "color": "All Black",
+          "size": "39",
+          "qty": 14
+        },
+        {
+          "color": "All Black",
+          "size": "40",
+          "qty": 20
+        },
+        {
+          "color": "All Black",
+          "size": "41",
+          "qty": 17
+        },
+        {
+          "color": "All Black",
+          "size": "42",
+          "qty": 12
+        }
+      ]
+    },
+    {
+      "id": "p9",
+      "name": "On Cloud Cloudswift",
+      "image": "assets/images/default_shoes/cloudswift.png",
+      "base_price": 2400.0,
+      "colors": [
+        "Midnight/Eclipse",
+        "White/Pearl"
+      ],
+      "sizes": [
+        "37",
+        "38",
+        "39",
+        "40",
+        "41",
+        "42",
+        "43"
+      ],
+      "stock": [
+        {
+          "color": "Midnight/Eclipse",
+          "size": "37",
+          "qty": 17
+        },
+        {
+          "color": "Midnight/Eclipse",
+          "size": "38",
+          "qty": 20
+        },
+        {
+          "color": "Midnight/Eclipse",
+          "size": "39",
+          "qty": 15
+        },
+        {
+          "color": "Midnight/Eclipse",
+          "size": "40",
+          "qty": 18
+        },
+        {
+          "color": "Midnight/Eclipse",
+          "size": "41",
+          "qty": 12
+        },
+        {
+          "color": "Midnight/Eclipse",
+          "size": "42",
+          "qty": 18
+        },
+        {
+          "color": "Midnight/Eclipse",
+          "size": "43",
+          "qty": 15
+        },
+        {
+          "color": "White/Pearl",
+          "size": "37",
+          "qty": 16
+        },
+        {
+          "color": "White/Pearl",
+          "size": "38",
+          "qty": 12
+        },
+        {
+          "color": "White/Pearl",
+          "size": "39",
+          "qty": 13
+        },
+        {
+          "color": "White/Pearl",
+          "size": "40",
+          "qty": 17
+        },
+        {
+          "color": "White/Pearl",
+          "size": "41",
+          "qty": 20
+        },
+        {
+          "color": "White/Pearl",
+          "size": "42",
+          "qty": 17
+        },
+        {
+          "color": "White/Pearl",
+          "size": "43",
+          "qty": 17
+        }
+      ]
+    },
+    {
+      "id": "p10",
+      "name": "Onitsuka Tiger Mexico 66",
+      "image": "assets/images/default_shoes/mexico66.png",
+      "base_price": 1500.0,
+      "colors": [
+        "Oatmeal/Habanero",
+        "Dark Brown",
+        "Cream/Peacoat"
+      ],
+      "sizes": [
+        "36",
+        "38",
+        "39",
+        "40",
+        "41",
+        "42"
+      ],
+      "stock": [
+        {
+          "color": "Oatmeal/Habanero",
+          "size": "36",
+          "qty": 20
+        },
+        {
+          "color": "Oatmeal/Habanero",
+          "size": "38",
+          "qty": 15
+        },
+        {
+          "color": "Oatmeal/Habanero",
+          "size": "39",
+          "qty": 16
+        },
+        {
+          "color": "Oatmeal/Habanero",
+          "size": "40",
+          "qty": 19
+        },
+        {
+          "color": "Oatmeal/Habanero",
+          "size": "41",
+          "qty": 20
+        },
+        {
+          "color": "Oatmeal/Habanero",
+          "size": "42",
+          "qty": 16
+        },
+        {
+          "color": "Dark Brown",
+          "size": "36",
+          "qty": 15
+        },
+        {
+          "color": "Dark Brown",
+          "size": "38",
+          "qty": 20
+        },
+        {
+          "color": "Dark Brown",
+          "size": "39",
+          "qty": 16
+        },
+        {
+          "color": "Dark Brown",
+          "size": "40",
+          "qty": 17
+        },
+        {
+          "color": "Dark Brown",
+          "size": "41",
+          "qty": 14
+        },
+        {
+          "color": "Dark Brown",
+          "size": "42",
+          "qty": 14
+        },
+        {
+          "color": "Cream/Peacoat",
+          "size": "36",
+          "qty": 20
+        },
+        {
+          "color": "Cream/Peacoat",
+          "size": "38",
+          "qty": 12
+        },
+        {
+          "color": "Cream/Peacoat",
+          "size": "39",
+          "qty": 14
+        },
+        {
+          "color": "Cream/Peacoat",
+          "size": "40",
+          "qty": 14
+        },
+        {
+          "color": "Cream/Peacoat",
+          "size": "41",
+          "qty": 16
+        },
+        {
+          "color": "Cream/Peacoat",
+          "size": "42",
+          "qty": 12
+        }
+      ]
+    },
+    {
+      "id": "p11",
+      "name": "Onitsuka Tiger Serrano",
+      "image": "assets/images/default_shoes/serrano.png",
+      "base_price": 1600.0,
+      "colors": [
+        "White/Black",
+        "Cream/Forest"
+      ],
+      "sizes": [
+        "38",
+        "39",
+        "40",
+        "41",
+        "42",
+        "43"
+      ],
+      "stock": [
+        {
+          "color": "White/Black",
+          "size": "38",
+          "qty": 18
+        },
+        {
+          "color": "White/Black",
+          "size": "39",
+          "qty": 17
+        },
+        {
+          "color": "White/Black",
+          "size": "40",
+          "qty": 16
+        },
+        {
+          "color": "White/Black",
+          "size": "41",
+          "qty": 13
+        },
+        {
+          "color": "White/Black",
+          "size": "42",
+          "qty": 17
+        },
+        {
+          "color": "White/Black",
+          "size": "43",
+          "qty": 20
+        },
+        {
+          "color": "Cream/Forest",
+          "size": "38",
+          "qty": 18
+        },
+        {
+          "color": "Cream/Forest",
+          "size": "39",
+          "qty": 19
+        },
+        {
+          "color": "Cream/Forest",
+          "size": "40",
+          "qty": 12
+        },
+        {
+          "color": "Cream/Forest",
+          "size": "41",
+          "qty": 14
+        },
+        {
+          "color": "Cream/Forest",
+          "size": "42",
+          "qty": 18
+        },
+        {
+          "color": "Cream/Forest",
+          "size": "43",
+          "qty": 18
+        }
+      ]
+    },
+    {
+      "id": "p12",
+      "name": "Onitsuka Tiger Ultimate 81",
+      "image": "assets/images/default_shoes/ultimate81.png",
+      "base_price": 2000.0,
+      "colors": [
+        "White/Navy",
+        "Black/White"
+      ],
+      "sizes": [
+        "38",
+        "39",
+        "40",
+        "41",
+        "42",
+        "43"
+      ],
+      "stock": [
+        {
+          "color": "White/Navy",
+          "size": "38",
+          "qty": 14
+        },
+        {
+          "color": "White/Navy",
+          "size": "39",
+          "qty": 18
+        },
+        {
+          "color": "White/Navy",
+          "size": "40",
+          "qty": 18
+        },
+        {
+          "color": "White/Navy",
+          "size": "41",
+          "qty": 13
+        },
+        {
+          "color": "White/Navy",
+          "size": "42",
+          "qty": 13
+        },
+        {
+          "color": "White/Navy",
+          "size": "43",
+          "qty": 15
+        },
+        {
+          "color": "Black/White",
+          "size": "38",
+          "qty": 13
+        },
+        {
+          "color": "Black/White",
+          "size": "39",
+          "qty": 12
+        },
+        {
+          "color": "Black/White",
+          "size": "40",
+          "qty": 18
+        },
+        {
+          "color": "Black/White",
+          "size": "41",
+          "qty": 17
+        },
+        {
+          "color": "Black/White",
+          "size": "42",
+          "qty": 16
+        },
+        {
+          "color": "Black/White",
+          "size": "43",
+          "qty": 15
+        }
+      ]
+    }
+  ],
+  "events": [
+    {
+      "id": "e_august_fair",
+      "name": "August Fair",
+      "company_id": "c2",
+      "start_date": "2026-08-03",
+      "end_date": "2026-08-07",
+      "payment_methods": [
+        "CASH",
+        "GCASH"
+      ],
+      "assigned_employee_emails": [
+        "employee@syncbazaar.com",
+        "missy@syncbazaar.com"
+      ],
+      "allocations": [
+        {
+          "product_id": "p7",
+          "color": "All Black",
+          "size": "42",
+          "qty": 11
+        },
+        {
+          "product_id": "p10",
+          "color": "Dark Brown",
+          "size": "36",
+          "qty": 12
+        },
+        {
+          "product_id": "p10",
+          "color": "Oatmeal/Habanero",
+          "size": "42",
+          "qty": 10
+        },
+        {
+          "product_id": "p10",
+          "color": "Oatmeal/Habanero",
+          "size": "41",
+          "qty": 10
+        },
+        {
+          "product_id": "p1",
+          "color": "Light Orewood Brown",
+          "size": "42",
+          "qty": 10
+        },
+        {
+          "product_id": "p12",
+          "color": "Black/White",
+          "size": "42",
+          "qty": 9
+        },
+        {
+          "product_id": "p12",
+          "color": "White/Navy",
+          "size": "43",
+          "qty": 11
+        },
+        {
+          "product_id": "p12",
+          "color": "Black/White",
+          "size": "39",
+          "qty": 8
+        },
+        {
+          "product_id": "p8",
+          "color": "Frost/Wash",
+          "size": "42",
+          "qty": 12
+        },
+        {
+          "product_id": "p6",
+          "color": "Core Black",
+          "size": "42",
+          "qty": 10
+        },
+        {
+          "product_id": "p11",
+          "color": "Cream/Forest",
+          "size": "39",
+          "qty": 11
+        },
+        {
+          "product_id": "p3",
+          "color": "University Red",
+          "size": "42",
+          "qty": 9
+        },
+        {
+          "product_id": "p3",
+          "color": "Panda",
+          "size": "39",
+          "qty": 10
+        },
+        {
+          "product_id": "p3",
+          "color": "University Red",
+          "size": "38",
+          "qty": 12
+        },
+        {
+          "product_id": "p9",
+          "color": "White/Pearl",
+          "size": "43",
+          "qty": 8
+        },
+        {
+          "product_id": "p4",
+          "color": "Cloud White/Core Black/Gum",
+          "size": "43",
+          "qty": 8
+        },
+        {
+          "product_id": "p4",
+          "color": "Core Black/Cloud White",
+          "size": "37",
+          "qty": 12
+        },
+        {
+          "product_id": "p5",
+          "color": "Hazy Green/Off White",
+          "size": "40",
+          "qty": 8
+        },
+        {
+          "product_id": "p5",
+          "color": "Hazy Green/Off White",
+          "size": "41",
+          "qty": 8
+        },
+        {
+          "product_id": "p5",
+          "color": "Hazy Green/Off White",
+          "size": "38",
+          "qty": 12
+        }
+      ]
+    },
+    {
+      "id": "e_ongoing_1",
+      "name": "Weekend Pop-Up Bazaar",
+      "company_id": "c3",
+      "start_date": "2026-07-27",
+      "end_date": "2026-08-10",
+      "payment_methods": [
+        "CASH",
+        "GCASH"
+      ],
+      "assigned_employee_emails": [
+        "employee@syncbazaar.com"
+      ],
+      "allocations": [
+        {
+          "product_id": "p9",
+          "color": "White/Pearl",
+          "size": "37",
+          "qty": 10
+        },
+        {
+          "product_id": "p9",
+          "color": "Midnight/Eclipse",
+          "size": "40",
+          "qty": 7
+        },
+        {
+          "product_id": "p5",
+          "color": "Hazy Green/Off White",
+          "size": "39",
+          "qty": 8
+        },
+        {
+          "product_id": "p5",
+          "color": "Hazy Green/Off White",
+          "size": "42",
+          "qty": 9
+        },
+        {
+          "product_id": "p5",
+          "color": "Hazy Green/Off White",
+          "size": "38",
+          "qty": 7
+        },
+        {
+          "product_id": "p11",
+          "color": "White/Black",
+          "size": "39",
+          "qty": 10
+        },
+        {
+          "product_id": "p2",
+          "color": "University Blue",
+          "size": "43",
+          "qty": 10
+        },
+        {
+          "product_id": "p7",
+          "color": "Ivory/Frost",
+          "size": "39",
+          "qty": 10
+        },
+        {
+          "product_id": "p10",
+          "color": "Cream/Peacoat",
+          "size": "38",
+          "qty": 6
+        },
+        {
+          "product_id": "p10",
+          "color": "Cream/Peacoat",
+          "size": "40",
+          "qty": 9
+        },
+        {
+          "product_id": "p12",
+          "color": "Black/White",
+          "size": "42",
+          "qty": 7
+        },
+        {
+          "product_id": "p12",
+          "color": "White/Navy",
+          "size": "38",
+          "qty": 10
+        },
+        {
+          "product_id": "p12",
+          "color": "White/Navy",
+          "size": "42",
+          "qty": 6
+        },
+        {
+          "product_id": "p1",
+          "color": "Light Orewood Brown",
+          "size": "39",
+          "qty": 7
+        },
+        {
+          "product_id": "p1",
+          "color": "Triple White",
+          "size": "36",
+          "qty": 9
+        },
+        {
+          "product_id": "p4",
+          "color": "Core Black/Cloud White",
+          "size": "43",
+          "qty": 7
+        },
+        {
+          "product_id": "p4",
+          "color": "Cloud White/Core Black/Gum",
+          "size": "41",
+          "qty": 9
+        },
+        {
+          "product_id": "p8",
+          "color": "Frost/Wash",
+          "size": "41",
+          "qty": 10
+        },
+        {
+          "product_id": "p8",
+          "color": "Frost/Wash",
+          "size": "42",
+          "qty": 6
+        },
+        {
+          "product_id": "p3",
+          "color": "Grey Fog",
+          "size": "43",
+          "qty": 8
+        },
+        {
+          "product_id": "p3",
+          "color": "Panda",
+          "size": "43",
+          "qty": 9
+        },
+        {
+          "product_id": "p6",
+          "color": "Core Black",
+          "size": "41",
+          "qty": 10
+        }
+      ]
+    },
+    {
+      "id": "e_ongoing_2",
+      "name": "Midweek Office Bazaar",
+      "company_id": "c3",
+      "start_date": "2026-08-10",
+      "end_date": "2026-08-12",
+      "payment_methods": [
+        "CASH",
+        "GCASH"
+      ],
+      "assigned_employee_emails": [
+        "missy@syncbazaar.com"
+      ],
+      "allocations": [
+        {
+          "product_id": "p8",
+          "color": "Frost/Wash",
+          "size": "41",
+          "qty": 3
+        },
+        {
+          "product_id": "p9",
+          "color": "Midnight/Eclipse",
+          "size": "39",
+          "qty": 6
+        },
+        {
+          "product_id": "p12",
+          "color": "White/Navy",
+          "size": "41",
+          "qty": 5
+        },
+        {
+          "product_id": "p4",
+          "color": "Core Black/Cloud White",
+          "size": "38",
+          "qty": 5
+        },
+        {
+          "product_id": "p7",
+          "color": "Frost/White",
+          "size": "36",
+          "qty": 3
+        },
+        {
+          "product_id": "p7",
+          "color": "Ivory/Frost",
+          "size": "38",
+          "qty": 6
+        },
+        {
+          "product_id": "p5",
+          "color": "Core Black/Ftwr White",
+          "size": "37",
+          "qty": 5
+        },
+        {
+          "product_id": "p11",
+          "color": "White/Black",
+          "size": "41",
+          "qty": 6
+        },
+        {
+          "product_id": "p11",
+          "color": "White/Black",
+          "size": "39",
+          "qty": 4
+        },
+        {
+          "product_id": "p11",
+          "color": "Cream/Forest",
+          "size": "43",
+          "qty": 6
+        }
+      ]
+    },
+    {
+      "id": "e_incoming_1",
+      "name": "Back-to-School Bazaar",
+      "company_id": "c1",
+      "start_date": "2026-08-24",
+      "end_date": "2026-08-25",
+      "payment_methods": [
+        "CASH",
+        "GCASH"
+      ],
+      "assigned_employee_emails": [
+        "tg@syncbazaar.com"
+      ],
+      "allocations": [
+        {
+          "product_id": "p4",
+          "color": "Cloud White/Core Black/Gum",
+          "size": "40",
+          "qty": 5
+        },
+        {
+          "product_id": "p4",
+          "color": "Core Black/Cloud White",
+          "size": "38",
+          "qty": 4
+        },
+        {
+          "product_id": "p4",
+          "color": "Cloud White/Core Black/Gum",
+          "size": "41",
+          "qty": 6
+        },
+        {
+          "product_id": "p2",
+          "color": "University Blue",
+          "size": "43",
+          "qty": 3
+        },
+        {
+          "product_id": "p2",
+          "color": "Black/White",
+          "size": "37",
+          "qty": 6
+        },
+        {
+          "product_id": "p7",
+          "color": "Frost/White",
+          "size": "40",
+          "qty": 4
+        },
+        {
+          "product_id": "p12",
+          "color": "Black/White",
+          "size": "43",
+          "qty": 4
+        },
+        {
+          "product_id": "p11",
+          "color": "Cream/Forest",
+          "size": "39",
+          "qty": 6
+        },
+        {
+          "product_id": "p11",
+          "color": "Cream/Forest",
+          "size": "41",
+          "qty": 4
+        },
+        {
+          "product_id": "p11",
+          "color": "White/Black",
+          "size": "38",
+          "qty": 4
+        },
+        {
+          "product_id": "p3",
+          "color": "Grey Fog",
+          "size": "41",
+          "qty": 3
+        }
+      ]
+    },
+    {
+      "id": "e_incoming_2",
+      "name": "Payday Pop-Up",
+      "company_id": "c2",
+      "start_date": "2026-08-31",
+      "end_date": "2026-09-02",
+      "payment_methods": [
+        "CASH",
+        "GCASH"
+      ],
+      "assigned_employee_emails": [
+        "sen@syncbazaar.com"
+      ],
+      "allocations": [
+        {
+          "product_id": "p6",
+          "color": "Cloud White",
+          "size": "39",
+          "qty": 6
+        },
+        {
+          "product_id": "p6",
+          "color": "Solar Red",
+          "size": "39",
+          "qty": 5
+        },
+        {
+          "product_id": "p10",
+          "color": "Cream/Peacoat",
+          "size": "41",
+          "qty": 4
+        },
+        {
+          "product_id": "p1",
+          "color": "Light Orewood Brown",
+          "size": "36",
+          "qty": 3
+        },
+        {
+          "product_id": "p1",
+          "color": "Triple Black",
+          "size": "40",
+          "qty": 6
+        },
+        {
+          "product_id": "p1",
+          "color": "Triple White",
+          "size": "41",
+          "qty": 6
+        },
+        {
+          "product_id": "p7",
+          "color": "All Black",
+          "size": "37",
+          "qty": 4
+        },
+        {
+          "product_id": "p11",
+          "color": "Cream/Forest",
+          "size": "41",
+          "qty": 5
+        },
+        {
+          "product_id": "p11",
+          "color": "Cream/Forest",
+          "size": "40",
+          "qty": 6
+        }
+      ]
+    },
+    {
+      "id": "e_incoming_3",
+      "name": "Harvest Festival Bazaar",
+      "company_id": "c3",
+      "start_date": "2026-09-07",
+      "end_date": "2026-09-09",
+      "payment_methods": [
+        "CASH",
+        "GCASH"
+      ],
+      "assigned_employee_emails": [
+        "employee@syncbazaar.com"
+      ],
+      "allocations": [
+        {
+          "product_id": "p10",
+          "color": "Dark Brown",
+          "size": "41",
+          "qty": 6
+        },
+        {
+          "product_id": "p1",
+          "color": "Triple Black",
+          "size": "36",
+          "qty": 3
+        },
+        {
+          "product_id": "p1",
+          "color": "Triple White",
+          "size": "41",
+          "qty": 5
+        },
+        {
+          "product_id": "p8",
+          "color": "All Black",
+          "size": "41",
+          "qty": 3
+        },
+        {
+          "product_id": "p2",
+          "color": "University Blue",
+          "size": "37",
+          "qty": 5
+        },
+        {
+          "product_id": "p2",
+          "color": "Bred Toe",
+          "size": "38",
+          "qty": 4
+        },
+        {
+          "product_id": "p2",
+          "color": "University Blue",
+          "size": "39",
+          "qty": 3
+        },
+        {
+          "product_id": "p3",
+          "color": "Grey Fog",
+          "size": "41",
+          "qty": 5
+        },
+        {
+          "product_id": "p6",
+          "color": "Cloud White",
+          "size": "38",
+          "qty": 5
+        },
+        {
+          "product_id": "p6",
+          "color": "Cloud White",
+          "size": "41",
+          "qty": 5
+        },
+        {
+          "product_id": "p6",
+          "color": "Solar Red",
+          "size": "42",
+          "qty": 3
+        },
+        {
+          "product_id": "p9",
+          "color": "White/Pearl",
+          "size": "38",
+          "qty": 4
+        },
+        {
+          "product_id": "p9",
+          "color": "White/Pearl",
+          "size": "40",
+          "qty": 4
+        },
+        {
+          "product_id": "p9",
+          "color": "Midnight/Eclipse",
+          "size": "42",
+          "qty": 6
+        }
+      ]
+    },
+    {
+      "id": "e_incoming_4",
+      "name": "Founders' Week Bazaar",
+      "company_id": "c2",
+      "start_date": "2026-09-14",
+      "end_date": "2026-09-18",
+      "payment_methods": [
+        "CASH",
+        "GCASH"
+      ],
+      "assigned_employee_emails": [
+        "missy@syncbazaar.com"
+      ],
+      "allocations": [
+        {
+          "product_id": "p12",
+          "color": "Black/White",
+          "size": "41",
+          "qty": 4
+        },
+        {
+          "product_id": "p11",
+          "color": "Cream/Forest",
+          "size": "41",
+          "qty": 4
+        },
+        {
+          "product_id": "p11",
+          "color": "Cream/Forest",
+          "size": "43",
+          "qty": 3
+        },
+        {
+          "product_id": "p8",
+          "color": "All Black",
+          "size": "39",
+          "qty": 5
+        },
+        {
+          "product_id": "p8",
+          "color": "Frost/Wash",
+          "size": "40",
+          "qty": 5
+        },
+        {
+          "product_id": "p8",
+          "color": "Frost/Wash",
+          "size": "39",
+          "qty": 3
+        },
+        {
+          "product_id": "p4",
+          "color": "Cloud White/Core Black/Gum",
+          "size": "42",
+          "qty": 5
+        },
+        {
+          "product_id": "p4",
+          "color": "Core Black/Cloud White",
+          "size": "37",
+          "qty": 3
+        },
+        {
+          "product_id": "p7",
+          "color": "Frost/White",
+          "size": "41",
+          "qty": 4
+        },
+        {
+          "product_id": "p7",
+          "color": "Ivory/Frost",
+          "size": "36",
+          "qty": 6
+        },
+        {
+          "product_id": "p7",
+          "color": "All Black",
+          "size": "36",
+          "qty": 3
+        },
+        {
+          "product_id": "p5",
+          "color": "Hazy Green/Off White",
+          "size": "40",
+          "qty": 6
+        }
+      ]
+    },
+    {
+      "id": "e_incoming_5",
+      "name": "Community Sale Days",
+      "company_id": "c2",
+      "start_date": "2026-09-22",
+      "end_date": "2026-09-25",
+      "payment_methods": [
+        "CASH",
+        "GCASH"
+      ],
+      "assigned_employee_emails": [
+        "tg@syncbazaar.com"
+      ],
+      "allocations": [
+        {
+          "product_id": "p12",
+          "color": "White/Navy",
+          "size": "39",
+          "qty": 6
+        },
+        {
+          "product_id": "p12",
+          "color": "Black/White",
+          "size": "39",
+          "qty": 3
+        },
+        {
+          "product_id": "p7",
+          "color": "Frost/White",
+          "size": "37",
+          "qty": 5
+        },
+        {
+          "product_id": "p7",
+          "color": "Frost/White",
+          "size": "41",
+          "qty": 5
+        },
+        {
+          "product_id": "p1",
+          "color": "Triple White",
+          "size": "41",
+          "qty": 3
+        },
+        {
+          "product_id": "p1",
+          "color": "Light Orewood Brown",
+          "size": "38",
+          "qty": 4
+        },
+        {
+          "product_id": "p1",
+          "color": "Triple White",
+          "size": "42",
+          "qty": 5
+        },
+        {
+          "product_id": "p3",
+          "color": "Grey Fog",
+          "size": "37",
+          "qty": 4
+        },
+        {
+          "product_id": "p6",
+          "color": "Cloud White",
+          "size": "42",
+          "qty": 5
+        },
+        {
+          "product_id": "p6",
+          "color": "Solar Red",
+          "size": "38",
+          "qty": 5
+        }
+      ]
+    },
+    {
+      "id": "e_incoming_6",
+      "name": "Sportsfest Sidewalk Sale",
+      "company_id": "c3",
+      "start_date": "2026-09-25",
+      "end_date": "2026-09-28",
+      "payment_methods": [
+        "CASH",
+        "GCASH"
+      ],
+      "assigned_employee_emails": [
+        "sen@syncbazaar.com"
+      ],
+      "allocations": [
+        {
+          "product_id": "p10",
+          "color": "Dark Brown",
+          "size": "40",
+          "qty": 3
+        },
+        {
+          "product_id": "p9",
+          "color": "White/Pearl",
+          "size": "42",
+          "qty": 5
+        },
+        {
+          "product_id": "p9",
+          "color": "White/Pearl",
+          "size": "40",
+          "qty": 5
+        },
+        {
+          "product_id": "p4",
+          "color": "Cloud White/Core Black/Gum",
+          "size": "39",
+          "qty": 6
+        },
+        {
+          "product_id": "p6",
+          "color": "Solar Red",
+          "size": "40",
+          "qty": 6
+        },
+        {
+          "product_id": "p6",
+          "color": "Core Black",
+          "size": "38",
+          "qty": 6
+        },
+        {
+          "product_id": "p5",
+          "color": "Core Black/Ftwr White",
+          "size": "39",
+          "qty": 3
+        },
+        {
+          "product_id": "p5",
+          "color": "Core Black/Ftwr White",
+          "size": "43",
+          "qty": 3
+        },
+        {
+          "product_id": "p2",
+          "color": "Bred Toe",
+          "size": "37",
+          "qty": 4
+        },
+        {
+          "product_id": "p1",
+          "color": "Triple Black",
+          "size": "41",
+          "qty": 6
+        }
+      ]
+    },
+    {
+      "id": "e_finished_1",
+      "name": "March Campus Bazaar",
+      "company_id": "c2",
+      "start_date": "2026-06-04",
+      "end_date": "2026-06-08",
+      "payment_methods": [
+        "CASH",
+        "GCASH"
+      ],
+      "assigned_employee_emails": [
+        "employee@syncbazaar.com"
+      ],
+      "allocations": [
+        {
+          "product_id": "p2",
+          "color": "Bred Toe",
+          "size": "41",
+          "qty": 6
+        },
+        {
+          "product_id": "p7",
+          "color": "Ivory/Frost",
+          "size": "40",
+          "qty": 4
+        },
+        {
+          "product_id": "p7",
+          "color": "Frost/White",
+          "size": "41",
+          "qty": 4
+        },
+        {
+          "product_id": "p7",
+          "color": "All Black",
+          "size": "41",
+          "qty": 6
+        },
+        {
+          "product_id": "p12",
+          "color": "White/Navy",
+          "size": "39",
+          "qty": 6
+        },
+        {
+          "product_id": "p12",
+          "color": "White/Navy",
+          "size": "40",
+          "qty": 5
+        },
+        {
+          "product_id": "p12",
+          "color": "Black/White",
+          "size": "43",
+          "qty": 3
+        },
+        {
+          "product_id": "p11",
+          "color": "White/Black",
+          "size": "41",
+          "qty": 5
+        },
+        {
+          "product_id": "p11",
+          "color": "White/Black",
+          "size": "40",
+          "qty": 3
+        },
+        {
+          "product_id": "p3",
+          "color": "Panda",
+          "size": "42",
+          "qty": 5
+        }
+      ]
+    },
+    {
+      "id": "e_finished_2",
+      "name": "Summer Kickoff Bazaar",
+      "company_id": "c2",
+      "start_date": "2026-06-19",
+      "end_date": "2026-06-23",
+      "payment_methods": [
+        "CASH",
+        "GCASH"
+      ],
+      "assigned_employee_emails": [
+        "missy@syncbazaar.com"
+      ],
+      "allocations": [
+        {
+          "product_id": "p8",
+          "color": "All Black",
+          "size": "41",
+          "qty": 6
+        },
+        {
+          "product_id": "p10",
+          "color": "Dark Brown",
+          "size": "36",
+          "qty": 3
+        },
+        {
+          "product_id": "p11",
+          "color": "Cream/Forest",
+          "size": "38",
+          "qty": 3
+        },
+        {
+          "product_id": "p11",
+          "color": "White/Black",
+          "size": "40",
+          "qty": 6
+        },
+        {
+          "product_id": "p11",
+          "color": "Cream/Forest",
+          "size": "40",
+          "qty": 4
+        },
+        {
+          "product_id": "p2",
+          "color": "Bred Toe",
+          "size": "37",
+          "qty": 3
+        },
+        {
+          "product_id": "p2",
+          "color": "Black/White",
+          "size": "41",
+          "qty": 3
+        },
+        {
+          "product_id": "p2",
+          "color": "Black/White",
+          "size": "37",
+          "qty": 6
+        },
+        {
+          "product_id": "p12",
+          "color": "Black/White",
+          "size": "41",
+          "qty": 5
+        },
+        {
+          "product_id": "p12",
+          "color": "White/Navy",
+          "size": "43",
+          "qty": 3
+        }
+      ]
+    },
+    {
+      "id": "e_finished_3",
+      "name": "Mid-Year Sale Bazaar",
+      "company_id": "c2",
+      "start_date": "2026-06-30",
+      "end_date": "2026-07-02",
+      "payment_methods": [
+        "CASH",
+        "GCASH"
+      ],
+      "assigned_employee_emails": [
+        "tg@syncbazaar.com"
+      ],
+      "allocations": [
+        {
+          "product_id": "p7",
+          "color": "Ivory/Frost",
+          "size": "36",
+          "qty": 4
+        },
+        {
+          "product_id": "p7",
+          "color": "All Black",
+          "size": "38",
+          "qty": 5
+        },
+        {
+          "product_id": "p7",
+          "color": "Frost/White",
+          "size": "38",
+          "qty": 3
+        },
+        {
+          "product_id": "p8",
+          "color": "All Black",
+          "size": "38",
+          "qty": 4
+        },
+        {
+          "product_id": "p8",
+          "color": "All Black",
+          "size": "40",
+          "qty": 4
+        },
+        {
+          "product_id": "p12",
+          "color": "Black/White",
+          "size": "38",
+          "qty": 3
+        },
+        {
+          "product_id": "p1",
+          "color": "Triple White",
+          "size": "36",
+          "qty": 3
+        },
+        {
+          "product_id": "p4",
+          "color": "Core Black/Cloud White",
+          "size": "38",
+          "qty": 6
+        },
+        {
+          "product_id": "p4",
+          "color": "Cloud White/Core Black/Gum",
+          "size": "42",
+          "qty": 6
+        },
+        {
+          "product_id": "p4",
+          "color": "Cloud White/Core Black/Gum",
+          "size": "39",
+          "qty": 3
+        },
+        {
+          "product_id": "p9",
+          "color": "White/Pearl",
+          "size": "38",
+          "qty": 5
+        },
+        {
+          "product_id": "p3",
+          "color": "Grey Fog",
+          "size": "38",
+          "qty": 6
+        },
+        {
+          "product_id": "p3",
+          "color": "Grey Fog",
+          "size": "40",
+          "qty": 5
+        },
+        {
+          "product_id": "p3",
+          "color": "Grey Fog",
+          "size": "42",
+          "qty": 6
+        }
+      ]
+    }
+  ],
+  "sales": [
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p3",
+      "color": "University Red",
+      "size": "38",
+      "customer_name": "Kim Aquino",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p3",
+      "color": "University Red",
+      "size": "38",
+      "customer_name": "Ricky Torres",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p10",
+      "color": "Oatmeal/Habanero",
+      "size": "41",
+      "customer_name": "Jose Reyes",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p5",
+      "color": "Hazy Green/Off White",
+      "size": "38",
+      "customer_name": "Paolo Garcia",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p11",
+      "color": "Cream/Forest",
+      "size": "39",
+      "customer_name": "Bryan Ocampo",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p5",
+      "color": "Hazy Green/Off White",
+      "size": "41",
+      "customer_name": "Mark Villanueva",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p7",
+      "color": "All Black",
+      "size": "42",
+      "customer_name": "Aaron Domingo",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p6",
+      "color": "Core Black",
+      "size": "42",
+      "customer_name": "Cathy Morales",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p5",
+      "color": "Hazy Green/Off White",
+      "size": "40",
+      "customer_name": "Faith Pascual",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 20,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p4",
+      "color": "Cloud White/Core Black/Gum",
+      "size": "43",
+      "customer_name": "Bea Fernandez",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p1",
+      "color": "Light Orewood Brown",
+      "size": "42",
+      "customer_name": "Juan Dela Cruz",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p3",
+      "color": "Panda",
+      "size": "39",
+      "customer_name": "Bea Fernandez",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p1",
+      "color": "Light Orewood Brown",
+      "size": "42",
+      "customer_name": "Miguel Rivera",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p10",
+      "color": "Oatmeal/Habanero",
+      "size": "42",
+      "customer_name": "Nica Flores",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 10,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p10",
+      "color": "Oatmeal/Habanero",
+      "size": "42",
+      "customer_name": "Trisha Navarro",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 20,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p11",
+      "color": "Cream/Forest",
+      "size": "39",
+      "customer_name": "Ana Bautista",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p10",
+      "color": "Oatmeal/Habanero",
+      "size": "41",
+      "customer_name": "Maria Santos",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p4",
+      "color": "Cloud White/Core Black/Gum",
+      "size": "43",
+      "customer_name": "Ricky Torres",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 20,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p4",
+      "color": "Cloud White/Core Black/Gum",
+      "size": "43",
+      "customer_name": "Miguel Rivera",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p12",
+      "color": "White/Navy",
+      "size": "43",
+      "customer_name": "Cathy Morales",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p10",
+      "color": "Oatmeal/Habanero",
+      "size": "42",
+      "customer_name": "Cathy Morales",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p6",
+      "color": "Core Black",
+      "size": "42",
+      "customer_name": "Faith Pascual",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 20,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p10",
+      "color": "Oatmeal/Habanero",
+      "size": "42",
+      "customer_name": "Kaye Delos Santos",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p3",
+      "color": "University Red",
+      "size": "42",
+      "customer_name": "Mark Villanueva",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 20,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p6",
+      "color": "Core Black",
+      "size": "42",
+      "customer_name": "Maria Santos",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p10",
+      "color": "Oatmeal/Habanero",
+      "size": "42",
+      "customer_name": "Miguel Rivera",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 2
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p4",
+      "color": "Cloud White/Core Black/Gum",
+      "size": "43",
+      "customer_name": "Maria Santos",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 2
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p3",
+      "color": "Panda",
+      "size": "39",
+      "customer_name": "Ana Bautista",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 2
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p5",
+      "color": "Hazy Green/Off White",
+      "size": "41",
+      "customer_name": "Maria Santos",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 2
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p1",
+      "color": "Light Orewood Brown",
+      "size": "42",
+      "customer_name": "Bryan Ocampo",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 20,
+      "days_after_start": 2
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p6",
+      "color": "Core Black",
+      "size": "42",
+      "customer_name": "Cathy Morales",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 2
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p3",
+      "color": "University Red",
+      "size": "38",
+      "customer_name": "Ricky Torres",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 2
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p5",
+      "color": "Hazy Green/Off White",
+      "size": "40",
+      "customer_name": "Kaye Delos Santos",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 2
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p5",
+      "color": "Hazy Green/Off White",
+      "size": "41",
+      "customer_name": "Grace Mendoza",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 2
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p4",
+      "color": "Cloud White/Core Black/Gum",
+      "size": "43",
+      "customer_name": "Aaron Domingo",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 2
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p6",
+      "color": "Core Black",
+      "size": "42",
+      "customer_name": "Ricky Torres",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 2
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p10",
+      "color": "Oatmeal/Habanero",
+      "size": "41",
+      "customer_name": "Carlo Ramos",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 30,
+      "days_after_start": 3
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p10",
+      "color": "Oatmeal/Habanero",
+      "size": "41",
+      "customer_name": "Jose Reyes",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 3
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p9",
+      "color": "White/Pearl",
+      "size": "43",
+      "customer_name": "Paolo Garcia",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 3
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p12",
+      "color": "Black/White",
+      "size": "39",
+      "customer_name": "Miguel Rivera",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 3
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p3",
+      "color": "University Red",
+      "size": "38",
+      "customer_name": "Bea Fernandez",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 20,
+      "days_after_start": 3
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p3",
+      "color": "Panda",
+      "size": "39",
+      "customer_name": "Faith Pascual",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 30,
+      "days_after_start": 3
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p6",
+      "color": "Core Black",
+      "size": "42",
+      "customer_name": "Kim Aquino",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 3
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p3",
+      "color": "University Red",
+      "size": "42",
+      "customer_name": "Leo Salazar",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 3
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p3",
+      "color": "University Red",
+      "size": "38",
+      "customer_name": "Grace Mendoza",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 3
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p5",
+      "color": "Hazy Green/Off White",
+      "size": "41",
+      "customer_name": "Dennis Castro",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 10,
+      "days_after_start": 3
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p10",
+      "color": "Oatmeal/Habanero",
+      "size": "41",
+      "customer_name": "Trisha Navarro",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 3
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p6",
+      "color": "Core Black",
+      "size": "42",
+      "customer_name": "Angel Cruz",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 3
+    },
+    {
+      "event_id": "e_august_fair",
+      "product_id": "p10",
+      "color": "Oatmeal/Habanero",
+      "size": "42",
+      "customer_name": "Angel Cruz",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 3
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p5",
+      "color": "Hazy Green/Off White",
+      "size": "39",
+      "customer_name": "Aaron Domingo",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 7
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p9",
+      "color": "White/Pearl",
+      "size": "37",
+      "customer_name": "Ricky Torres",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 7
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p3",
+      "color": "Grey Fog",
+      "size": "43",
+      "customer_name": "Kim Aquino",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 30,
+      "days_after_start": 7
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p9",
+      "color": "White/Pearl",
+      "size": "37",
+      "customer_name": "Juan Dela Cruz",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 7
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p6",
+      "color": "Core Black",
+      "size": "41",
+      "customer_name": "Dennis Castro",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 7
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p2",
+      "color": "University Blue",
+      "size": "43",
+      "customer_name": "Kaye Delos Santos",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 7
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p4",
+      "color": "Core Black/Cloud White",
+      "size": "43",
+      "customer_name": "Ana Bautista",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 10,
+      "days_after_start": 7
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p12",
+      "color": "White/Navy",
+      "size": "42",
+      "customer_name": "Joy Gonzales",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 7
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p7",
+      "color": "Ivory/Frost",
+      "size": "39",
+      "customer_name": "Kaye Delos Santos",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 8
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p9",
+      "color": "White/Pearl",
+      "size": "37",
+      "customer_name": "Paolo Garcia",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 10,
+      "days_after_start": 8
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p9",
+      "color": "White/Pearl",
+      "size": "37",
+      "customer_name": "Ana Bautista",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 8
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p1",
+      "color": "Light Orewood Brown",
+      "size": "39",
+      "customer_name": "Leo Salazar",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 10,
+      "days_after_start": 8
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p6",
+      "color": "Core Black",
+      "size": "41",
+      "customer_name": "Jose Reyes",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 20,
+      "days_after_start": 8
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p12",
+      "color": "White/Navy",
+      "size": "38",
+      "customer_name": "Faith Pascual",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 8
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p5",
+      "color": "Hazy Green/Off White",
+      "size": "39",
+      "customer_name": "Grace Mendoza",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 8
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p5",
+      "color": "Hazy Green/Off White",
+      "size": "39",
+      "customer_name": "Maria Santos",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 8
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p4",
+      "color": "Cloud White/Core Black/Gum",
+      "size": "41",
+      "customer_name": "Paolo Garcia",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 8
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p7",
+      "color": "Ivory/Frost",
+      "size": "39",
+      "customer_name": "Bryan Ocampo",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 8
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p1",
+      "color": "Light Orewood Brown",
+      "size": "39",
+      "customer_name": "Carlo Ramos",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 8
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p3",
+      "color": "Panda",
+      "size": "43",
+      "customer_name": "Grace Mendoza",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 20,
+      "days_after_start": 9
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p3",
+      "color": "Grey Fog",
+      "size": "43",
+      "customer_name": "Grace Mendoza",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 9
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p1",
+      "color": "Light Orewood Brown",
+      "size": "39",
+      "customer_name": "Nica Flores",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 9
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p1",
+      "color": "Triple White",
+      "size": "36",
+      "customer_name": "Jose Reyes",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 20,
+      "days_after_start": 9
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p3",
+      "color": "Panda",
+      "size": "43",
+      "customer_name": "Joy Gonzales",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 9
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p3",
+      "color": "Panda",
+      "size": "43",
+      "customer_name": "Trisha Navarro",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 9
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p5",
+      "color": "Hazy Green/Off White",
+      "size": "42",
+      "customer_name": "Jose Reyes",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 9
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p1",
+      "color": "Triple White",
+      "size": "36",
+      "customer_name": "Kim Aquino",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 9
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p9",
+      "color": "White/Pearl",
+      "size": "37",
+      "customer_name": "Leo Salazar",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 9
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p5",
+      "color": "Hazy Green/Off White",
+      "size": "39",
+      "customer_name": "Nica Flores",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 30,
+      "days_after_start": 9
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p5",
+      "color": "Hazy Green/Off White",
+      "size": "42",
+      "customer_name": "Joy Gonzales",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 9
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p1",
+      "color": "Light Orewood Brown",
+      "size": "39",
+      "customer_name": "Aaron Domingo",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 9
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p3",
+      "color": "Panda",
+      "size": "43",
+      "customer_name": "Cathy Morales",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 9
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p5",
+      "color": "Hazy Green/Off White",
+      "size": "39",
+      "customer_name": "Angel Cruz",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 9
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p11",
+      "color": "White/Black",
+      "size": "39",
+      "customer_name": "Dennis Castro",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 9
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p1",
+      "color": "Light Orewood Brown",
+      "size": "39",
+      "customer_name": "Miguel Rivera",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 10
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p9",
+      "color": "Midnight/Eclipse",
+      "size": "40",
+      "customer_name": "Vince Aguilar",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 20,
+      "days_after_start": 10
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p5",
+      "color": "Hazy Green/Off White",
+      "size": "42",
+      "customer_name": "Faith Pascual",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 30,
+      "days_after_start": 10
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p3",
+      "color": "Panda",
+      "size": "43",
+      "customer_name": "Nica Flores",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 10,
+      "days_after_start": 10
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p9",
+      "color": "Midnight/Eclipse",
+      "size": "40",
+      "customer_name": "Ricky Torres",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 10,
+      "days_after_start": 10
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p5",
+      "color": "Hazy Green/Off White",
+      "size": "42",
+      "customer_name": "Vince Aguilar",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 20,
+      "days_after_start": 10
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p3",
+      "color": "Panda",
+      "size": "43",
+      "customer_name": "Maria Santos",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 11
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p3",
+      "color": "Grey Fog",
+      "size": "43",
+      "customer_name": "Miguel Rivera",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 10,
+      "days_after_start": 11
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p10",
+      "color": "Cream/Peacoat",
+      "size": "40",
+      "customer_name": "Carlo Ramos",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 11
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p3",
+      "color": "Grey Fog",
+      "size": "43",
+      "customer_name": "Bryan Ocampo",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 11
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p8",
+      "color": "Frost/Wash",
+      "size": "41",
+      "customer_name": "Kaye Delos Santos",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 11
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p10",
+      "color": "Cream/Peacoat",
+      "size": "38",
+      "customer_name": "Faith Pascual",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 11
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p10",
+      "color": "Cream/Peacoat",
+      "size": "38",
+      "customer_name": "Kaye Delos Santos",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 10,
+      "days_after_start": 11
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p3",
+      "color": "Panda",
+      "size": "43",
+      "customer_name": "Joy Gonzales",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 11
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p9",
+      "color": "White/Pearl",
+      "size": "37",
+      "customer_name": "Nica Flores",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 10,
+      "days_after_start": 11
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p9",
+      "color": "Midnight/Eclipse",
+      "size": "40",
+      "customer_name": "Faith Pascual",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 11
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p11",
+      "color": "White/Black",
+      "size": "39",
+      "customer_name": "Leo Salazar",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 11
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p4",
+      "color": "Core Black/Cloud White",
+      "size": "43",
+      "customer_name": "Bryan Ocampo",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 11
+    },
+    {
+      "event_id": "e_ongoing_1",
+      "product_id": "p1",
+      "color": "Triple White",
+      "size": "36",
+      "customer_name": "Joy Gonzales",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 11
+    },
+    {
+      "event_id": "e_ongoing_2",
+      "product_id": "p4",
+      "color": "Core Black/Cloud White",
+      "size": "38",
+      "customer_name": "Kaye Delos Santos",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_ongoing_2",
+      "product_id": "p7",
+      "color": "Ivory/Frost",
+      "size": "38",
+      "customer_name": "Juan Dela Cruz",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_ongoing_2",
+      "product_id": "p5",
+      "color": "Core Black/Ftwr White",
+      "size": "37",
+      "customer_name": "Maria Santos",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 10,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_ongoing_2",
+      "product_id": "p7",
+      "color": "Frost/White",
+      "size": "36",
+      "customer_name": "Juan Dela Cruz",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_ongoing_2",
+      "product_id": "p12",
+      "color": "White/Navy",
+      "size": "41",
+      "customer_name": "Dennis Castro",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_ongoing_2",
+      "product_id": "p7",
+      "color": "Ivory/Frost",
+      "size": "38",
+      "customer_name": "Faith Pascual",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 10,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p11",
+      "color": "White/Black",
+      "size": "41",
+      "customer_name": "Bryan Ocampo",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p7",
+      "color": "Ivory/Frost",
+      "size": "40",
+      "customer_name": "Dennis Castro",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p12",
+      "color": "White/Navy",
+      "size": "40",
+      "customer_name": "Ricky Torres",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p11",
+      "color": "White/Black",
+      "size": "41",
+      "customer_name": "Juan Dela Cruz",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 10,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p2",
+      "color": "Bred Toe",
+      "size": "41",
+      "customer_name": "Dennis Castro",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p7",
+      "color": "All Black",
+      "size": "41",
+      "customer_name": "Kim Aquino",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 20,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p7",
+      "color": "Ivory/Frost",
+      "size": "40",
+      "customer_name": "Ricky Torres",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p3",
+      "color": "Panda",
+      "size": "42",
+      "customer_name": "Ricky Torres",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 10,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p12",
+      "color": "White/Navy",
+      "size": "40",
+      "customer_name": "Jose Reyes",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p7",
+      "color": "Ivory/Frost",
+      "size": "40",
+      "customer_name": "Angel Cruz",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 10,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p11",
+      "color": "White/Black",
+      "size": "40",
+      "customer_name": "Nica Flores",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p12",
+      "color": "White/Navy",
+      "size": "39",
+      "customer_name": "Mark Villanueva",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p7",
+      "color": "All Black",
+      "size": "41",
+      "customer_name": "Bea Fernandez",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 10,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p7",
+      "color": "All Black",
+      "size": "41",
+      "customer_name": "Kaye Delos Santos",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 20,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p12",
+      "color": "White/Navy",
+      "size": "39",
+      "customer_name": "Joy Gonzales",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p2",
+      "color": "Bred Toe",
+      "size": "41",
+      "customer_name": "Leo Salazar",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p7",
+      "color": "All Black",
+      "size": "41",
+      "customer_name": "Bea Fernandez",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p7",
+      "color": "Ivory/Frost",
+      "size": "40",
+      "customer_name": "Maria Santos",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p12",
+      "color": "Black/White",
+      "size": "43",
+      "customer_name": "Aaron Domingo",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p7",
+      "color": "All Black",
+      "size": "41",
+      "customer_name": "Juan Dela Cruz",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p2",
+      "color": "Bred Toe",
+      "size": "41",
+      "customer_name": "Kaye Delos Santos",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p3",
+      "color": "Panda",
+      "size": "42",
+      "customer_name": "Maria Santos",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p7",
+      "color": "All Black",
+      "size": "41",
+      "customer_name": "Grace Mendoza",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p11",
+      "color": "White/Black",
+      "size": "40",
+      "customer_name": "Jose Reyes",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p7",
+      "color": "Ivory/Frost",
+      "size": "40",
+      "customer_name": "Leo Salazar",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 10,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p7",
+      "color": "All Black",
+      "size": "41",
+      "customer_name": "Cathy Morales",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p11",
+      "color": "White/Black",
+      "size": "40",
+      "customer_name": "Aaron Domingo",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p12",
+      "color": "White/Navy",
+      "size": "39",
+      "customer_name": "Aaron Domingo",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 20,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p7",
+      "color": "Ivory/Frost",
+      "size": "40",
+      "customer_name": "Carlo Ramos",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 2
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p12",
+      "color": "Black/White",
+      "size": "43",
+      "customer_name": "Jose Reyes",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 20,
+      "days_after_start": 2
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p3",
+      "color": "Panda",
+      "size": "42",
+      "customer_name": "Aaron Domingo",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 2
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p3",
+      "color": "Panda",
+      "size": "42",
+      "customer_name": "Vince Aguilar",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 2
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p12",
+      "color": "White/Navy",
+      "size": "40",
+      "customer_name": "Bryan Ocampo",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 10,
+      "days_after_start": 2
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p2",
+      "color": "Bred Toe",
+      "size": "41",
+      "customer_name": "Angel Cruz",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 2
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p11",
+      "color": "White/Black",
+      "size": "40",
+      "customer_name": "Miguel Rivera",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 2
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p12",
+      "color": "White/Navy",
+      "size": "40",
+      "customer_name": "Leo Salazar",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 2
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p12",
+      "color": "White/Navy",
+      "size": "40",
+      "customer_name": "Angel Cruz",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 10,
+      "days_after_start": 2
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p2",
+      "color": "Bred Toe",
+      "size": "41",
+      "customer_name": "Miguel Rivera",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 2
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p12",
+      "color": "White/Navy",
+      "size": "39",
+      "customer_name": "Nica Flores",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 3
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p7",
+      "color": "Ivory/Frost",
+      "size": "40",
+      "customer_name": "Juan Dela Cruz",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 3
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p3",
+      "color": "Panda",
+      "size": "42",
+      "customer_name": "Mark Villanueva",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 20,
+      "days_after_start": 3
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p12",
+      "color": "White/Navy",
+      "size": "39",
+      "customer_name": "Juan Dela Cruz",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 10,
+      "days_after_start": 3
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p3",
+      "color": "Panda",
+      "size": "42",
+      "customer_name": "Mark Villanueva",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 3
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p11",
+      "color": "White/Black",
+      "size": "40",
+      "customer_name": "Mark Villanueva",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 3
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p12",
+      "color": "White/Navy",
+      "size": "39",
+      "customer_name": "Joy Gonzales",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 10,
+      "days_after_start": 3
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p12",
+      "color": "Black/White",
+      "size": "43",
+      "customer_name": "Angel Cruz",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 3
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p11",
+      "color": "White/Black",
+      "size": "40",
+      "customer_name": "Kim Aquino",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 4
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p3",
+      "color": "Panda",
+      "size": "42",
+      "customer_name": "Bryan Ocampo",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 20,
+      "days_after_start": 4
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p11",
+      "color": "White/Black",
+      "size": "40",
+      "customer_name": "Ana Bautista",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 4
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p12",
+      "color": "Black/White",
+      "size": "43",
+      "customer_name": "Leo Salazar",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 4
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p7",
+      "color": "Ivory/Frost",
+      "size": "40",
+      "customer_name": "Grace Mendoza",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 10,
+      "days_after_start": 4
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p2",
+      "color": "Bred Toe",
+      "size": "41",
+      "customer_name": "Jose Reyes",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 4
+    },
+    {
+      "event_id": "e_finished_1",
+      "product_id": "p7",
+      "color": "Ivory/Frost",
+      "size": "40",
+      "customer_name": "Bryan Ocampo",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 4
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p8",
+      "color": "All Black",
+      "size": "41",
+      "customer_name": "Trisha Navarro",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 20,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p2",
+      "color": "Bred Toe",
+      "size": "37",
+      "customer_name": "Paolo Garcia",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p2",
+      "color": "Black/White",
+      "size": "41",
+      "customer_name": "Vince Aguilar",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p2",
+      "color": "Black/White",
+      "size": "37",
+      "customer_name": "Angel Cruz",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p8",
+      "color": "All Black",
+      "size": "41",
+      "customer_name": "Maria Santos",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 30,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p2",
+      "color": "Black/White",
+      "size": "37",
+      "customer_name": "Ricky Torres",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p8",
+      "color": "All Black",
+      "size": "41",
+      "customer_name": "Miguel Rivera",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p11",
+      "color": "Cream/Forest",
+      "size": "40",
+      "customer_name": "Jose Reyes",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 10,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p2",
+      "color": "Bred Toe",
+      "size": "37",
+      "customer_name": "Jose Reyes",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p2",
+      "color": "Black/White",
+      "size": "37",
+      "customer_name": "Leo Salazar",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p11",
+      "color": "Cream/Forest",
+      "size": "40",
+      "customer_name": "Kaye Delos Santos",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p2",
+      "color": "Black/White",
+      "size": "41",
+      "customer_name": "Cathy Morales",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p2",
+      "color": "Black/White",
+      "size": "37",
+      "customer_name": "Aaron Domingo",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p2",
+      "color": "Black/White",
+      "size": "41",
+      "customer_name": "Ricky Torres",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p2",
+      "color": "Black/White",
+      "size": "37",
+      "customer_name": "Vince Aguilar",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p12",
+      "color": "Black/White",
+      "size": "41",
+      "customer_name": "Vince Aguilar",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p2",
+      "color": "Bred Toe",
+      "size": "37",
+      "customer_name": "Bryan Ocampo",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p2",
+      "color": "Black/White",
+      "size": "41",
+      "customer_name": "Grace Mendoza",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p12",
+      "color": "Black/White",
+      "size": "41",
+      "customer_name": "Kaye Delos Santos",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p12",
+      "color": "Black/White",
+      "size": "41",
+      "customer_name": "Kaye Delos Santos",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 20,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p2",
+      "color": "Black/White",
+      "size": "37",
+      "customer_name": "Cathy Morales",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p2",
+      "color": "Black/White",
+      "size": "41",
+      "customer_name": "Ricky Torres",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 2
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p11",
+      "color": "Cream/Forest",
+      "size": "38",
+      "customer_name": "Trisha Navarro",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 10,
+      "days_after_start": 2
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p2",
+      "color": "Black/White",
+      "size": "41",
+      "customer_name": "Miguel Rivera",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 30,
+      "days_after_start": 2
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p11",
+      "color": "Cream/Forest",
+      "size": "38",
+      "customer_name": "Ricky Torres",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 10,
+      "days_after_start": 2
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p11",
+      "color": "Cream/Forest",
+      "size": "38",
+      "customer_name": "Jose Reyes",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 2
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p2",
+      "color": "Bred Toe",
+      "size": "37",
+      "customer_name": "Cathy Morales",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 2
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p2",
+      "color": "Black/White",
+      "size": "37",
+      "customer_name": "Ricky Torres",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 2
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p2",
+      "color": "Black/White",
+      "size": "37",
+      "customer_name": "Kaye Delos Santos",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 2
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p2",
+      "color": "Black/White",
+      "size": "41",
+      "customer_name": "Jose Reyes",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 2
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p2",
+      "color": "Bred Toe",
+      "size": "37",
+      "customer_name": "Carlo Ramos",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 3
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p2",
+      "color": "Bred Toe",
+      "size": "37",
+      "customer_name": "Ricky Torres",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 10,
+      "days_after_start": 3
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p12",
+      "color": "Black/White",
+      "size": "41",
+      "customer_name": "Faith Pascual",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 3
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p2",
+      "color": "Black/White",
+      "size": "41",
+      "customer_name": "Bryan Ocampo",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 3
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p2",
+      "color": "Black/White",
+      "size": "41",
+      "customer_name": "Miguel Rivera",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 3
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p2",
+      "color": "Bred Toe",
+      "size": "37",
+      "customer_name": "Cathy Morales",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 3
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p11",
+      "color": "Cream/Forest",
+      "size": "38",
+      "customer_name": "Ricky Torres",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 3
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p2",
+      "color": "Bred Toe",
+      "size": "37",
+      "customer_name": "Juan Dela Cruz",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 3
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p12",
+      "color": "Black/White",
+      "size": "41",
+      "customer_name": "Ana Bautista",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 3
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p8",
+      "color": "All Black",
+      "size": "41",
+      "customer_name": "Nica Flores",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 3
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p8",
+      "color": "All Black",
+      "size": "41",
+      "customer_name": "Maria Santos",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 3
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p11",
+      "color": "Cream/Forest",
+      "size": "38",
+      "customer_name": "Dennis Castro",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 20,
+      "days_after_start": 3
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p8",
+      "color": "All Black",
+      "size": "41",
+      "customer_name": "Mark Villanueva",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 3
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p12",
+      "color": "Black/White",
+      "size": "41",
+      "customer_name": "Bea Fernandez",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 4
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p11",
+      "color": "Cream/Forest",
+      "size": "38",
+      "customer_name": "Nica Flores",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 4
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p11",
+      "color": "Cream/Forest",
+      "size": "38",
+      "customer_name": "Jose Reyes",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 4
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p11",
+      "color": "Cream/Forest",
+      "size": "38",
+      "customer_name": "Mark Villanueva",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 4
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p2",
+      "color": "Bred Toe",
+      "size": "37",
+      "customer_name": "Ricky Torres",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 4
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p11",
+      "color": "Cream/Forest",
+      "size": "38",
+      "customer_name": "Trisha Navarro",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 4
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p12",
+      "color": "Black/White",
+      "size": "41",
+      "customer_name": "Juan Dela Cruz",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 4
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p2",
+      "color": "Bred Toe",
+      "size": "37",
+      "customer_name": "Juan Dela Cruz",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 10,
+      "days_after_start": 4
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p2",
+      "color": "Black/White",
+      "size": "41",
+      "customer_name": "Faith Pascual",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 4
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p8",
+      "color": "All Black",
+      "size": "41",
+      "customer_name": "Vince Aguilar",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 4
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p2",
+      "color": "Bred Toe",
+      "size": "37",
+      "customer_name": "Ana Bautista",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 4
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p11",
+      "color": "Cream/Forest",
+      "size": "38",
+      "customer_name": "Aaron Domingo",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 4
+    },
+    {
+      "event_id": "e_finished_2",
+      "product_id": "p8",
+      "color": "All Black",
+      "size": "41",
+      "customer_name": "Kaye Delos Santos",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 10,
+      "days_after_start": 4
+    },
+    {
+      "event_id": "e_finished_3",
+      "product_id": "p4",
+      "color": "Cloud White/Core Black/Gum",
+      "size": "39",
+      "customer_name": "Miguel Rivera",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_finished_3",
+      "product_id": "p3",
+      "color": "Grey Fog",
+      "size": "42",
+      "customer_name": "Ana Bautista",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_finished_3",
+      "product_id": "p4",
+      "color": "Cloud White/Core Black/Gum",
+      "size": "39",
+      "customer_name": "Leo Salazar",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_finished_3",
+      "product_id": "p12",
+      "color": "Black/White",
+      "size": "38",
+      "customer_name": "Aaron Domingo",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_finished_3",
+      "product_id": "p4",
+      "color": "Cloud White/Core Black/Gum",
+      "size": "39",
+      "customer_name": "Grace Mendoza",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 10,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_finished_3",
+      "product_id": "p9",
+      "color": "White/Pearl",
+      "size": "38",
+      "customer_name": "Faith Pascual",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_finished_3",
+      "product_id": "p4",
+      "color": "Cloud White/Core Black/Gum",
+      "size": "42",
+      "customer_name": "Cathy Morales",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 30,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_finished_3",
+      "product_id": "p9",
+      "color": "White/Pearl",
+      "size": "38",
+      "customer_name": "Vince Aguilar",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 20,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_finished_3",
+      "product_id": "p7",
+      "color": "All Black",
+      "size": "38",
+      "customer_name": "Carlo Ramos",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_finished_3",
+      "product_id": "p4",
+      "color": "Cloud White/Core Black/Gum",
+      "size": "39",
+      "customer_name": "Grace Mendoza",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 0
+    },
+    {
+      "event_id": "e_finished_3",
+      "product_id": "p7",
+      "color": "Frost/White",
+      "size": "38",
+      "customer_name": "Ana Bautista",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_finished_3",
+      "product_id": "p3",
+      "color": "Grey Fog",
+      "size": "42",
+      "customer_name": "Maria Santos",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 10,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_finished_3",
+      "product_id": "p4",
+      "color": "Cloud White/Core Black/Gum",
+      "size": "42",
+      "customer_name": "Mark Villanueva",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_finished_3",
+      "product_id": "p4",
+      "color": "Cloud White/Core Black/Gum",
+      "size": "42",
+      "customer_name": "Miguel Rivera",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 30,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_finished_3",
+      "product_id": "p8",
+      "color": "All Black",
+      "size": "38",
+      "customer_name": "Maria Santos",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_finished_3",
+      "product_id": "p3",
+      "color": "Grey Fog",
+      "size": "42",
+      "customer_name": "Bea Fernandez",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_finished_3",
+      "product_id": "p7",
+      "color": "All Black",
+      "size": "38",
+      "customer_name": "Vince Aguilar",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_finished_3",
+      "product_id": "p9",
+      "color": "White/Pearl",
+      "size": "38",
+      "customer_name": "Miguel Rivera",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 10,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_finished_3",
+      "product_id": "p4",
+      "color": "Cloud White/Core Black/Gum",
+      "size": "42",
+      "customer_name": "Ricky Torres",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 10,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_finished_3",
+      "product_id": "p7",
+      "color": "All Black",
+      "size": "38",
+      "customer_name": "Bea Fernandez",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 1
+    },
+    {
+      "event_id": "e_finished_3",
+      "product_id": "p3",
+      "color": "Grey Fog",
+      "size": "38",
+      "customer_name": "Juan Dela Cruz",
+      "payment_method": "GCASH",
+      "qty": 1,
+      "discount_percent": 10,
+      "days_after_start": 2
+    },
+    {
+      "event_id": "e_finished_3",
+      "product_id": "p12",
+      "color": "Black/White",
+      "size": "38",
+      "customer_name": "Miguel Rivera",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 2
+    },
+    {
+      "event_id": "e_finished_3",
+      "product_id": "p1",
+      "color": "Triple White",
+      "size": "36",
+      "customer_name": "Carlo Ramos",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 2
+    },
+    {
+      "event_id": "e_finished_3",
+      "product_id": "p8",
+      "color": "All Black",
+      "size": "40",
+      "customer_name": "Vince Aguilar",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 10,
+      "days_after_start": 2
+    },
+    {
+      "event_id": "e_finished_3",
+      "product_id": "p8",
+      "color": "All Black",
+      "size": "40",
+      "customer_name": "Vince Aguilar",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 10,
+      "days_after_start": 2
+    },
+    {
+      "event_id": "e_finished_3",
+      "product_id": "p7",
+      "color": "Frost/White",
+      "size": "38",
+      "customer_name": "Aaron Domingo",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 2
+    },
+    {
+      "event_id": "e_finished_3",
+      "product_id": "p7",
+      "color": "Frost/White",
+      "size": "38",
+      "customer_name": "Dennis Castro",
+      "payment_method": "CASH",
+      "qty": 1,
+      "discount_percent": 0,
+      "days_after_start": 2
+    }
+  ]
+}

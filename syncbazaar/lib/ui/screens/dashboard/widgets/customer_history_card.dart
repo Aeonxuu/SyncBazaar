@@ -3,63 +3,17 @@ import 'package:flutter/material.dart';
 import '../../../../bloc/dashboard/dashboard_cubit.dart';
 import '../../../../core/constants/colors.dart';
 import 'dashboard_section_card.dart';
+import '../../../../core/utils/formatters.dart';
 
 class CustomerHistoryCard extends StatelessWidget {
-  const CustomerHistoryCard({
-    super.key,
-    required this.rows,
-    required this.filterOptions,
-    required this.selectedFilter,
-    required this.onFilterChanged,
-    required this.isFilterEnabled,
-    this.showFilter = true,
-  });
+  const CustomerHistoryCard({super.key, required this.rows});
 
   final List<CustomerHistoryData> rows;
-  final List<String> filterOptions;
-  final String selectedFilter;
-  final ValueChanged<String?> onFilterChanged;
-  final bool isFilterEnabled;
-  final bool showFilter;
 
   @override
   Widget build(BuildContext context) {
     return DashboardSectionCard(
       title: 'Transaction History',
-      trailing: showFilter
-          ? SizedBox(
-              width: 210,
-              child: DropdownButtonFormField<String>(
-                initialValue: filterOptions.contains(selectedFilter)
-                    ? selectedFilter
-                    : (filterOptions.isNotEmpty ? filterOptions.first : null),
-                isExpanded: true,
-                icon: const Icon(Icons.keyboard_arrow_down_rounded),
-                decoration: InputDecoration(
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 10,
-                  ),
-                  filled: true,
-                  fillColor: AppColors.surface,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-                onChanged: isFilterEnabled ? onFilterChanged : null,
-                items: filterOptions
-                    .map(
-                      (option) => DropdownMenuItem<String>(
-                        value: option,
-                        child: Text(option),
-                      ),
-                    )
-                    .toList(),
-              ),
-            )
-          : null,
       child: Column(
         children: [
           _headerRow(context),
@@ -72,7 +26,7 @@ class CustomerHistoryCard extends StatelessWidget {
                     child: Text(
                       'Transaction History is currently empty.',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Colors.black.withOpacity(0.4),
+                        color: Colors.black.withValues(alpha: 0.4),
                       ),
                     ),
                   )
@@ -138,7 +92,7 @@ class CustomerHistoryCard extends StatelessWidget {
           Expanded(
             flex: 2,
             child: Text(
-              'PHP ${row.amount.toStringAsFixed(2)}',
+              formatPeso(row.amount),
               style: textStyle?.copyWith(fontWeight: FontWeight.w700),
               textAlign: TextAlign.left,
             ),

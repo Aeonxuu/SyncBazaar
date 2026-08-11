@@ -34,15 +34,15 @@ class ApprovalsCubit extends Cubit<List<ApprovalRequest>> {
     _processingRequestIds.add(request.id);
 
     try {
-    if (request.type == ApprovalType.stock) {
-      final created = await _createEventFromStockRequest(request);
-      if (!created) {
-        return false;
+      if (request.type == ApprovalType.stock) {
+        final created = await _createEventFromStockRequest(request);
+        if (!created) {
+          return false;
+        }
       }
-    }
-    await _approvalsRepository.removePendingRequest(request.id);
-    await loadPending();
-    return true;
+      await _approvalsRepository.removePendingRequest(request.id);
+      await loadPending();
+      return true;
     } finally {
       _processingRequestIds.remove(request.id);
     }
@@ -57,15 +57,22 @@ class ApprovalsCubit extends Cubit<List<ApprovalRequest>> {
     final decoded = _safeDecode(request.detailsJson);
     final rawName = decoded?['eventName'];
     final rawCompanyId = decoded?['companyId'];
-    final eventName =
-        rawName is String && rawName.trim().isNotEmpty ? rawName.trim() : 'Approved Bazaar';
+    final eventName = rawName is String && rawName.trim().isNotEmpty
+        ? rawName.trim()
+        : 'Approved Bazaar';
     final companyId = rawCompanyId is int ? rawCompanyId : 1;
     final startDate = _tryParseDate(decoded?['dateStart']) ?? DateTime.now();
     final endDate = _tryParseDate(decoded?['dateEnd']) ?? startDate;
 
-    final acceptedPaymentMethods = _parseStringList(decoded?['acceptedPaymentMethods']);
-    final customOtherMethods = _parseCustomMethods(decoded?['customOtherMethods']);
-    final allocationsByAllocationKey = _parseAllocations(decoded?['allocationsByAllocationKey']);
+    final acceptedPaymentMethods = _parseStringList(
+      decoded?['acceptedPaymentMethods'],
+    );
+    final customOtherMethods = _parseCustomMethods(
+      decoded?['customOtherMethods'],
+    );
+    final allocationsByAllocationKey = _parseAllocations(
+      decoded?['allocationsByAllocationKey'],
+    );
 
     if (allocationsByAllocationKey.isNotEmpty) {
       final reserved = await _productRepository.reserveStocksByAllocationKey(
@@ -160,9 +167,7 @@ class ApprovalsCubit extends Cubit<List<ApprovalRequest>> {
         return decoded;
       }
       if (decoded is Map) {
-        return decoded.map(
-          (key, value) => MapEntry(key.toString(), value),
-        );
+        return decoded.map((key, value) => MapEntry(key.toString(), value));
       }
     } catch (_) {
       return null;

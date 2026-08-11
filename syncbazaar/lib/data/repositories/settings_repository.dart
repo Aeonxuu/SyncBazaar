@@ -1,80 +1,28 @@
+import 'package:shared_preferences/shared_preferences.dart';
+
 import '../../models/company.dart';
 
 class PaymentMethodMeta {
-  const PaymentMethodMeta({
-    required this.name,
-    this.extraFieldLabel,
-  });
+  const PaymentMethodMeta({required this.name, this.extraFieldLabel});
 
   final String name;
   final String? extraFieldLabel;
 }
 
 class SettingsRepository {
-  final List<Company> _companies = [
-    const Company(
-      id: 1,
-      name: 'Amkor Technology',
-      address: 'Makati City',
-      contact: '0917-000-0000',
-      incentivePercent: 10,
-      bufferPercent: 10,
-    ),
-    const Company(
-      id: 2,
-      name: 'Shin-Etsu',
-      address: 'Laguna',
-      contact: '0917-111-1111',
-      incentivePercent: 10,
-      bufferPercent: 10,
-    ),
-    const Company(
-      id: 3,
-      name: 'MSEUF Lucena',
-      address: 'Lucena City, Quezon',
-      contact: '',
-      incentivePercent: 10,
-      bufferPercent: 0,
-    ),
-    const Company(
-      id: 4,
-      name: 'Perez Park',
-      address: 'Lucena City, Quezon',
-      contact: '',
-      incentivePercent: 10,
-      bufferPercent: 0,
-    ),
-    const Company(
-      id: 5,
-      name: 'Tagaytay Picnic Grove',
-      address: 'Tagaytay City, Cavite',
-      contact: '',
-      incentivePercent: 10,
-      bufferPercent: 10,
-    ),
-  ];
+  static const String _storeNameKey = 'settings.storeName';
+
+  /// Printed until the seller sets their own name, so a receipt is never
+  /// headed by an empty line.
+  static const String _defaultStoreName = 'SyncBazaar';
+
+  final List<Company> _companies = [];
 
   bool _autoSyncOnReconnect = true;
-  int _nextCompanyId = 6;
+  int _nextCompanyId = 1;
 
-  final Map<int, List<PaymentMethodMeta>> _locationPaymentMethodsByCompanyId = {
-    1: const [
-      PaymentMethodMeta(name: 'CASH'),
-      PaymentMethodMeta(name: 'GCASH'),
-    ],
-    2: const [
-      PaymentMethodMeta(name: 'CASH'),
-    ],
-    3: const [
-      PaymentMethodMeta(name: 'CASH'),
-    ],
-    4: const [
-      PaymentMethodMeta(name: 'CASH'),
-    ],
-    5: const [
-      PaymentMethodMeta(name: 'CASH'),
-    ],
-  };
+  final Map<int, List<PaymentMethodMeta>> _locationPaymentMethodsByCompanyId =
+      {};
 
   final List<PaymentMethodMeta> _paymentMethods = [
     const PaymentMethodMeta(name: 'CASH'),
@@ -88,9 +36,7 @@ class SettingsRepository {
       _companies.add(company);
       _locationPaymentMethodsByCompanyId.putIfAbsent(
         company.id,
-        () => const [
-          PaymentMethodMeta(name: 'CASH'),
-        ],
+        () => const [PaymentMethodMeta(name: 'CASH')],
       );
       return;
     }
@@ -126,15 +72,6 @@ class SettingsRepository {
       for (final entry in _locationPaymentMethodsByCompanyId.entries)
         entry.key: List<PaymentMethodMeta>.from(entry.value),
     };
-  }
-
-  Future<List<PaymentMethodMeta>> paymentMethodsForCompany(int companyId) async {
-    return List<PaymentMethodMeta>.from(
-      _locationPaymentMethodsByCompanyId[companyId] ??
-          const [
-            PaymentMethodMeta(name: 'CASH'),
-          ],
-    );
   }
 
   Future<void> upsertCompanyConfiguration({
@@ -174,21 +111,36 @@ class SettingsRepository {
     return methods;
   }
 
-  Future<void> upsertPaymentMethod(PaymentMethodMeta method) async {
-    final idx = _paymentMethods.indexWhere(
-      (item) => item.name.trim().toUpperCase() == method.name.trim().toUpperCase(),
-    );
-    if (idx == -1) {
-      _paymentMethods.add(method);
-      return;
-    }
-    _paymentMethods[idx] = method;
-  }
-
   Future<bool> autoSyncEnabled() async => _autoSyncOnReconnect;
 
   Future<void> setAutoSync(bool enabled) async {
     _autoSyncOnReconnect = enabled;
+  }
+
+  /// The seller's own name — the pop-up store, e.g. "SV KICKz".
+  ///
+  /// Distinct from [Company], which models the venue hosting the bazaar. The
+  /// receipt header prints both, because a customer needs to know who sold
+  /// them the shoes, not only which mall they were standing in.
+  ///
+  /// Unlike its in-memory siblings this one is persisted: it is typed once and
+  /// then printed on every receipt, so losing it on restart would silently
+  /// start producing unbranded receipts. Follows [AuthRepository]'s use of
+  /// `shared_preferences`.
+  Future<String> storeName() async {
+    final prefs = await SharedPreferences.getInstance();
+    final stored = prefs.getString(_storeNameKey)?.trim();
+    return (stored == null || stored.isEmpty) ? _defaultStoreName : stored;
+  }
+
+  Future<void> setStoreName(String name) async {
+    final prefs = await SharedPreferences.getInstance();
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) {
+      await prefs.remove(_storeNameKey);
+      return;
+    }
+    await prefs.setString(_storeNameKey, trimmed);
   }
 
   List<PaymentMethodMeta> _normalizePaymentMethods(

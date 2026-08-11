@@ -1,19 +1,21 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:syncbazaar/app.dart';
+import 'package:syncbazaar/ui/screens/login/login_screen.dart';
 
 void main() {
-  testWidgets('SyncBazaar boots', (WidgetTester tester) async {
-    await tester.pumpWidget(const SyncBazaarApp());
+  testWidgets('SyncBazaar boots to the login screen', (tester) async {
+    // Seeding is off here on purpose. The dev seeder reads
+    // `assets/dev/mock_data.json` through `rootBundle`, which is real I/O and
+    // never completes inside the fake-async zone `testWidgets` runs in — with
+    // it on, `pumpAndSettle` below spins until it times out. See
+    // `SyncBazaarApp.seedMockData`.
+    await tester.pumpWidget(const SyncBazaarApp(seedMockData: false));
     await tester.pumpAndSettle();
 
-    expect(find.text('SyncBazaar Login'), findsOneWidget);
+    // Asserted on the widget rather than on a heading string: this test is
+    // here to prove the app boots and lands unauthenticated, and it shouldn't
+    // start failing because someone reworded the login copy.
+    expect(find.byType(LoginScreen), findsOneWidget);
   });
 }

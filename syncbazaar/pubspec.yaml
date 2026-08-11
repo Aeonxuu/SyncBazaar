@@ -32,14 +32,28 @@ dependencies:
     sdk: flutter
   cupertino_icons: ^1.0.8
   flutter_bloc: ^8.1.5
-  sqflite: ^2.3.0
-  path_provider: ^2.1.0
-  http: ^1.1.0
-  path: ^1.9.1
   image_picker: ^1.0.4
-  google_fonts: ^6.1.0
   intl: ^0.18.1
   shared_preferences: ^2.2.2
+  fl_chart: ^1.2.0
+  # Talks to the Django REST backend (github.com/Allie1080/syncbazaar_backend).
+  # `http` rather than `dio`: the API is plain token-authenticated REST with no
+  # interceptor, retry or multipart needs yet, and one less dependency is one
+  # less thing to keep working on an offline tablet.
+  http: ^1.2.0
+  # Every sale carries a v4 uuid generated at the till, which is what lets a
+  # failed upload be retried without recording the sale twice. Dart has no
+  # built-in uuid, and one hand-rolled from Random is the kind of thing that is
+  # subtly wrong and never noticed.
+  uuid: ^4.5.1
+  # Receipt export. `screenshot` renders the receipt widget off-screen with an
+  # unbounded height, which is what lets the PNG grow with the item count.
+  # Saving then splits by platform: `gal` puts the image in the tablet's photo
+  # gallery (file_saver would hide it in Android/data/<pkg>/files), while
+  # file_saver handles the browser download on web and ~/Downloads on desktop.
+  screenshot: ^3.0.0
+  file_saver: ^0.4.0
+  gal: ^2.3.3
 
 dev_dependencies:
   flutter_test:
@@ -69,8 +83,24 @@ flutter:
   # Place future custom navigation icons under assets/icons/ and register here.
   assets:
     - assets/icons/
-    - assets/data/sample_products.json
     - assets/images/default_shoes/
+    - assets/dev/mock_data.json
+
+  # Inter is bundled rather than fetched by google_fonts at runtime. A till at
+  # a bazaar has no reliable network, and the fetch does not degrade quietly:
+  # it throws, which took down receipt printing entirely on an offline tablet.
+  # Shipping the files makes the app's typography independent of connectivity.
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Inter-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Inter-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Inter-Bold.ttf
+          weight: 700
 
   # To add assets to your application, add an assets section, like this:
   # assets:

@@ -58,8 +58,11 @@ class _StaffScreenState extends State<StaffScreen> {
                 final visible = _selectedRole == 'ALL'
                     ? base
                     : base
-                        .where((user) => user.role.name.toUpperCase() == _selectedRole)
-                        .toList();
+                          .where(
+                            (user) =>
+                                user.role.name.toUpperCase() == _selectedRole,
+                          )
+                          .toList();
 
                 return DashboardSectionCard(
                   title: 'Staff Directory',
@@ -85,7 +88,10 @@ class _StaffScreenState extends State<StaffScreen> {
                         DropdownMenuItem(value: 'ALL', child: Text('ALL')),
                         DropdownMenuItem(value: 'ADMIN', child: Text('ADMIN')),
                         DropdownMenuItem(value: 'OWNER', child: Text('OWNER')),
-                        DropdownMenuItem(value: 'EMPLOYEE', child: Text('EMPLOYEE')),
+                        DropdownMenuItem(
+                          value: 'EMPLOYEE',
+                          child: Text('EMPLOYEE'),
+                        ),
                       ],
                       onChanged: (value) {
                         if (value == null) {
@@ -193,6 +199,7 @@ class _StaffScreenState extends State<StaffScreen> {
       title: 'Delete User',
       message: 'Delete ${user.name}?',
       confirmLabel: 'Delete',
+      tone: ConfirmationTone.destructive,
     );
     if (approved != true || !context.mounted) {
       return;
@@ -201,9 +208,9 @@ class _StaffScreenState extends State<StaffScreen> {
     if (!context.mounted) {
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('User deleted.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('User deleted.')));
   }
 
   Future<void> _showUserDialog(BuildContext context, {AppUser? user}) async {
@@ -230,230 +237,261 @@ class _StaffScreenState extends State<StaffScreen> {
           child: StatefulBuilder(
             builder: (dialogContext, setDialogState) {
               return Dialog(
-              backgroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 420),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              isEdit ? 'Edit user' : 'Add user',
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                            ),
-                          ),
-                          IconButton(
-                            onPressed: () => Navigator.pop(dialogContext),
-                            visualDensity: VisualDensity.compact,
-                            icon: const Icon(Icons.close_rounded, size: 20),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      _fieldLabel(context, 'Name'),
-                      const SizedBox(height: 4),
-                      TextField(
-                        controller: nameController,
-                        decoration: _dialogFieldDecoration('Enter full name'),
-                      ),
-                      const SizedBox(height: 8),
-                      _fieldLabel(context, 'Email'),
-                      const SizedBox(height: 4),
-                      TextField(
-                        controller: emailController,
-                        decoration: _dialogFieldDecoration('Enter email address'),
-                      ),
-                      const SizedBox(height: 8),
-                      _fieldLabel(context, 'Role'),
-                      const SizedBox(height: 4),
-                      DropdownButtonFormField<UserRole>(
-                        initialValue: selectedRole,
-                        items: allowedRoles
-                            .map(
-                              (role) => DropdownMenuItem<UserRole>(
-                                value: role,
-                                child: Text(role.name.toUpperCase()),
+                backgroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 420),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                isEdit ? 'Edit user' : 'Add user',
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w700),
                               ),
-                            )
-                            .toList(),
-                        onChanged: (value) {
-                          if (value == null) {
-                            return;
-                          }
-                          setDialogState(() {
-                            selectedRole = value;
-                          });
-                        },
-                        decoration: _dialogFieldDecoration('Select role'),
-                      ),
-                      const SizedBox(height: 8),
-                      _fieldLabel(
-                        context,
-                        isEdit ? 'New password (optional)' : 'Password',
-                      ),
-                      const SizedBox(height: 4),
-                      TextField(
-                        controller: passwordController,
-                        obscureText: obscurePassword,
-                        decoration: _dialogFieldDecoration(
-                          isEdit ? 'Enter new password' : 'Enter password',
-                        ).copyWith(
-                          suffixIcon: IconButton(
-                            onPressed: () {
-                              setDialogState(() {
-                                obscurePassword = !obscurePassword;
-                              });
-                            },
-                            icon: Icon(
-                              obscurePassword
-                                  ? Icons.visibility_off_rounded
-                                  : Icons.visibility_rounded,
-                              size: 18,
                             ),
-                          ),
-                        ),
-                      ),
-                      if (isEdit) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          'Leave password blank to keep current password.',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Colors.black45,
-                                fontWeight: FontWeight.w600,
-                              ),
-                        ),
-                      ],
-                      const SizedBox(height: 14),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
+                            IconButton(
                               onPressed: () => Navigator.pop(dialogContext),
-                              icon: const Icon(Icons.close_rounded, size: 18),
-                              style: OutlinedButton.styleFrom(
-                                minimumSize: const Size.fromHeight(38),
-                                foregroundColor: const Color(0xFFC62828),
-                                side: const BorderSide(color: Color(0xFFC62828)),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(6),
+                              visualDensity: VisualDensity.compact,
+                              icon: const Icon(Icons.close_rounded, size: 20),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        _fieldLabel(context, 'Name'),
+                        const SizedBox(height: 4),
+                        TextField(
+                          controller: nameController,
+                          decoration: _dialogFieldDecoration('Enter full name'),
+                        ),
+                        const SizedBox(height: 8),
+                        _fieldLabel(context, 'Email'),
+                        const SizedBox(height: 4),
+                        TextField(
+                          controller: emailController,
+                          decoration: _dialogFieldDecoration(
+                            'Enter email address',
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        _fieldLabel(context, 'Role'),
+                        const SizedBox(height: 4),
+                        DropdownButtonFormField<UserRole>(
+                          initialValue: selectedRole,
+                          items: allowedRoles
+                              .map(
+                                (role) => DropdownMenuItem<UserRole>(
+                                  value: role,
+                                  child: Text(role.name.toUpperCase()),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) {
+                            if (value == null) {
+                              return;
+                            }
+                            setDialogState(() {
+                              selectedRole = value;
+                            });
+                          },
+                          decoration: _dialogFieldDecoration('Select role'),
+                        ),
+                        const SizedBox(height: 8),
+                        _fieldLabel(
+                          context,
+                          isEdit ? 'New password (optional)' : 'Password',
+                        ),
+                        const SizedBox(height: 4),
+                        TextField(
+                          controller: passwordController,
+                          obscureText: obscurePassword,
+                          decoration:
+                              _dialogFieldDecoration(
+                                isEdit
+                                    ? 'Enter new password'
+                                    : 'Enter password',
+                              ).copyWith(
+                                suffixIcon: IconButton(
+                                  onPressed: () {
+                                    setDialogState(() {
+                                      obscurePassword = !obscurePassword;
+                                    });
+                                  },
+                                  icon: Icon(
+                                    obscurePassword
+                                        ? Icons.visibility_off_rounded
+                                        : Icons.visibility_rounded,
+                                    size: 18,
+                                  ),
                                 ),
                               ),
-                              label: const Text('Cancel'),
-                            ),
+                        ),
+                        if (isEdit) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            'Leave password blank to keep current password.',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: Colors.black45,
+                                  fontWeight: FontWeight.w600,
+                                ),
                           ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: () async {
-                                final name = nameController.text.trim();
-                                final email = emailController.text.trim();
-                                final password = passwordController.text.trim();
-                                if (name.isEmpty || email.isEmpty) {
-                                  if (mounted) {
-                                    ScaffoldMessenger.of(this.context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text('Name and email are required.'),
-                                      ),
-                                    );
-                                  }
-                                  return;
-                                }
-                                if (!_emailPattern.hasMatch(email)) {
-                                  if (mounted) {
-                                    ScaffoldMessenger.of(this.context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text('Please enter a valid email address.'),
-                                      ),
-                                    );
-                                  }
-                                  return;
-                                }
-                                if (!isEdit && password.isEmpty) {
-                                  if (mounted) {
-                                    ScaffoldMessenger.of(this.context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text('Password is required for new users.'),
-                                      ),
-                                    );
-                                  }
-                                  return;
-                                }
-
-                                try {
-                                  if (!mounted) {
+                        ],
+                        const SizedBox(height: 14),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () => Navigator.pop(dialogContext),
+                                icon: const Icon(Icons.close_rounded, size: 18),
+                                style: OutlinedButton.styleFrom(
+                                  minimumSize: const Size.fromHeight(38),
+                                  foregroundColor: const Color(0xFFC62828),
+                                  side: const BorderSide(
+                                    color: Color(0xFFC62828),
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                ),
+                                label: const Text('Cancel'),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () async {
+                                  final name = nameController.text.trim();
+                                  final email = emailController.text.trim();
+                                  final password = passwordController.text
+                                      .trim();
+                                  if (name.isEmpty || email.isEmpty) {
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(
+                                        this.context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'Name and email are required.',
+                                          ),
+                                        ),
+                                      );
+                                    }
                                     return;
                                   }
-                                  final staffCubit = this.context.read<StaffCubit>();
-
-                                  if (isEdit) {
-                                    await staffCubit.updateUser(
-                                      id: user.id,
-                                      name: name,
-                                      email: email,
-                                      role: selectedRole,
-                                      password: password.isEmpty ? null : password,
-                                    );
-                                  } else {
-                                    await staffCubit.addUser(
-                                      name: name,
-                                      email: email,
-                                      role: selectedRole,
-                                      password: password,
-                                    );
-                                  }
-                                } catch (_) {
-                                  if (!mounted) {
+                                  if (!_emailPattern.hasMatch(email)) {
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(
+                                        this.context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'Please enter a valid email address.',
+                                          ),
+                                        ),
+                                      );
+                                    }
                                     return;
                                   }
-                                  ScaffoldMessenger.of(this.context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Unable to save user. Please try again.'),
+                                  if (!isEdit && password.isEmpty) {
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(
+                                        this.context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'Password is required for new users.',
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                    return;
+                                  }
+
+                                  try {
+                                    if (!mounted) {
+                                      return;
+                                    }
+                                    final staffCubit = this.context
+                                        .read<StaffCubit>();
+
+                                    if (isEdit) {
+                                      await staffCubit.updateUser(
+                                        id: user.id,
+                                        name: name,
+                                        email: email,
+                                        role: selectedRole,
+                                        password: password.isEmpty
+                                            ? null
+                                            : password,
+                                      );
+                                    } else {
+                                      await staffCubit.addUser(
+                                        name: name,
+                                        email: email,
+                                        role: selectedRole,
+                                        password: password,
+                                      );
+                                    }
+                                  } catch (_) {
+                                    if (!mounted) {
+                                      return;
+                                    }
+                                    ScaffoldMessenger.of(
+                                      this.context,
+                                    ).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Unable to save user. Please try again.',
+                                        ),
+                                      ),
+                                    );
+                                    return;
+                                  }
+
+                                  if (!dialogContext.mounted) {
+                                    return;
+                                  }
+                                  Navigator.pop(dialogContext);
+                                  if (!context.mounted) {
+                                    return;
+                                  }
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        isEdit
+                                            ? 'User updated.'
+                                            : 'User added.',
+                                      ),
                                     ),
                                   );
-                                  return;
-                                }
-
-                                if (!dialogContext.mounted) {
-                                  return;
-                                }
-                                Navigator.pop(dialogContext);
-                                if (!context.mounted) {
-                                  return;
-                                }
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(isEdit ? 'User updated.' : 'User added.'),
+                                },
+                                icon: const Icon(Icons.check_rounded, size: 18),
+                                style: ElevatedButton.styleFrom(
+                                  minimumSize: const Size.fromHeight(38),
+                                  backgroundColor: const Color(0xFF2E7D32),
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(6),
                                   ),
-                                );
-                              },
-                              icon: const Icon(Icons.check_rounded, size: 18),
-                              style: ElevatedButton.styleFrom(
-                                minimumSize: const Size.fromHeight(38),
-                                backgroundColor: const Color(0xFF2E7D32),
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(6),
                                 ),
+                                label: Text(isEdit ? 'Save' : 'Add'),
                               ),
-                              label: Text(isEdit ? 'Save' : 'Add'),
                             ),
-                          ),
-                        ],
-                      ),
-                    ],
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
               );
             },
           ),
@@ -470,10 +508,10 @@ class _StaffScreenState extends State<StaffScreen> {
     return Text(
       label,
       style: Theme.of(context).textTheme.labelSmall?.copyWith(
-            color: Colors.grey,
-            fontWeight: FontWeight.w500,
-            fontSize: 11,
-          ),
+        color: Colors.grey,
+        fontWeight: FontWeight.w500,
+        fontSize: 11,
+      ),
     );
   }
 

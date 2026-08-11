@@ -2,77 +2,23 @@ import '../../models/bazaar_event.dart';
 import '../../models/user.dart';
 
 class EventRepository {
-  final List<BazaarEvent> _events = [
-    BazaarEvent(
-      id: 1,
-      name: 'Pasayahan Festival',
-      companyId: 4,
-      startDate: DateTime(2026, 5, 15),
-      endDate: DateTime(2026, 5, 22),
-      status: BazaarStatus.upcoming,
-      acceptedPaymentMethods: ['CASH', 'GCASH'],
-      customOtherMethods: [
-        const BazaarPaymentMethod(name: 'GCASH', extraFieldLabel: 'Reference Number'),
-      ],
-    ),
-    BazaarEvent(
-      id: 2,
-      name: 'MSEUF Festival',
-      companyId: 3,
-      startDate: DateTime(2026, 4, 14),
-      endDate: DateTime(2026, 4, 17),
-      status: BazaarStatus.upcoming,
-      acceptedPaymentMethods: ['CASH'],
-    ),
-  ];
-  final Map<int, Map<String, int>> _allocationsByEventId = {
-    1: {
-      '1:9000': 6,
-      '1:9001': 6,
-      '4:9014': 6,
-      '4:9016': 6,
-      '7:9032': 5,
-      '7:9033': 5,
-      '10:9044': 5,
-      '10:9046': 5,
-      '13:9056': 6,
-      '13:9058': 6,
-      '2:9005': 5,
-      '2:9007': 5,
-      '5:9021': 5,
-      '5:9023': 5,
-      '8:9036': 4,
-      '8:9038': 4,
-      '11:9048': 4,
-      '11:9050': 4,
-      '14:9061': 4,
-      '14:9063': 4,
-    },
-    2: {
-      '3:9010': 5,
-      '3:9012': 5,
-      '6:9027': 5,
-      '6:9029': 5,
-      '9:9040': 5,
-      '9:9042': 5,
-      '12:9053': 5,
-      '12:9055': 5,
-      '15:9065': 5,
-      '15:9067': 5,
-      '1:9002': 5,
-      '1:9003': 5,
-      '4:9015': 5,
-      '4:9017': 5,
-    },
-  };
+  final List<BazaarEvent> _events = [];
+  final Map<int, Map<String, int>> _allocationsByEventId = {};
 
   BazaarStatus _statusFor(DateTime startDate, DateTime endDate) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    if (endDate.isBefore(today)) {
+    // Compared date-to-date. A bazaar runs for whole days, but its bounds are
+    // plain DateTimes that may carry a time: a start of "today 2:30pm" is
+    // after midnight-today, so an event opening this morning was reported as
+    // still upcoming until tomorrow. Truncating both sides makes the answer
+    // depend on the date the user picked and nothing else.
+    final start = DateTime(startDate.year, startDate.month, startDate.day);
+    final end = DateTime(endDate.year, endDate.month, endDate.day);
+    if (end.isBefore(today)) {
       return BazaarStatus.ended;
     }
-    if (startDate.isAfter(today)) {
+    if (start.isAfter(today)) {
       return BazaarStatus.upcoming;
     }
     return BazaarStatus.ongoing;
@@ -163,21 +109,10 @@ class EventRepository {
     _allocationsByEventId.remove(eventId);
   }
 
-  Future<Map<String, int>> allocationsForEventByAllocationKey(int eventId) async {
+  Future<Map<String, int>> allocationsForEventByAllocationKey(
+    int eventId,
+  ) async {
     return Map<String, int>.from(_allocationsByEventId[eventId] ?? const {});
-  }
-
-  Future<Map<int, int>> allocationsForEvent(int eventId) async {
-    final source = _allocationsByEventId[eventId] ?? const {};
-    final byProduct = <int, int>{};
-    for (final entry in source.entries) {
-      final productId = int.tryParse(entry.key.split(':').first);
-      if (productId == null) {
-        continue;
-      }
-      byProduct[productId] = (byProduct[productId] ?? 0) + entry.value;
-    }
-    return byProduct;
   }
 
   Future<void> updateEvent({

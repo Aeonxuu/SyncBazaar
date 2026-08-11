@@ -6,22 +6,16 @@ import '../../data/repositories/sales_repository.dart';
 import '../../models/bazaar_event.dart';
 import '../../models/sale.dart';
 import '../../models/user.dart';
-import '../../services/dashboard_insights_service.dart';
+import '../../services/dashboard_analytics_service.dart';
+import '../../core/utils/formatters.dart';
 
 const String _employeeScopeFilter = 'My bazaars';
 
 class DashboardKpiData {
-  const DashboardKpiData({
-    required this.title,
-    required this.value,
-    this.trendText,
-    this.trendIsPositive = true,
-  });
+  const DashboardKpiData({required this.title, required this.value});
 
   final String title;
   final String value;
-  final String? trendText;
-  final bool trendIsPositive;
 }
 
 class BazaarSummaryData {
@@ -65,95 +59,60 @@ class CustomerHistoryData {
 class DashboardState {
   const DashboardState({
     this.events = const [],
-    this.todayRevenue = 0,
-    this.totalOrders = 0,
-    this.activeBazaars = 0,
     List<DashboardKpiData>? kpis,
     List<BazaarSummaryData>? bazaarSummaries,
     List<double>? dailySales,
-    List<String>? aiInsights,
+    this.analytics = const DashboardAnalytics.empty(scopeLabel: 'all bazaars'),
     List<CustomerHistoryData>? recentOrders,
     List<String>? bazaarFilterOptions,
     String? selectedBazaarFilter,
-    List<String>? salesFilterOptions,
-    String? selectedSalesFilter,
-    this.averageDailySalesTrendText = '+0.0%',
-    this.averageDailySalesTrendIsPositive = true,
   }) : _kpis = kpis,
        _bazaarSummaries = bazaarSummaries,
        _dailySales = dailySales,
-       _aiInsights = aiInsights,
        _recentOrders = recentOrders,
        _bazaarFilterOptions = bazaarFilterOptions,
-       _selectedBazaarFilter = selectedBazaarFilter,
-       _salesFilterOptions = salesFilterOptions,
-       _selectedSalesFilter = selectedSalesFilter;
+       _selectedBazaarFilter = selectedBazaarFilter;
 
   final List<BazaarEvent> events;
-  final double todayRevenue;
-  final int totalOrders;
-  final int activeBazaars;
   final List<DashboardKpiData>? _kpis;
   final List<BazaarSummaryData>? _bazaarSummaries;
   final List<double>? _dailySales;
-  final List<String>? _aiInsights;
+
+  /// Descriptive breakdowns of the same sales the KPI row totals up.
+  final DashboardAnalytics analytics;
   final List<CustomerHistoryData>? _recentOrders;
   final List<String>? _bazaarFilterOptions;
   final String? _selectedBazaarFilter;
-  final List<String>? _salesFilterOptions;
-  final String? _selectedSalesFilter;
-  final String averageDailySalesTrendText;
-  final bool averageDailySalesTrendIsPositive;
 
   List<DashboardKpiData> get kpis => _kpis ?? const [];
   List<BazaarSummaryData> get bazaarSummaries => _bazaarSummaries ?? const [];
-  List<double> get dailySales =>
-      _dailySales ?? const [1200, 1500, 1300, 1800, 1600, 1900, 1700];
-  List<String> get aiInsights => _aiInsights ?? const [];
+
+  /// Mon-Fri revenue for the current week (5 values).
+  List<double> get dailySales => _dailySales ?? const [0, 0, 0, 0, 0];
   List<CustomerHistoryData> get recentOrders => _recentOrders ?? const [];
   List<String> get bazaarFilterOptions =>
       _bazaarFilterOptions ?? const ['All bazaars'];
   String get selectedBazaarFilter => _selectedBazaarFilter ?? 'All bazaars';
-  List<String> get salesFilterOptions =>
-      _salesFilterOptions ?? const ['All bazaars'];
-  String get selectedSalesFilter => _selectedSalesFilter ?? 'All bazaars';
 
   DashboardState copyWith({
     List<BazaarEvent>? events,
-    double? todayRevenue,
-    int? totalOrders,
-    int? activeBazaars,
     List<DashboardKpiData>? kpis,
     List<BazaarSummaryData>? bazaarSummaries,
     List<double>? dailySales,
-    List<String>? aiInsights,
+    DashboardAnalytics? analytics,
     List<CustomerHistoryData>? recentOrders,
     List<String>? bazaarFilterOptions,
     String? selectedBazaarFilter,
-    List<String>? salesFilterOptions,
-    String? selectedSalesFilter,
-    String? averageDailySalesTrendText,
-    bool? averageDailySalesTrendIsPositive,
   }) {
     return DashboardState(
       events: events ?? this.events,
-      todayRevenue: todayRevenue ?? this.todayRevenue,
-      totalOrders: totalOrders ?? this.totalOrders,
-      activeBazaars: activeBazaars ?? this.activeBazaars,
       kpis: kpis ?? this.kpis,
       bazaarSummaries: bazaarSummaries ?? this.bazaarSummaries,
       dailySales: dailySales ?? this.dailySales,
-      aiInsights: aiInsights ?? this.aiInsights,
+      analytics: analytics ?? this.analytics,
       recentOrders: recentOrders ?? this.recentOrders,
       bazaarFilterOptions: bazaarFilterOptions ?? this.bazaarFilterOptions,
       selectedBazaarFilter: selectedBazaarFilter ?? this.selectedBazaarFilter,
-      salesFilterOptions: salesFilterOptions ?? this.salesFilterOptions,
-      selectedSalesFilter: selectedSalesFilter ?? this.selectedSalesFilter,
-      averageDailySalesTrendText:
-          averageDailySalesTrendText ?? this.averageDailySalesTrendText,
-      averageDailySalesTrendIsPositive:
-          averageDailySalesTrendIsPositive ??
-          this.averageDailySalesTrendIsPositive,
     );
   }
 }
@@ -163,16 +122,14 @@ class DashboardCubit extends Cubit<DashboardState> {
     this._eventRepository,
     this._salesRepository, {
     required ProductRepository productRepository,
-    DashboardInsightsService? insightsService,
-  }) : _insightsService =
-           insightsService ?? const LocalDashboardInsightsService(),
-       _productRepository = productRepository,
+  }) : _productRepository = productRepository,
        super(const DashboardState());
 
   final EventRepository _eventRepository;
   final SalesRepository _salesRepository;
   final ProductRepository _productRepository;
-  final DashboardInsightsService _insightsService;
+  final DashboardAnalyticsService _analyticsService =
+      const DashboardAnalyticsService();
 
   List<CustomerHistoryData> _allOrders = const [];
   List<Sale> _visibleSales = const [];
@@ -191,11 +148,11 @@ class DashboardCubit extends Cubit<DashboardState> {
     final summaryBazaarNames = summaries.map((s) => s.bazaarName).toList();
     final defaultFilter = user.isAdminOrOwner
         ? 'All bazaars'
-      : _employeeScopeFilter;
+        : _employeeScopeFilter;
 
     final filters = user.isAdminOrOwner
         ? <String>{'All bazaars', ...summaryBazaarNames}.toList()
-      : const <String>[_employeeScopeFilter];
+        : const <String>[_employeeScopeFilter];
 
     final allSales = await _salesRepository.listSales();
     final eventNameById = {for (final event in events) event.id: event.name};
@@ -207,10 +164,14 @@ class DashboardCubit extends Cubit<DashboardState> {
     _eventNameById = eventNameById;
 
     final products = await _productRepository.listProducts();
-    _productNameById = {for (final product in products) product.id: product.name};
+    _productNameById = {
+      for (final product in products) product.id: product.name,
+    };
     final variantLabels = <int, String>{};
     for (final product in products) {
-      final options = await _productRepository.variantOptionsForProduct(product.id);
+      final options = await _productRepository.allVariantOptionsForProduct(
+        product.id,
+      );
       for (final option in options) {
         variantLabels[option.id] = option.value;
       }
@@ -223,21 +184,12 @@ class DashboardCubit extends Cubit<DashboardState> {
       sales: salesForVisibleEvents,
       eventNameById: eventNameById,
     );
-    final trendData = _buildTrendData(
+    final analytics = _analyticsService.compute(
       selectedFilter: defaultFilter,
       sales: salesForVisibleEvents,
       eventNameById: eventNameById,
-    );
-    final insights = await _insightsService.generateInsights(
-      DashboardInsightsRequest(
-        user: user,
-        selectedFilter: defaultFilter,
-        events: events,
-        sales: salesForVisibleEvents,
-        eventNameById: eventNameById,
-        productNameById: _productNameById,
-        variantLabelByOptionId: _variantLabelByOptionId,
-      ),
+      productNameById: _productNameById,
+      variantLabelByOptionId: _variantLabelByOptionId,
     );
 
     _allOrders = _buildCustomerHistoryFromSales(
@@ -250,32 +202,18 @@ class DashboardCubit extends Cubit<DashboardState> {
     emit(
       state.copyWith(
         events: events,
-        todayRevenue: metrics.todayRevenue,
-        totalOrders: metrics.totalOrders,
-        activeBazaars: metrics.activeBazaars,
         kpis: _buildKpis(
           user,
           totalRevenue: metrics.totalRevenue,
           todayRevenue: metrics.todayRevenue,
           activeBazaars: metrics.activeBazaars,
           totalOrders: metrics.totalOrders,
-          totalRevenueTrendText: trendData.totalRevenueTrendText,
-          totalRevenueTrendIsPositive: trendData.totalRevenueTrendIsPositive,
-          todayRevenueTrendText: trendData.todayRevenueTrendText,
-          todayRevenueTrendIsPositive: trendData.todayRevenueTrendIsPositive,
-          totalOrdersTrendText: trendData.totalOrdersTrendText,
-          totalOrdersTrendIsPositive: trendData.totalOrdersTrendIsPositive,
         ),
         bazaarSummaries: summaries,
-        aiInsights: insights,
+        analytics: analytics,
         bazaarFilterOptions: filters,
         selectedBazaarFilter: defaultFilter,
-        salesFilterOptions: filters,
-        selectedSalesFilter: defaultFilter,
         dailySales: dailySales,
-        averageDailySalesTrendText: trendData.averageDailySalesTrendText,
-        averageDailySalesTrendIsPositive:
-          trendData.averageDailySalesTrendIsPositive,
         recentOrders: _applyOrderFilter(
           orders: _allOrders,
           selectedBazaarFilter: defaultFilter,
@@ -285,74 +223,32 @@ class DashboardCubit extends Cubit<DashboardState> {
     );
   }
 
-  void updateBazaarFilter({
+  void updateGlobalFilter({
     required String selectedFilter,
     required AppUser user,
   }) {
-    emit(
-      state.copyWith(
-        selectedBazaarFilter: selectedFilter,
-        recentOrders: _applyOrderFilter(
-          orders: _allOrders,
-          selectedBazaarFilter: selectedFilter,
-          isAdminOrOwner: user.isAdminOrOwner,
-        ),
-      ),
-    );
-  }
-
-  void updateSalesFilter({
-    required String selectedFilter,
-    required AppUser user,
-  }) {
-    emit(
-      state.copyWith(
-        selectedSalesFilter: selectedFilter,
-        dailySales: _buildDailySalesForFilter(selectedFilter: selectedFilter),
-      ),
-    );
-  }
-
-  Future<void> updateGlobalFilter({
-    required String selectedFilter,
-    required AppUser user,
-  }) async {
     final metrics = _metricsForFilter(
       selectedFilter: selectedFilter,
       events: state.events,
       sales: _visibleSales,
       eventNameById: _eventNameById,
     );
-    final trendData = _buildTrendData(
+    final analytics = _analyticsService.compute(
       selectedFilter: selectedFilter,
       sales: _visibleSales,
       eventNameById: _eventNameById,
-    );
-    final insights = await _insightsService.generateInsights(
-      DashboardInsightsRequest(
-        user: user,
-        selectedFilter: selectedFilter,
-        events: state.events,
-        sales: _visibleSales,
-        eventNameById: _eventNameById,
-        productNameById: _productNameById,
-        variantLabelByOptionId: _variantLabelByOptionId,
-      ),
+      productNameById: _productNameById,
+      variantLabelByOptionId: _variantLabelByOptionId,
     );
 
-    final dailySales = _buildDailySalesForFilter(selectedFilter: selectedFilter);
+    final dailySales = _buildDailySalesForFilter(
+      selectedFilter: selectedFilter,
+    );
 
     emit(
       state.copyWith(
-        todayRevenue: metrics.todayRevenue,
-        totalOrders: metrics.totalOrders,
-        activeBazaars: metrics.activeBazaars,
         selectedBazaarFilter: selectedFilter,
-        selectedSalesFilter: selectedFilter,
         dailySales: dailySales,
-        averageDailySalesTrendText: trendData.averageDailySalesTrendText,
-        averageDailySalesTrendIsPositive:
-          trendData.averageDailySalesTrendIsPositive,
         recentOrders: _applyOrderFilter(
           orders: _allOrders,
           selectedBazaarFilter: selectedFilter,
@@ -364,14 +260,8 @@ class DashboardCubit extends Cubit<DashboardState> {
           todayRevenue: metrics.todayRevenue,
           activeBazaars: metrics.activeBazaars,
           totalOrders: metrics.totalOrders,
-          totalRevenueTrendText: trendData.totalRevenueTrendText,
-          totalRevenueTrendIsPositive: trendData.totalRevenueTrendIsPositive,
-          todayRevenueTrendText: trendData.todayRevenueTrendText,
-          todayRevenueTrendIsPositive: trendData.todayRevenueTrendIsPositive,
-          totalOrdersTrendText: trendData.totalOrdersTrendText,
-          totalOrdersTrendIsPositive: trendData.totalOrdersTrendIsPositive,
         ),
-        aiInsights: insights,
+        analytics: analytics,
       ),
     );
   }
@@ -382,26 +272,16 @@ class DashboardCubit extends Cubit<DashboardState> {
     required double todayRevenue,
     required int activeBazaars,
     required int totalOrders,
-    required String totalRevenueTrendText,
-    required bool totalRevenueTrendIsPositive,
-    required String todayRevenueTrendText,
-    required bool todayRevenueTrendIsPositive,
-    required String totalOrdersTrendText,
-    required bool totalOrdersTrendIsPositive,
   }) {
     final scopeSuffix = user.isAdminOrOwner ? '' : ' (My Bazaar)';
     return [
       DashboardKpiData(
         title: 'Total Sale$scopeSuffix',
-        value: 'PHP ${totalRevenue.toStringAsFixed(2)}',
-        trendText: totalRevenueTrendText,
-        trendIsPositive: totalRevenueTrendIsPositive,
+        value: formatPeso(totalRevenue),
       ),
       DashboardKpiData(
         title: 'Today\'s Sale$scopeSuffix',
-        value: 'PHP ${todayRevenue.toStringAsFixed(2)}',
-        trendText: todayRevenueTrendText,
-        trendIsPositive: todayRevenueTrendIsPositive,
+        value: formatPeso(todayRevenue),
       ),
       DashboardKpiData(
         title: 'Active Bazaars$scopeSuffix',
@@ -410,8 +290,6 @@ class DashboardCubit extends Cubit<DashboardState> {
       DashboardKpiData(
         title: 'Total Orders$scopeSuffix',
         value: '$totalOrders',
-        trendText: totalOrdersTrendText,
-        trendIsPositive: totalOrdersTrendIsPositive,
       ),
     ];
   }
@@ -444,6 +322,12 @@ class DashboardCubit extends Cubit<DashboardState> {
         .toList();
   }
 
+  /// Revenue for Mon-Fri of the current week, in that order (5 values).
+  ///
+  /// Anchored to the actual Monday rather than "the last N days" so the
+  /// chart's Mon-Fri labels always line up with the data underneath them —
+  /// a rolling window would silently mislabel days whenever the chart was
+  /// opened on anything but a Monday.
   List<double> _buildDailySalesForFilter({required String selectedFilter}) {
     final filteredSales = _filterSalesByBazaar(
       sales: _visibleSales,
@@ -453,10 +337,13 @@ class DashboardCubit extends Cubit<DashboardState> {
 
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
+    final monday = today.subtract(
+      Duration(days: today.weekday - DateTime.monday),
+    );
     final daily = <double>[];
 
-    for (var offset = 6; offset >= 0; offset--) {
-      final day = today.subtract(Duration(days: offset));
+    for (var offset = 0; offset < 5; offset++) {
+      final day = monday.add(Duration(days: offset));
       final total = filteredSales
           .where(
             (sale) =>
@@ -480,7 +367,10 @@ class DashboardCubit extends Cubit<DashboardState> {
             .map(
               (sale) => CustomerHistoryData(
                 timestamp: sale.timestamp,
-                customerName: sale.customerName,
+                // Normalised on display too, not only when the POS records it,
+                // so sales already stored with a blank name stop showing up as
+                // an empty cell in the history.
+                customerName: normalizeCustomerName(sale.customerName),
                 bazaarName: eventNameById[sale.eventId] ?? 'Unknown Bazaar',
                 paymentMethod: sale.paymentMethod,
                 amount: sale.total,
@@ -524,28 +414,6 @@ class _DashboardMetrics {
   final int activeBazaars;
 }
 
-class _DashboardTrendData {
-  const _DashboardTrendData({
-    required this.totalRevenueTrendText,
-    required this.totalRevenueTrendIsPositive,
-    required this.todayRevenueTrendText,
-    required this.todayRevenueTrendIsPositive,
-    required this.totalOrdersTrendText,
-    required this.totalOrdersTrendIsPositive,
-    required this.averageDailySalesTrendText,
-    required this.averageDailySalesTrendIsPositive,
-  });
-
-  final String totalRevenueTrendText;
-  final bool totalRevenueTrendIsPositive;
-  final String todayRevenueTrendText;
-  final bool todayRevenueTrendIsPositive;
-  final String totalOrdersTrendText;
-  final bool totalOrdersTrendIsPositive;
-  final String averageDailySalesTrendText;
-  final bool averageDailySalesTrendIsPositive;
-}
-
 _DashboardMetrics _metricsForFilter({
   required String selectedFilter,
   required List<BazaarEvent> events,
@@ -572,16 +440,17 @@ _DashboardMetrics _metricsForFilter({
       )
       .fold<double>(0, (sum, sale) => sum + sale.total);
 
-  final filteredEvents = selectedFilter == 'All bazaars'
-      || selectedFilter == _employeeScopeFilter
-      ? events
-      : events.where((event) => event.name == selectedFilter).toList();
-
   return _DashboardMetrics(
     totalRevenue: totalRevenue,
     todayRevenue: todayRevenue,
     totalOrders: filteredSales.length,
-    activeBazaars: filteredEvents
+    // Counted across every visible event, deliberately ignoring the bazaar
+    // filter. The other three KPIs answer "how did sales go", which the filter
+    // should scope; this one answers "how many bazaars are running", which it
+    // should not. Scoping it meant selecting a bazaar dropped the count to 1
+    // while the Active Bazaars Summary directly beneath — which never filters
+    // — still listed two ongoing, so the card contradicted its own detail.
+    activeBazaars: events
         .where((event) => event.status == BazaarStatus.ongoing)
         .length,
   );
@@ -600,114 +469,4 @@ List<Sale> _filterSalesByBazaar({
   return sales
       .where((sale) => eventNameById[sale.eventId] == selectedFilter)
       .toList();
-}
-
-_DashboardTrendData _buildTrendData({
-  required String selectedFilter,
-  required List<Sale> sales,
-  required Map<int, String> eventNameById,
-}) {
-  final filteredSales = _filterSalesByBazaar(
-    sales: sales,
-    selectedFilter: selectedFilter,
-    eventNameById: eventNameById,
-  );
-  final now = DateTime.now();
-  final today = DateTime(now.year, now.month, now.day);
-  final yesterday = today.subtract(const Duration(days: 1));
-  final monthStart = today.subtract(const Duration(days: 29));
-  final previousMonthStart = monthStart.subtract(const Duration(days: 30));
-
-  bool sameDay(DateTime a, DateTime b) {
-    return a.year == b.year && a.month == b.month && a.day == b.day;
-  }
-
-  final totalRevenueCurrent = filteredSales
-      .where((sale) => !sale.timestamp.isBefore(monthStart))
-      .fold<double>(0, (sum, sale) => sum + sale.total);
-  final totalRevenuePrevious = filteredSales
-      .where(
-        (sale) =>
-            !sale.timestamp.isBefore(previousMonthStart) &&
-            sale.timestamp.isBefore(monthStart),
-      )
-      .fold<double>(0, (sum, sale) => sum + sale.total);
-
-  final todayRevenue = filteredSales
-      .where((sale) => sameDay(sale.timestamp, today))
-      .fold<double>(0, (sum, sale) => sum + sale.total);
-  final yesterdayRevenue = filteredSales
-      .where((sale) => sameDay(sale.timestamp, yesterday))
-      .fold<double>(0, (sum, sale) => sum + sale.total);
-
-  final totalOrdersCurrent = filteredSales
-      .where((sale) => !sale.timestamp.isBefore(monthStart))
-      .length;
-  final totalOrdersPrevious = filteredSales
-      .where(
-        (sale) =>
-            !sale.timestamp.isBefore(previousMonthStart) &&
-            sale.timestamp.isBefore(monthStart),
-      )
-      .length;
-
-  final weekStart = today.subtract(const Duration(days: 6));
-  final previousWeekStart = weekStart.subtract(const Duration(days: 7));
-
-  final weekRevenue = filteredSales
-      .where((sale) => !sale.timestamp.isBefore(weekStart))
-      .fold<double>(0, (sum, sale) => sum + sale.total);
-  final previousWeekRevenue = filteredSales
-      .where(
-        (sale) =>
-            !sale.timestamp.isBefore(previousWeekStart) &&
-            sale.timestamp.isBefore(weekStart),
-      )
-      .fold<double>(0, (sum, sale) => sum + sale.total);
-
-  final currentWeekAvg = weekRevenue / 7;
-  final previousWeekAvg = previousWeekRevenue / 7;
-
-  final totalRevenueDelta = _percentChange(
-    current: totalRevenueCurrent,
-    previous: totalRevenuePrevious,
-  );
-  final todayRevenueDelta = _percentChange(
-    current: todayRevenue,
-    previous: yesterdayRevenue,
-  );
-  final totalOrdersDelta = _percentChange(
-    current: totalOrdersCurrent.toDouble(),
-    previous: totalOrdersPrevious.toDouble(),
-  );
-  final averageDailyDelta = _percentChange(
-    current: currentWeekAvg,
-    previous: previousWeekAvg,
-  );
-
-  return _DashboardTrendData(
-    totalRevenueTrendText: _formatTrend(totalRevenueDelta),
-    totalRevenueTrendIsPositive: totalRevenueDelta >= 0,
-    todayRevenueTrendText: _formatTrend(todayRevenueDelta),
-    todayRevenueTrendIsPositive: todayRevenueDelta >= 0,
-    totalOrdersTrendText: _formatTrend(totalOrdersDelta),
-    totalOrdersTrendIsPositive: totalOrdersDelta >= 0,
-    averageDailySalesTrendText: _formatTrend(averageDailyDelta),
-    averageDailySalesTrendIsPositive: averageDailyDelta >= 0,
-  );
-}
-
-double _percentChange({required double current, required double previous}) {
-  if (previous == 0) {
-    if (current == 0) {
-      return 0;
-    }
-    return 100;
-  }
-  return ((current - previous) / previous) * 100;
-}
-
-String _formatTrend(double value) {
-  final prefix = value >= 0 ? '+' : '';
-  return '$prefix${value.toStringAsFixed(1)}%';
 }

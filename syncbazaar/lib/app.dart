@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -6,6 +7,7 @@ import 'bloc/auth/auth_cubit.dart';
 import 'bloc/auth/auth_state.dart';
 import 'bloc/dashboard/dashboard_cubit.dart';
 import 'bloc/inventory/inventory_cubit.dart';
+import 'bloc/notifications/notifications_cubit.dart';
 import 'bloc/orders/orders_cubit.dart';
 import 'bloc/pos/pos_cubit.dart';
 import 'bloc/pre_bazaar/pre_bazaar_cubit.dart';
@@ -23,15 +25,17 @@ import 'data/repositories/orders_repository.dart';
 import 'data/repositories/product_repository.dart';
 import 'data/repositories/sales_repository.dart';
 import 'data/repositories/settings_repository.dart';
+import 'dev/dev_mock_data_seeder.dart';
+import 'models/approval_request.dart';
 import 'models/user.dart';
 import 'services/notification_service.dart';
-import 'services/dashboard_insights_service.dart';
 import 'services/sync_service.dart';
 import 'ui/screens/approvals/approvals_screen.dart';
 import 'ui/screens/dashboard/dashboard_screen.dart';
 import 'ui/screens/inventory/inventory_screen.dart';
 import 'ui/screens/login/login_screen.dart';
-import 'ui/screens/location/location_screen.dart';
+import 'ui/screens/notifications/notifications_screen.dart';
+import 'ui/screens/venues/venues_screen.dart';
 import 'ui/screens/orders/orders_screen.dart';
 import 'ui/screens/pos/pos_screen.dart';
 import 'ui/screens/post_bazaar/post_bazaar_screen.dart';
@@ -39,10 +43,20 @@ import 'ui/screens/pre_bazaar/pre_bazaar_screen.dart';
 import 'ui/screens/settings/settings_screen.dart';
 import 'ui/screens/staff/staff_screen.dart';
 import 'ui/widgets/navigation_rail.dart';
-import 'ui/widgets/top_bar.dart';
 
 class SyncBazaarApp extends StatefulWidget {
-  const SyncBazaarApp({super.key});
+  const SyncBazaarApp({super.key, this.seedMockData = kDebugMode});
+
+  /// Whether to load `assets/dev/mock_data.json` on boot.
+  ///
+  /// Defaults to on in debug builds and off in release, which is what the app
+  /// itself always wants. It exists as a parameter for widget tests: the
+  /// seeder reads the asset through `rootBundle`, and that is real I/O which
+  /// never completes inside `testWidgets`' fake-async zone — so a test that
+  /// boots the app with seeding on hangs in `pumpAndSettle` until it times
+  /// out. Passing `false` lets a test exercise the real widget tree without
+  /// waiting on a load that, by construction, cannot finish.
+  final bool seedMockData;
 
   @override
   State<SyncBazaarApp> createState() => _SyncBazaarAppState();
@@ -58,10 +72,12 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
   late final SettingsRepository _settingsRepository;
   late final NotificationService _notificationService;
   late final SyncService _syncService;
+  late bool _seeding;
 
   @override
   void initState() {
     super.initState();
+    _seeding = widget.seedMockData;
     _authRepository = AuthRepository();
     _eventRepository = EventRepository();
     _productRepository = ProductRepository();
@@ -77,29 +93,51 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
       approvalsRepository: _approvalsRepository,
       notificationService: _notificationService,
     );
+    if (widget.seedMockData) {
+      _seedMockData();
+    }
+  }
+
+  Future<void> _seedMockData() async {
+    await DevMockDataSeeder(
+      eventRepository: _eventRepository,
+      productRepository: _productRepository,
+      salesRepository: _salesRepository,
+      ordersRepository: _ordersRepository,
+      settingsRepository: _settingsRepository,
+      authRepository: _authRepository,
+    ).seed();
+    if (mounted) {
+      setState(() => _seeding = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_seeding) {
+      return const MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: Scaffold(body: Center(child: CircularProgressIndicator())),
+      );
+    }
     return MultiRepositoryProvider(
       providers: [
         RepositoryProvider<EventRepository>.value(value: _eventRepository),
         RepositoryProvider<ProductRepository>.value(value: _productRepository),
         RepositoryProvider<SalesRepository>.value(value: _salesRepository),
         RepositoryProvider<OrdersRepository>.value(value: _ordersRepository),
-        RepositoryProvider<SettingsRepository>.value(value: _settingsRepository),
+        RepositoryProvider<SettingsRepository>.value(
+          value: _settingsRepository,
+        ),
       ],
       child: MultiBlocProvider(
         providers: [
-          BlocProvider(
-            create: (_) => AuthCubit(_authRepository),
-          ),
+          BlocProvider(create: (_) => AuthCubit(_authRepository)),
           BlocProvider(
             create: (_) => DashboardCubit(
               _eventRepository,
               _salesRepository,
               productRepository: _productRepository,
-              insightsService: const LocalDashboardInsightsService(),
             ),
           ),
           BlocProvider(
@@ -112,10 +150,8 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
             ),
           ),
           BlocProvider(
-            create: (_) => OrdersCubit(
-              _ordersRepository,
-              _salesRepository,
-            )..load(),
+            create: (_) =>
+                OrdersCubit(_ordersRepository, _salesRepository)..load(),
           ),
           BlocProvider(
             create: (_) => ApprovalsCubit(
@@ -126,7 +162,8 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
             )..loadPending(),
           ),
           BlocProvider(
-            create: (_) => InventoryCubit(_productRepository)..load(),
+            create: (_) =>
+                InventoryCubit(_productRepository, _salesRepository)..load(),
           ),
           BlocProvider(create: (_) => StaffCubit(_authRepository)..load()),
           BlocProvider(
@@ -134,6 +171,9 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
           ),
           BlocProvider(create: (_) => PreBazaarCubit(_approvalsRepository)),
           BlocProvider(create: (_) => SyncCubit(_syncService)),
+          BlocProvider(
+            create: (_) => NotificationsCubit(_notificationService)..load(),
+          ),
         ],
         child: MaterialApp(
           title: 'SyncBazaar',
@@ -177,15 +217,15 @@ class MainShell extends StatefulWidget {
 }
 
 class _MainShellState extends State<MainShell> {
-  int _selectedIndex = 0;
+  AppSection _section = AppSection.dashboard;
   bool _isNavCollapsed = false;
 
-  late List<AppNavItem> _navItems;
+  late List<AppNavGroup> _navGroups;
 
   @override
   void initState() {
     super.initState();
-    _navItems = _buildNavItems(widget.user);
+    _navGroups = _buildNavGroups(widget.user);
     _loadForUser();
   }
 
@@ -193,8 +233,8 @@ class _MainShellState extends State<MainShell> {
   void didUpdateWidget(covariant MainShell oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.user.id != widget.user.id) {
-      _navItems = _buildNavItems(widget.user);
-      _selectedIndex = 0;
+      _navGroups = _buildNavGroups(widget.user);
+      _section = AppSection.dashboard;
       _loadForUser();
     }
   }
@@ -202,127 +242,175 @@ class _MainShellState extends State<MainShell> {
   void _loadForUser() {
     context.read<DashboardCubit>().load(widget.user);
     context.read<PosCubit>().load(widget.user);
+    context.read<NotificationsCubit>().load();
   }
 
-  void _handleSectionSelect(int index) {
-    setState(() => _selectedIndex = index);
-    final section = _navItems[index].section;
-    if (section == AppSection.dashboard) {
-      context.read<DashboardCubit>().load(widget.user);
-    }
-    if (section == AppSection.pos) {
-      context.read<PosCubit>().load(widget.user);
-    }
-    if (section == AppSection.orders) {
-      context.read<OrdersCubit>().load();
-    }
-    if (section == AppSection.approvals) {
-      context.read<ApprovalsCubit>().loadPending();
+  void _handleSectionSelect(AppSection section) {
+    setState(() => _section = section);
+    switch (section) {
+      case AppSection.dashboard:
+        context.read<DashboardCubit>().load(widget.user);
+      case AppSection.pos:
+        context.read<PosCubit>().load(widget.user);
+      case AppSection.orders:
+        context.read<OrdersCubit>().load();
+      case AppSection.approvals:
+        context.read<ApprovalsCubit>().loadPending();
+      case AppSection.notifications:
+        context.read<NotificationsCubit>().load();
+      default:
+        break;
     }
   }
 
-  List<AppNavItem> _buildNavItems(AppUser user) {
+  /// Destinations grouped by when in the job they are needed, rather than as
+  /// one flat list. See [SideNavigationRail] for why.
+  ///
+  /// Role gating happens per item, so a group can come back with one entry or
+  /// none; the rail drops the heading in the first case and the whole block in
+  /// the second.
+  List<AppNavGroup> _buildNavGroups(AppUser user) {
     final canApprove = user.isAdminOrOwner;
-    return [
-      const AppNavItem(
-        section: AppSection.dashboard,
-        label: 'Dashboard',
-        icon: Icons.home_outlined,
+    final isOwner = user.role == UserRole.owner;
+
+    final groups = <AppNavGroup>[
+      const AppNavGroup(
+        items: [
+          AppNavItem(
+            section: AppSection.dashboard,
+            label: 'Dashboard',
+            icon: Icons.home_outlined,
+          ),
+          AppNavItem(
+            section: AppSection.notifications,
+            label: 'Notifications',
+            icon: Icons.notifications_outlined,
+          ),
+        ],
       ),
-      if (user.role == UserRole.owner)
-        const AppNavItem(
-          section: AppSection.inventory,
-          label: 'Master Inventory',
-          icon: Icons.inventory_2_outlined,
-        ),
-      const AppNavItem(
-        section: AppSection.preBazaar,
-        label: 'Preparations',
-        icon: Icons.event_note_outlined,
+      // Ordered the way a bazaar actually runs — set up, sell, close out. The
+      // sequence is itself information: it tells a new employee what comes
+      // next without anyone documenting it.
+      const AppNavGroup(
+        label: 'Bazaar',
+        items: [
+          AppNavItem(
+            section: AppSection.preBazaar,
+            label: 'Preparations',
+            icon: Icons.event_note_outlined,
+          ),
+          AppNavItem(
+            section: AppSection.pos,
+            label: 'Sales',
+            icon: Icons.point_of_sale_outlined,
+          ),
+          AppNavItem(
+            section: AppSection.postBazaar,
+            label: 'Documentation',
+            icon: Icons.summarize_outlined,
+          ),
+        ],
       ),
-      const AppNavItem(
-        section: AppSection.pos,
-        label: 'Sales',
-        icon: Icons.point_of_sale_outlined,
+      AppNavGroup(
+        label: 'Records',
+        items: [
+          if (isOwner)
+            const AppNavItem(
+              section: AppSection.inventory,
+              label: 'Master Inventory',
+              icon: Icons.inventory_2_outlined,
+            ),
+          const AppNavItem(
+            section: AppSection.orders,
+            label: 'Orders',
+            icon: Icons.receipt_long_outlined,
+          ),
+          if (canApprove)
+            const AppNavItem(
+              section: AppSection.approvals,
+              label: 'Pending Approvals',
+              icon: Icons.pending_actions_outlined,
+            ),
+        ],
       ),
-      const AppNavItem(
-        section: AppSection.postBazaar,
-        label: 'Documentation',
-        icon: Icons.summarize_outlined,
-      ),
-      const AppNavItem(
-        section: AppSection.orders,
-        label: 'Orders',
-        icon: Icons.receipt_long_outlined,
-      ),
-      if (canApprove)
-        const AppNavItem(
-          section: AppSection.approvals,
-          label: 'Pending Approvals',
-          icon: Icons.pending_actions_outlined,
-        ),
-      if (canApprove)
-        const AppNavItem(
-          section: AppSection.staff,
-          label: 'Staff List',
-          icon: Icons.groups_2_outlined,
-        ),
-      if (canApprove)
-        const AppNavItem(
-          section: AppSection.location,
-          label: 'Location',
-          icon: Icons.place_outlined,
-        ),
-      const AppNavItem(
-        section: AppSection.settings,
-        label: 'Settings',
-        icon: Icons.settings_outlined,
+      AppNavGroup(
+        label: 'Manage',
+        items: [
+          if (canApprove) ...[
+            const AppNavItem(
+              section: AppSection.staff,
+              label: 'Staff List',
+              icon: Icons.groups_2_outlined,
+            ),
+            const AppNavItem(
+              section: AppSection.venues,
+              label: 'Venues & Terms',
+              icon: Icons.storefront_outlined,
+            ),
+          ],
+          const AppNavItem(
+            section: AppSection.settings,
+            label: 'Settings',
+            icon: Icons.settings_outlined,
+          ),
+        ],
       ),
     ];
+
+    return groups.where((group) => group.items.isNotEmpty).toList();
   }
 
   @override
   Widget build(BuildContext context) {
-    final section = _navItems[_selectedIndex].section;
+    final section = _section;
 
     return Scaffold(
       resizeToAvoidBottomInset:
           section != AppSection.pos && section != AppSection.staff,
       backgroundColor: AppColors.background,
-      body: Row(
-        children: [
-          SideNavigationRail(
-            items: _navItems,
-            selectedIndex: _selectedIndex,
-            onSelect: _handleSectionSelect,
-            isCollapsed: _isNavCollapsed,
-            onToggle: () => setState(() => _isNavCollapsed = !_isNavCollapsed),
-            onLogout: () => context.read<AuthCubit>().logout(),
-          ),
-          Expanded(
-            child: Column(
-              children: [
-                TopBar(
-                  user: widget.user,
-                  notificationCount: widget.user.isAdminOrOwner ? 2 : 1,
-                  onOpenNotifications: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          widget.user.isAdminOrOwner
-                              ? 'New pending approvals available.'
-                              : 'New assignment/sync notifications.',
+      // A sync writes a notification, so the badge has to re-read the store
+      // when one finishes. Without this the count only catches up the next
+      // time something else happens to reload it.
+      body: BlocListener<SyncCubit, SyncState>(
+        listenWhen: (previous, current) =>
+            previous.isSyncing && !current.isSyncing,
+        listener: (context, _) => context.read<NotificationsCubit>().load(),
+        child: Row(
+          children: [
+            BlocBuilder<SyncCubit, SyncState>(
+              builder: (context, syncState) =>
+                  BlocBuilder<NotificationsCubit, NotificationsState>(
+                    builder: (context, notificationsState) =>
+                        BlocBuilder<ApprovalsCubit, List<ApprovalRequest>>(
+                          builder: (context, pendingApprovals) =>
+                              SideNavigationRail(
+                                groups: _navGroups,
+                                selected: section,
+                                onSelect: _handleSectionSelect,
+                                isCollapsed: _isNavCollapsed,
+                                onToggle: () => setState(
+                                  () => _isNavCollapsed = !_isNavCollapsed,
+                                ),
+                                onLogout: () =>
+                                    context.read<AuthCubit>().logout(),
+                                isSyncing: syncState.isSyncing,
+                                onSync: () =>
+                                    context.read<SyncCubit>().syncNow(),
+                                syncMessage: syncState.lastMessage,
+                                badges: {
+                                  AppSection.notifications:
+                                      notificationsState.unreadCount,
+                                  if (widget.user.isAdminOrOwner)
+                                    AppSection.approvals:
+                                        pendingApprovals.length,
+                                },
+                              ),
                         ),
-                      ),
-                    );
-                  },
-                  onLogout: () => context.read<AuthCubit>().logout(),
-                ),
-                Expanded(child: _buildSection(section)),
-              ],
+                  ),
             ),
-          ),
-        ],
+            Expanded(child: _buildSection(section)),
+          ],
+        ),
       ),
     );
   }
@@ -332,25 +420,12 @@ class _MainShellState extends State<MainShell> {
       case AppSection.dashboard:
         return DashboardScreen(
           user: widget.user,
-          onOpenPos: () {
-            final index = _navItems.indexWhere(
-              (i) => i.section == AppSection.pos,
-            );
-            if (index != -1) setState(() => _selectedIndex = index);
-          },
+          onOpenPos: () => _handleSectionSelect(AppSection.pos),
         );
       case AppSection.preBazaar:
         return PreBazaarScreen(
           user: widget.user,
-          onOpenApprovals: () {
-            final index = _navItems.indexWhere(
-              (i) => i.section == AppSection.approvals,
-            );
-            if (index != -1) {
-              setState(() => _selectedIndex = index);
-              context.read<ApprovalsCubit>().loadPending();
-            }
-          },
+          onOpenApprovals: () => _handleSectionSelect(AppSection.approvals),
         );
       case AppSection.pos:
         return PosScreen(user: widget.user);
@@ -366,8 +441,10 @@ class _MainShellState extends State<MainShell> {
         return StaffScreen(currentUser: widget.user);
       case AppSection.settings:
         return SettingsScreen(user: widget.user);
-      case AppSection.location:
-        return LocationScreen(user: widget.user);
+      case AppSection.venues:
+        return VenuesScreen(user: widget.user);
+      case AppSection.notifications:
+        return const NotificationsScreen();
     }
   }
 }

@@ -1,4 +1,19 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <!-- Receipt PNGs are written to the photo gallery by `gal`. From API 30 the
+         MediaStore handles this with no permission at all, so this is scoped to
+         the older half of our minSdk 24 range rather than requested outright.
+
+         `tools:replace` is required, not decorative: file_saver's own manifest
+         declares this same permission capped at 28, and the merger treats two
+         different caps as an unresolvable conflict and fails the build. 29 is
+         the value gal documents, so ours wins deliberately rather than the
+         build breaking on a dependency's stricter cap. -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="29"
+        tools:replace="android:maxSdkVersion" />
     <application
         android:label="syncbazaar"
         android:name="${applicationName}"

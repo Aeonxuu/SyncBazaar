@@ -13,7 +13,7 @@ class TrendPill extends StatelessWidget {
     final fg = isPositive ? const Color(0xFF2E7D32) : AppColors.error;
     final bg = isPositive
         ? const Color(0x1A2E7D32)
-        : AppColors.error.withOpacity(0.12);
+        : AppColors.error.withValues(alpha: 0.12);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),

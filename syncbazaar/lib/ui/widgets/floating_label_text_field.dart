@@ -36,7 +36,7 @@ class _FloatingLabelTextFieldState extends State<FloatingLabelTextField> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final radius = BorderRadius.circular(8);
-    final fillColor = colorScheme.primary.withOpacity(0.08);
+    final fillColor = colorScheme.primary.withValues(alpha: 0.08);
 
     return SizedBox(
       height: 56,
@@ -78,7 +78,7 @@ class _FloatingLabelTextFieldState extends State<FloatingLabelTextField> {
             vertical: 18,
           ),
           labelStyle: theme.textTheme.bodyLarge?.copyWith(
-            color: colorScheme.primary.withOpacity(0.85),
+            color: colorScheme.primary.withValues(alpha: 0.85),
             fontSize: 15,
             fontWeight: FontWeight.w500,
           ),

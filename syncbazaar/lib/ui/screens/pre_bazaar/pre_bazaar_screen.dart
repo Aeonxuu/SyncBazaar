@@ -3,6 +3,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/constants/colors.dart';
+import '../../../core/constants/motion.dart';
+
 import '../../../bloc/approvals/approvals_cubit.dart';
 import '../../../bloc/dashboard/dashboard_cubit.dart';
 import '../../../bloc/inventory/inventory_cubit.dart';
@@ -17,8 +20,9 @@ import '../../../models/bazaar_event.dart';
 import '../../../models/company.dart';
 import '../../../models/user.dart';
 import '../../widgets/confirmation_dialog.dart';
-import 'widgets/create_bazaar_card.dart';
-import 'widgets/stock_allocation_card.dart';
+import '../../widgets/date_range_picker_dialog.dart';
+import 'widgets/bazaar_details_step.dart';
+import 'widgets/stock_allocation_step.dart';
 
 class PreBazaarScreen extends StatefulWidget {
   const PreBazaarScreen({
@@ -38,20 +42,25 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
   final _eventName = TextEditingController();
   DateTimeRange? _dateRange;
   int? _selectedCompanyId = 1;
-  bool? _stockAllocationUnlocked;
+
+  /// 0 = details, 1 = stock allocation. Replaces the old
+  /// `_stockAllocationUnlocked` flag: the relationship between the two halves
+  /// was always sequential, and naming it as a step makes that visible to the
+  /// user instead of expressing it as a greyed-out panel beside a live one.
+  int _step = 0;
+  final _allocationSearch = TextEditingController();
   final Map<String, int> _allocations = {};
   final Map<String, int> _masterStockByItem = {};
   final Map<String, int> _availableStockAtDraftStart = {};
   final Map<String, ProductAllocationItem> _allocationMetaByKey = {};
   final Set<int> _assignedEmployeeIds = {};
-  int? _selectedEmployeeId;
   List<Company> _locations = const [];
-  Map<int, List<PaymentMethodMeta>> _locationPaymentMethodsByCompanyId = const {};
+  Map<int, List<PaymentMethodMeta>> _locationPaymentMethodsByCompanyId =
+      const {};
 
   @override
   void initState() {
     super.initState();
-    _stockAllocationUnlocked = false;
     _eventName.addListener(_onEventNameChanged);
     Future.microtask(() async {
       await _syncLocationsFromRepository();
@@ -69,18 +78,8 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
   void dispose() {
     _eventName.removeListener(_onEventNameChanged);
     _eventName.dispose();
+    _allocationSearch.dispose();
     super.dispose();
-  }
-
-  List<DropdownMenuItem<int>> get _locationItems {
-    return _locations
-        .map(
-          (location) => DropdownMenuItem<int>(
-            value: location.id,
-            child: Text(location.name),
-          ),
-        )
-        .toList();
   }
 
   List<PaymentMethodMeta> get _selectedLocationPaymentMethods {
@@ -101,31 +100,16 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
   Future<void> _pickDateRange() async {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final tomorrow = today.add(const Duration(days: 1));
-    final range = await showDateRangePicker(
+    // A bazaar can't start today or earlier, so the calendar simply doesn't
+    // offer those days — no need to accept a tap and then reject it.
+    final range = await showAppDateRangePicker(
       context: context,
-      firstDate: tomorrow,
-      lastDate: DateTime(2030),
-      initialDateRange: _dateRange,
-      selectableDayPredicate: (day, _, __) => day.isAfter(today),
+      firstDate: today.add(const Duration(days: 1)),
+      lastDate: DateTime(2030, 12, 31),
+      initialRange: _dateRange,
+      title: 'Event dates',
     );
-    if (range != null) {
-      final startDate = DateTime(
-        range.start.year,
-        range.start.month,
-        range.start.day,
-      );
-      final endDate = DateTime(range.end.year, range.end.month, range.end.day);
-
-      if (!startDate.isAfter(today) || !endDate.isAfter(today)) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Please select dates after today.')),
-          );
-        }
-        return;
-      }
-
+    if (range != null && mounted) {
       setState(() => _dateRange = range);
     }
   }
@@ -134,12 +118,12 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
     setState(() {
       _eventName.clear();
       _dateRange = null;
-      _selectedCompanyId = _locationItems.isEmpty ? null : _locationItems.first.value;
-      _stockAllocationUnlocked = false;
+      _selectedCompanyId = _locations.isEmpty ? null : _locations.first.id;
+      _step = 0;
+      _allocationSearch.clear();
       _allocations.updateAll((_, __) => 0);
       _masterStockByItem.clear();
       _assignedEmployeeIds.clear();
-      _selectedEmployeeId = null;
     });
     await _syncLocationsFromRepository();
     await _syncStocksFromRepository();
@@ -148,8 +132,8 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
   Future<void> _syncLocationsFromRepository() async {
     final settingsRepository = context.read<SettingsRepository>();
     final locations = await settingsRepository.listCompanies();
-    final methodsByCompanyId =
-        await settingsRepository.paymentMethodsByCompanyId();
+    final methodsByCompanyId = await settingsRepository
+        .paymentMethodsByCompanyId();
 
     if (!mounted) {
       return;
@@ -193,7 +177,9 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
       for (final item in items) {
         _allocations.putIfAbsent(item.allocationKey, () => 0);
       }
-      _allocations.removeWhere((key, _) => !_allocationMetaByKey.containsKey(key));
+      _allocations.removeWhere(
+        (key, _) => !_allocationMetaByKey.containsKey(key),
+      );
 
       _availableStockAtDraftStart
         ..clear()
@@ -204,19 +190,12 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
     });
   }
 
-  void _onNextFromCreate() {
-    if (!_isBazaarInfoComplete) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Complete all Create Bazaar fields before proceeding.'),
-        ),
-      );
-      return;
-    }
-
-    setState(() {
-      _stockAllocationUnlocked = true;
-    });
+  /// Advances to allocation. The button is disabled until the details are
+  /// complete and the step itself lists what's outstanding, so this never has
+  /// to reject a tap with an error.
+  void _goToAllocation() {
+    if (!_isBazaarInfoComplete) return;
+    setState(() => _step = 1);
   }
 
   Future<void> _handleSubmit() async {
@@ -226,7 +205,7 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
-                'Complete event name, location, and event dates before submitting.',
+                'Complete event name, venue, and event dates before submitting.',
               ),
             ),
           );
@@ -242,17 +221,14 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
       );
 
       if (approved == true && mounted) {
-        final categories = await context.read<ProductRepository>().listCategories();
-        final categoryNameById = {
-          for (final category in categories) category.id: category.name,
-        };
         final selectedMethods = _selectedLocationPaymentMethods;
-        final locationName = _locations
+        final locationName =
+            _locations
                 .where((location) => location.id == _selectedCompanyId)
                 .map((location) => location.name)
                 .cast<String?>()
                 .firstWhere((value) => value != null, orElse: () => null) ??
-            'Unknown Location';
+            'Unknown venue';
         final allocationsByAllocationKey = <String, int>{
           for (final entry in _allocations.entries)
             if (entry.value > 0) entry.key: entry.value,
@@ -265,7 +241,9 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
         if (selectedAllocations.isEmpty) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Add at least one allocated quantity before submitting.'),
+              content: Text(
+                'Add at least one allocated quantity before submitting.',
+              ),
             ),
           );
           return;
@@ -274,13 +252,18 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
         final allocationItems = selectedAllocations.map((entry) {
           final meta = _allocationMetaByKey[entry.key];
           final product = meta?.product;
+          final variantValues = [
+            meta?.optionA?.value,
+            meta?.optionB?.value,
+          ].whereType<String>().toList();
           return {
             'name': product?.name ?? entry.key,
-            'category': product == null
-                ? '—'
-                : (categoryNameById[product.categoryId] ?? 'Uncategorized'),
-            'variant': meta?.option?.value ?? '—',
-            'price': product == null ? '—' : product.basePrice.toStringAsFixed(2),
+            'variant': variantValues.isEmpty ? '—' : variantValues.join(', '),
+            // The raw number, not a formatted string: this goes into the
+            // request's detailsJson, and the approvals table formats it when
+            // it renders. Baking the display format in at encode time is how
+            // the price ended up as the one unseparated amount in the app.
+            'price': product?.basePrice,
             'qty': entry.value,
           };
         }).toList();
@@ -291,7 +274,9 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
           'companyId': _selectedCompanyId,
           'dateStart': _dateRange?.start.toIso8601String(),
           'dateEnd': _dateRange?.end.toIso8601String(),
-          'acceptedPaymentMethods': selectedMethods.map((method) => method.name).toList(),
+          'acceptedPaymentMethods': selectedMethods
+              .map((method) => method.name)
+              .toList(),
           'customOtherMethods': selectedMethods
               .map(
                 (method) => {
@@ -304,14 +289,18 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
           'items': allocationItems,
         });
 
-        await context.read<PreBazaarCubit>().submitAllocation(
+        // Both cubits are resolved before the submit, because the form is
+        // reset and the app navigates to Approvals in between.
+        final preBazaarCubit = context.read<PreBazaarCubit>();
+        final approvalsCubit = context.read<ApprovalsCubit>();
+        await preBazaarCubit.submitAllocation(
           user: widget.user,
           eventId: DateTime.now().millisecondsSinceEpoch,
           detailsJson: details,
         );
 
         await _resetPreBazaarForm();
-        await context.read<ApprovalsCubit>().loadPending();
+        await approvalsCubit.loadPending();
         widget.onOpenApprovals();
       }
       return;
@@ -322,7 +311,7 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'Complete event name, location, and event dates before finishing.',
+              'Complete event name, venue, and event dates before finishing.',
             ),
           ),
         );
@@ -341,6 +330,16 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
     if (confirmed == true && mounted) {
       final eventRepository = context.read<EventRepository>();
       final productRepository = context.read<ProductRepository>();
+
+      // Publishing reloads four cubits and then resets the form; resolving
+      // any of them through `context` afterwards risks a context that has
+      // already moved on, which would drop the success message.
+      final messenger = ScaffoldMessenger.of(context);
+      final staffCubit = context.read<StaffCubit>();
+      final dashboardCubit = context.read<DashboardCubit>();
+      final posCubit = context.read<PosCubit>();
+      final inventoryCubit = context.read<InventoryCubit>();
+      final ordersCubit = context.read<OrdersCubit>();
       await _syncLocationsFromRepository();
 
       final selectedMethods = _selectedLocationPaymentMethods;
@@ -349,7 +348,7 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
-                'Selected location has no payment methods. Configure it in Location section.',
+                'This venue has no payment methods yet. Add them under Venues & Terms.',
               ),
             ),
           );
@@ -383,10 +382,12 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
 
       final createdEvent = await eventRepository.createEvent(
         name: _eventName.text.trim(),
-        companyId: _selectedCompanyId ?? _locationItems.first.value ?? 1,
+        companyId: _selectedCompanyId ?? _locations.first.id,
         startDate: _dateRange!.start,
         endDate: _dateRange!.end,
-        acceptedPaymentMethods: selectedMethods.map((method) => method.name).toList(),
+        acceptedPaymentMethods: selectedMethods
+            .map((method) => method.name)
+            .toList(),
         customOtherMethods: selectedMethods
             .map(
               (method) => BazaarPaymentMethod(
@@ -399,22 +400,18 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
       );
 
       if (_assignedEmployeeIds.isNotEmpty) {
-        await context.read<StaffCubit>().assignEmployeesToBazaar(
+        await staffCubit.assignEmployeesToBazaar(
           eventId: createdEvent.id,
           employeeIds: _assignedEmployeeIds.toList(),
         );
       }
 
-      if (!mounted) {
-        return;
-      }
+      await dashboardCubit.load(widget.user);
+      await posCubit.load(widget.user);
+      await inventoryCubit.load();
+      await ordersCubit.load();
 
-      await context.read<DashboardCubit>().load(widget.user);
-      await context.read<PosCubit>().load(widget.user);
-      await context.read<InventoryCubit>().load();
-      await context.read<OrdersCubit>().load();
-
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         const SnackBar(content: Text('Bazaar published successfully.')),
       );
       await _resetPreBazaarForm();
@@ -424,145 +421,295 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
   @override
   Widget build(BuildContext context) {
     final isAdminOrOwner = widget.user.isAdminOrOwner;
-    final users = context.select((StaffCubit cubit) => cubit.state);
-    final employees = users.where((user) => user.role == UserRole.employee).toList();
+    final employees = context
+        .select((StaffCubit cubit) => cubit.state)
+        .where((user) => user.role == UserRole.employee)
+        .toList();
     final employeeNameById = {
       for (final employee in employees) employee.id: employee.name,
     };
     final assignedEmployees = _assignedEmployeeIds
         .map((id) => MapEntry(id, employeeNameById[id] ?? 'Employee #$id'))
         .toList();
-    final employeeItems = employees
-        .map(
-          (employee) => DropdownMenuItem<int>(
-            value: employee.id,
-            child: Text(employee.name),
-          ),
-        )
-        .toList();
 
-    final canGoNext = _isBazaarInfoComplete;
-    final isStockAllocationUnlocked = _stockAllocationUnlocked ?? false;
-    final canUseStockAllocation = isStockAllocationUnlocked;
-    final canFinish = canUseStockAllocation && _isBazaarInfoComplete;
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final showSideBySide = constraints.maxWidth >= 760;
-
-          final createCard = CreateBazaarCard(
-            eventNameController: _eventName,
-            selectedCompanyId: _selectedCompanyId,
-            companyItems: _locationItems,
-            dateRange: _dateRange,
-            configuredPaymentMethods: _selectedLocationPaymentMethods,
-            employeeItems: employeeItems,
-            selectedEmployeeId: _selectedEmployeeId,
-            assignedEmployees: assignedEmployees,
-            onEmployeeChanged: (value) {
-              if (value == null) {
-                return;
-              }
-              setState(() {
-                _selectedEmployeeId = value;
-                _assignedEmployeeIds.add(value);
-              });
-            },
-            onRemoveAssignedEmployee: (employeeId) {
-              setState(() {
-                _assignedEmployeeIds.remove(employeeId);
-              });
-            },
-            showEmployeeAssignment: isAdminOrOwner,
-            onCompanyChanged: (value) {
-              setState(() => _selectedCompanyId = value);
-            },
-            onPickDates: _pickDateRange,
-            onCancel: () {
-              _resetPreBazaarForm();
-            },
-            onNext: _onNextFromCreate,
-            isNextEnabled: canGoNext,
-          );
-
-          final grouped = <int, StockAllocationGroup>{};
-          for (final entry in _allocationMetaByKey.entries) {
-            final itemKey = entry.key;
-            final meta = entry.value;
-            final existing = grouped[meta.product.id];
-            final label = (meta.group == null || meta.option == null)
-                ? meta.product.name
-                : '${meta.group!.name} ${meta.option!.value}';
-            final row = StockAllocationRow(
-              key: itemKey,
-              label: label,
-              allocated: _allocations[itemKey] ?? 0,
-              remaining: _masterStockByItem[itemKey] ?? 0,
-            );
-
-            if (existing == null) {
-              grouped[meta.product.id] = StockAllocationGroup(
-                productName: meta.product.name,
-                rows: [row],
-              );
-            } else {
-              grouped[meta.product.id] = StockAllocationGroup(
-                productName: existing.productName,
-                rows: [...existing.rows, row],
-              );
-            }
-          }
-
-          final allocationCard = StockAllocationCard(
-            groups: grouped.values.toList(),
-            isAdminOrOwner: isAdminOrOwner,
-            isAllocationEnabled: canUseStockAllocation,
-            onAllocationChanged: _handleAllocationChanged,
-            onCancel: () {
-              _resetPreBazaarForm();
-            },
-            onSubmit: _handleSubmit,
-            isSubmitEnabled: canFinish,
-          );
-
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Pre-Bazaar',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 6),
-              Text(
-                isAdminOrOwner
-                    ? 'Prepare your event and allocate stock before launch.'
-                    : 'Allocate stock and submit for approval before launch.',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyMedium?.copyWith(color: Colors.black54),
-              ),
-              const SizedBox(height: 14),
-              if (showSideBySide)
-                IntrinsicHeight(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(child: createCard),
-                      const SizedBox(width: 14),
-                      Expanded(child: allocationCard),
-                    ],
+    return ColoredBox(
+      color: AppColors.background,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Pre-Bazaar',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
                   ),
-                )
-              else ...[
-                createCard,
-                const SizedBox(height: 14),
-                allocationCard,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  isAdminOrOwner
+                      ? 'Set up the event, then allocate the stock it will sell.'
+                      : 'Set up the event and allocate stock, then submit for approval.',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(color: Colors.black54),
+                ),
+                const SizedBox(height: 20),
+                _buildStepper(context),
               ],
-            ],
-          );
-        },
+            ),
+          ),
+          // Same full-bleed rule as Master Inventory: the controls sit on the
+          // page background, the work surface starts below the line.
+          const Divider(height: 1, color: Color(0xFFE2E2E8)),
+          Expanded(
+            child: ColoredBox(
+              color: AppColors.surface,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+                child: _step == 0
+                    ? SingleChildScrollView(
+                        child: BazaarDetailsStep(
+                          eventNameController: _eventName,
+                          locations: _locations,
+                          selectedCompanyId: _selectedCompanyId,
+                          onCompanyChanged: (id) =>
+                              setState(() => _selectedCompanyId = id),
+                          dateRange: _dateRange,
+                          onPickDates: _pickDateRange,
+                          configuredPaymentMethods:
+                              _selectedLocationPaymentMethods,
+                          employees: employees,
+                          assignedEmployees: assignedEmployees,
+                          onAssignEmployee: (id) =>
+                              setState(() => _assignedEmployeeIds.add(id)),
+                          onRemoveAssignedEmployee: (id) => setState(() {
+                            _assignedEmployeeIds.remove(id);
+                          }),
+                          showEmployeeAssignment: isAdminOrOwner,
+                        ),
+                      )
+                    : StockAllocationStep(
+                        groups: _visibleAllocationGroups(),
+                        onAllocationChanged: _handleAllocationChanged,
+                        searchController: _allocationSearch,
+                        onSearchChanged: (_) => setState(() {}),
+                      ),
+              ),
+            ),
+          ),
+          _buildFooter(context, isAdminOrOwner),
+        ],
+      ),
+    );
+  }
+
+  /// Two numbered markers, matching the product form's stepper so the app has
+  /// one visual language for "you are partway through something".
+  Widget _buildStepper(BuildContext context) {
+    const labels = ['Bazaar details', 'Stock allocation'];
+    return Row(
+      children: [
+        for (var i = 0; i < labels.length; i++) ...[
+          if (i > 0)
+            Expanded(
+              child: Container(
+                height: 1,
+                margin: const EdgeInsets.symmetric(horizontal: 12),
+                color: i <= _step ? AppColors.primary : AppColors.border,
+              ),
+            ),
+          _StepMarker(
+            number: i + 1,
+            label: labels[i],
+            isDone: i < _step,
+            isCurrent: i == _step,
+            // Going back is always allowed; going forward is what the
+            // completeness check gates.
+            onTap: i < _step ? () => setState(() => _step = i) : null,
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildFooter(BuildContext context, bool isAdminOrOwner) {
+    final onDetails = _step == 0;
+    final canContinue = _isBazaarInfoComplete;
+    final canSubmit = canContinue && _totalAllocated > 0;
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        border: Border(top: BorderSide(color: AppColors.border)),
+      ),
+      padding: const EdgeInsets.fromLTRB(24, 14, 24, 16),
+      child: Row(
+        children: [
+          if (!onDetails)
+            TextButton.icon(
+              onPressed: () => setState(() => _step = 0),
+              icon: const Icon(Icons.arrow_back_rounded, size: 16),
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.black54,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
+              ),
+              label: const Text('Back'),
+            ),
+          const Spacer(),
+          TextButton(
+            onPressed: _resetPreBazaarForm,
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.black54,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            ),
+            child: const Text('Reset'),
+          ),
+          const SizedBox(width: 12),
+          ElevatedButton(
+            onPressed: onDetails
+                ? (canContinue ? _goToAllocation : null)
+                : (canSubmit ? _handleSubmit : null),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              disabledBackgroundColor: AppColors.primary.withValues(
+                alpha: 0.35,
+              ),
+              disabledForegroundColor: Colors.white70,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: Text(
+              onDetails
+                  ? 'Continue'
+                  : isAdminOrOwner
+                  ? 'Publish bazaar'
+                  : 'Submit for approval',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  int get _totalAllocated =>
+      _allocations.values.fold<int>(0, (sum, value) => sum + value);
+
+  /// Builds the allocation list, grouped by product and filtered by the
+  /// search box. Grouping happens here rather than in the widget so the step
+  /// stays a pure renderer.
+  List<StockAllocationGroup> _visibleAllocationGroups() {
+    final query = _allocationSearch.text.trim().toLowerCase();
+    final grouped = <int, StockAllocationGroup>{};
+
+    for (final entry in _allocationMetaByKey.entries) {
+      final meta = entry.value;
+      final variantParts = <String>[
+        if (meta.groupA != null && meta.optionA != null)
+          '${meta.groupA!.name} ${meta.optionA!.value}',
+        if (meta.groupB != null && meta.optionB != null)
+          '${meta.groupB!.name} ${meta.optionB!.value}',
+      ];
+      final label = variantParts.isEmpty
+          ? meta.product.name
+          : variantParts.join(' · ');
+
+      if (query.isNotEmpty &&
+          !meta.product.name.toLowerCase().contains(query) &&
+          !label.toLowerCase().contains(query)) {
+        continue;
+      }
+
+      final row = StockAllocationRow(
+        key: entry.key,
+        label: label,
+        allocated: _allocations[entry.key] ?? 0,
+        remaining: _masterStockByItem[entry.key] ?? 0,
+      );
+      final existing = grouped[meta.product.id];
+      grouped[meta.product.id] = StockAllocationGroup(
+        productName: meta.product.name,
+        rows: [...?existing?.rows, row],
+      );
+    }
+
+    return grouped.values.toList();
+  }
+}
+
+/// One numbered marker in the pre-bazaar stepper.
+class _StepMarker extends StatelessWidget {
+  const _StepMarker({
+    required this.number,
+    required this.label,
+    required this.isDone,
+    required this.isCurrent,
+    required this.onTap,
+  });
+
+  final int number;
+  final String label;
+  final bool isDone;
+  final bool isCurrent;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isActive = isDone || isCurrent;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedContainer(
+              duration: AppMotion.small,
+              curve: AppMotion.easeOut,
+              width: 22,
+              height: 22,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: isActive ? AppColors.primary : AppColors.border,
+                shape: BoxShape.circle,
+              ),
+              child: isDone
+                  ? const Icon(
+                      Icons.check_rounded,
+                      size: 14,
+                      color: Colors.white,
+                    )
+                  : Text(
+                      '$number',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        color: isActive ? Colors.white : Colors.black38,
+                      ),
+                    ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                fontSize: 13,
+                color: isActive ? AppColors.primary : Colors.black38,
+                fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

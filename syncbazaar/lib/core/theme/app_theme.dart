@@ -1,43 +1,59 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../constants/colors.dart';
 
 class AppTheme {
+  /// The bundled family declared in `pubspec.yaml`.
+  ///
+  /// Was `google_fonts`, which downloads Inter on first use. That is the wrong
+  /// trade for a till: a bazaar has no dependable network, and the fetch fails
+  /// loudly rather than quietly — an offline tablet could not print a receipt
+  /// at all because the font request threw before anything was drawn. The
+  /// files now ship with the app, so typography never depends on connectivity.
+  static const String fontFamily = 'Inter';
+
   static ThemeData get light {
     final base = ThemeData.light(useMaterial3: true);
-    final textTheme = GoogleFonts.interTextTheme(base.textTheme).copyWith(
-      headlineLarge: GoogleFonts.inter(
-        fontSize: 24,
-        fontWeight: FontWeight.w600,
-        color: AppColors.text,
-      ),
-      headlineMedium: GoogleFonts.inter(
-        fontSize: 22,
-        fontWeight: FontWeight.w600,
-        color: AppColors.text,
-      ),
-      headlineSmall: GoogleFonts.inter(
-        fontSize: 20,
-        fontWeight: FontWeight.w600,
-        color: AppColors.text,
-      ),
-      bodyLarge: GoogleFonts.inter(
-        fontSize: 16,
-        fontWeight: FontWeight.w400,
-        color: AppColors.text,
-      ),
-      bodyMedium: GoogleFonts.inter(
-        fontSize: 14,
-        fontWeight: FontWeight.w400,
-        color: AppColors.text,
-      ),
-      labelLarge: GoogleFonts.inter(
-        fontSize: 15,
-        fontWeight: FontWeight.w500,
-        color: AppColors.text,
-      ),
-    );
+    final textTheme = base.textTheme
+        .apply(fontFamily: fontFamily)
+        .copyWith(
+          headlineLarge: const TextStyle(
+            fontFamily: fontFamily,
+            fontSize: 24,
+            fontWeight: FontWeight.w600,
+            color: AppColors.text,
+          ),
+          headlineMedium: const TextStyle(
+            fontFamily: fontFamily,
+            fontSize: 22,
+            fontWeight: FontWeight.w600,
+            color: AppColors.text,
+          ),
+          headlineSmall: const TextStyle(
+            fontFamily: fontFamily,
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
+            color: AppColors.text,
+          ),
+          bodyLarge: const TextStyle(
+            fontFamily: fontFamily,
+            fontSize: 16,
+            fontWeight: FontWeight.w400,
+            color: AppColors.text,
+          ),
+          bodyMedium: const TextStyle(
+            fontFamily: fontFamily,
+            fontSize: 14,
+            fontWeight: FontWeight.w400,
+            color: AppColors.text,
+          ),
+          labelLarge: const TextStyle(
+            fontFamily: fontFamily,
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+            color: AppColors.text,
+          ),
+        );
 
     return base.copyWith(
       scaffoldBackgroundColor: AppColors.background,
@@ -67,7 +83,10 @@ class AppTheme {
         isDense: true,
         filled: true,
         fillColor: const Color(0xFFF5F1FB),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 11,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(6),
           borderSide: BorderSide.none,
@@ -86,9 +105,7 @@ class AppTheme {
           backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
           textStyle: textTheme.labelLarge,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(6),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
@@ -96,9 +113,7 @@ class AppTheme {
           backgroundColor: Colors.white,
           foregroundColor: AppColors.primary,
           textStyle: textTheme.labelLarge,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(6),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
@@ -107,9 +122,7 @@ class AppTheme {
           foregroundColor: AppColors.primary,
           side: const BorderSide(color: AppColors.primary),
           textStyle: textTheme.labelLarge,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(6),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
         ),
       ),
     );

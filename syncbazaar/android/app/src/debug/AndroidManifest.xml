@@ -1,7 +1,21 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <!-- The INTERNET permission is required for development. Specifically,
          the Flutter tool needs it to communicate with the running application
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- The Django dev server speaks http://, and API 28+ blocks cleartext by
+         default: without this the tablet fails every request to the backend
+         before one leaves the device, with a connection error that looks like
+         the server is down.
+
+         Deliberately in the *debug* manifest rather than main. Gradle merges
+         this only into debug builds, so a release APK keeps cleartext blocked
+         without anyone having to remember to take a flag back out. When the
+         backend gets a real https:// host, nothing here needs changing. -->
+    <application
+        android:usesCleartextTraffic="true"
+        tools:ignore="UnusedAttribute" />
 </manifest>

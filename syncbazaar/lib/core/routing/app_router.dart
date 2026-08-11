@@ -1,5 +1,6 @@
 enum AppSection {
   dashboard,
+  notifications,
   preBazaar,
   pos,
   postBazaar,
@@ -7,6 +8,6 @@ enum AppSection {
   approvals,
   inventory,
   staff,
-  location,
+  venues,
   settings,
 }

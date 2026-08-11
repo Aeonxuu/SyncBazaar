@@ -1,14 +1,8 @@
 {
-  "dart.flutterSdkPath": "C:/dev/flutter",
-  "dart.env": {
-    "PUB_CACHE": "C:/dev/pub-cache",
-    "FLUTTER_ROOT": "C:/dev/flutter",
-    "DART": "C:/dev/flutter/bin/cache/dart-sdk/bin/dart.exe"
-  },
-  "terminal.integrated.env.windows": {
-    "PUB_CACHE": "C:/dev/pub-cache",
-    "FLUTTER_ROOT": "C:/dev/flutter",
-    "DART": "C:/dev/flutter/bin/cache/dart-sdk/bin/dart.exe",
-    "PATH": "C:/dev/flutter/bin;${env:PATH}"
+  "dart.flutterSdkPath": "/Users/lj/development/flutter",
+  "terminal.integrated.env.osx": {
+    "PATH": "/Users/lj/development/flutter/bin:/Users/lj/Library/Android/sdk/cmdline-tools/latest/bin:/Users/lj/Library/Android/sdk/platform-tools:/Users/lj/.gem/ruby/2.6.0/bin:/Users/lj/development/portable-ruby/portable-ruby/3.4.5/bin:${env:PATH}",
+    "JAVA_HOME": "/Users/lj/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home",
+    "ANDROID_HOME": "/Users/lj/Library/Android/sdk"
   }
 }

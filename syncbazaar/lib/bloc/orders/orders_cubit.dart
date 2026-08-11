@@ -2,85 +2,114 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../data/repositories/orders_repository.dart';
 import '../../data/repositories/sales_repository.dart';
-import '../../models/order.dart';
-import '../../models/sale.dart';
 import '../../models/user.dart';
+
+/// A single completed transaction, joining an [Order]'s resolved product
+/// label with its [Sale]'s financial figures — purely for display in the
+/// read-only Transaction History table.
+class TransactionRecord {
+  const TransactionRecord({
+    required this.orderId,
+    required this.customerName,
+    required this.timestamp,
+    required this.productLabel,
+    required this.unitPrice,
+    required this.quantity,
+    required this.total,
+    required this.eventId,
+    required this.paymentMethod,
+    required this.userId,
+  });
+
+  final int orderId;
+  final String customerName;
+  final DateTime timestamp;
+  final String productLabel;
+  final double unitPrice;
+  final int quantity;
+  final double total;
+  final int eventId;
+  final String paymentMethod;
+  final int userId;
+}
 
 class OrdersState {
   const OrdersState({
-    this.orders = const [],
+    this.records = const [],
     this.selectedEventId,
     this.paymentMethod = 'All',
-    this.status = 'All',
   });
 
-  final List<Order> orders;
+  final List<TransactionRecord> records;
   final int? selectedEventId;
   final String paymentMethod;
-  final String status;
 
-  List<Order> visibleOrders(AppUser user) {
-    var result = orders;
+  List<TransactionRecord> visibleRecords(AppUser user) {
+    var result = records;
     if (user.role == UserRole.employee) {
-      result = result.where((o) => o.userId == user.id).toList();
+      result = result.where((r) => r.userId == user.id).toList();
     }
     if (selectedEventId != null) {
-      result = result.where((o) => o.eventId == selectedEventId).toList();
+      result = result.where((r) => r.eventId == selectedEventId).toList();
     }
     if (paymentMethod != 'All') {
-      result = result.where((o) => o.paymentMethod == paymentMethod).toList();
-    }
-    if (status != 'All') {
-      result = result
-          .where((o) => o.orderStatus.name == status.toLowerCase())
-          .toList();
+      result = result.where((r) => r.paymentMethod == paymentMethod).toList();
     }
     return result;
   }
 
   OrdersState copyWith({
-    List<Order>? orders,
+    List<TransactionRecord>? records,
     int? selectedEventId,
     String? paymentMethod,
-    String? status,
     bool clearEvent = false,
   }) {
     return OrdersState(
-      orders: orders ?? this.orders,
+      records: records ?? this.records,
       selectedEventId: clearEvent
           ? null
           : (selectedEventId ?? this.selectedEventId),
       paymentMethod: paymentMethod ?? this.paymentMethod,
-      status: status ?? this.status,
     );
   }
 }
 
 class OrdersCubit extends Cubit<OrdersState> {
   OrdersCubit(this._ordersRepository, this._salesRepository)
-      : super(const OrdersState());
+    : super(const OrdersState());
 
   final OrdersRepository _ordersRepository;
   final SalesRepository _salesRepository;
 
   Future<void> load() async {
-    emit(state.copyWith(orders: await _ordersRepository.listOrders()));
-  }
+    final orders = await _ordersRepository.listOrders();
+    final sales = await _salesRepository.listSales();
+    final saleById = {for (final sale in sales) sale.id: sale};
 
-  Future<void> updateStatus(int orderId, OrderStatus status) async {
-    final order = await _ordersRepository.getOrderById(orderId);
-    if (order == null) {
-      return;
+    final records = <TransactionRecord>[];
+    for (final order in orders) {
+      final sale = saleById[order.saleId];
+      if (sale == null) {
+        continue;
+      }
+      records.add(
+        TransactionRecord(
+          orderId: order.id,
+          customerName: order.customerName,
+          timestamp: sale.timestamp,
+          productLabel: order.productLabel,
+          unitPrice: sale.qty > 0 ? sale.total / sale.qty : sale.total,
+          quantity: sale.qty,
+          total: sale.total,
+          eventId: order.eventId,
+          paymentMethod: order.paymentMethod,
+          userId: order.userId,
+        ),
+      );
     }
-    if (order.orderStatus == OrderStatus.completed) {
-      return;
-    }
-    if (order.orderStatus == status) {
-      return;
-    }
-    await _ordersRepository.updateOrderStatus(orderId, status);
-    await _salesRepository.updateSaleOrderStatus(order.saleId, status);
-    await load();
+    records.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
+    emit(state.copyWith(records: records));
   }
 
   void filterByEvent(int? eventId) {
@@ -93,5 +122,4 @@ class OrdersCubit extends Cubit<OrdersState> {
 
   void filterByPayment(String payment) =>
       emit(state.copyWith(paymentMethod: payment));
-  void filterByStatus(String status) => emit(state.copyWith(status: status));
 }

@@ -44,12 +44,15 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         child: CustomPaint(
           painter: _DottedNotebookPainter(
-            dotColor: AppColors.primary.withOpacity(0.15),
+            dotColor: AppColors.primary.withValues(alpha: 0.15),
           ),
           child: SafeArea(
             child: Center(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 32,
+                ),
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 460),
                   child: DecoratedBox(
@@ -69,9 +72,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: BlocConsumer<AuthCubit, dynamic>(
                         listener: (context, state) {
                           if (state.error != null) {
-                            ScaffoldMessenger.of(
-                              context,
-                            ).showSnackBar(SnackBar(content: Text(state.error)));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(state.error)),
+                            );
                           }
                         },
                         builder: (context, state) {
@@ -103,7 +106,7 @@ class _LoginScreenState extends State<LoginScreen> {
             height: 96,
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.08),
+              color: AppColors.primary.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Image.asset(
@@ -157,9 +160,9 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Text(
               'Forgot Password?',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.w600,
-                  ),
+                color: AppColors.primary,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ),
@@ -185,9 +188,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       true,
                     );
                   },
-            child: Text(
-              state.isLoading ? 'SIGNING IN...' : 'SIGN IN',
-            ),
+            child: Text(state.isLoading ? 'SIGNING IN...' : 'SIGN IN'),
           ),
         ),
       ],
@@ -213,7 +214,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   },
                   padding: EdgeInsets.zero,
                   visualDensity: VisualDensity.compact,
-                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  constraints: const BoxConstraints(
+                    minWidth: 32,
+                    minHeight: 32,
+                  ),
                   icon: const Icon(Icons.arrow_back_rounded),
                 ),
               ),
@@ -224,7 +228,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   height: 96,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.08),
+                    color: AppColors.primary.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Image.asset(
@@ -258,10 +262,9 @@ class _LoginScreenState extends State<LoginScreen> {
         const SizedBox(height: 10),
         Text(
           'So the app can inform the admin and send them a key to reset their password.',
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Colors.black54,
-                height: 1.35,
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(color: Colors.black54, height: 1.35),
         ),
         const SizedBox(height: 24),
         SizedBox(

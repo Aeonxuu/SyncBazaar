@@ -1,4 +1,5 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../data/repositories/event_repository.dart';
 import '../../data/repositories/orders_repository.dart';
@@ -6,35 +7,53 @@ import '../../data/repositories/product_repository.dart';
 import '../../data/repositories/sales_repository.dart';
 import '../../data/repositories/settings_repository.dart';
 import '../../models/bazaar_event.dart';
+import '../../models/company.dart';
 import '../../models/order.dart';
 import '../../models/product.dart';
 import '../../models/product_variant.dart';
+import '../../models/receipt.dart';
 import '../../models/sale.dart';
 import '../../models/user.dart';
+import '../../services/receipt_payment_sections.dart';
 
 class CartItem {
   CartItem({
     required this.product,
     required this.quantity,
-    this.variantGroup,
-    this.variantOption,
+    this.groupA,
+    this.optionA,
+    this.groupB,
+    this.optionB,
   });
 
   final Product product;
   int quantity;
-  final ProductVariantGroup? variantGroup;
-  final ProductVariantOption? variantOption;
+  final ProductVariantGroup? groupA;
+  final ProductVariantOption? optionA;
+  final ProductVariantGroup? groupB;
+  final ProductVariantOption? optionB;
 
-  double get unitPrice => product.basePrice + (variantOption?.extraPrice ?? 0);
+  double get unitPrice =>
+      product.basePrice +
+      (optionA?.extraPrice ?? 0) +
+      (optionB?.extraPrice ?? 0);
   double get lineTotal => unitPrice * quantity;
 
-  int? get variantOptionId => variantOption?.id;
+  int? get variantOptionIdA => optionA?.id;
+  int? get variantOptionIdB => optionB?.id;
 
   String get cartLabel {
-    if (variantGroup == null || variantOption == null) {
+    final parts = <String>[];
+    if (groupA != null && optionA != null) {
+      parts.add('${groupA!.name} ${optionA!.value}');
+    }
+    if (groupB != null && optionB != null) {
+      parts.add('${groupB!.name} ${optionB!.value}');
+    }
+    if (parts.isEmpty) {
       return product.name;
     }
-    return '${product.name} (${variantGroup!.name} ${variantOption!.value})';
+    return '${product.name} (${parts.join(', ')})';
   }
 }
 
@@ -43,40 +62,34 @@ class PosState {
     this.events = const [],
     this.selectedEvent,
     this.products = const [],
-    this.filteredProducts = const [],
     this.cart = const [],
     this.paymentMethods = const [],
     this.selectedPaymentMethod = 'CASH',
     this.customerName = '',
     this.paymentExtraFieldValue = '',
-    this.quantity = 1,
-    this.discountPercent = 0,
-    this.category = 'All',
-    this.categoryNames = const {},
+    this.cashTendered = '',
   });
 
   final List<BazaarEvent> events;
   final BazaarEvent? selectedEvent;
   final List<Product> products;
-  final List<Product> filteredProducts;
   final List<CartItem> cart;
   final List<PaymentMethodMeta> paymentMethods;
   final String selectedPaymentMethod;
   final String customerName;
   final String paymentExtraFieldValue;
-  final int quantity;
-  final int discountPercent;
-  final String category;
-  final Map<int, String> categoryNames;
 
-  List<String> get categories {
-    final values = {'All', ...categoryNames.values};
-    return values.toList();
-  }
+  /// Raw text of the "Cash received" field, kept as typed so a half-entered
+  /// amount does not get rounded or reformatted under the cashier's cursor.
+  final String cashTendered;
 
   double get subtotal => cart.fold(0, (sum, item) => sum + item.lineTotal);
-  double get discountAmount => subtotal * (discountPercent / 100);
-  double get total => subtotal - discountAmount;
+
+  /// Equal to [subtotal] today. Kept as its own name because the checkout
+  /// path, the receipt and the recorded sale all mean "what the customer
+  /// pays", and the per-product discount that replaces the order-level one
+  /// will land here rather than at every call site.
+  double get total => subtotal;
 
   PaymentMethodMeta? get selectedPaymentMethodMeta {
     final selected = selectedPaymentMethod.trim().toUpperCase();
@@ -96,20 +109,53 @@ class PosState {
 
   bool get requiresPaymentExtraField => selectedExtraFieldLabel != null;
 
+  /// The receipt behaviour of the selected payment method.
+  ///
+  /// The POS asks this rather than testing for `'CASH'` itself, so a future
+  /// method that also hands money back needs no change here.
+  ReceiptPaymentSection get paymentSection =>
+      ReceiptSectionRegistry.resolve(selectedPaymentMethod);
+
+  bool get requiresCashTendered => paymentSection.requiresTendered;
+
+  /// Null when the field is empty or not a number — i.e. not yet valid.
+  double? get cashTenderedValue {
+    final parsed = double.tryParse(cashTendered.trim());
+    if (parsed == null || parsed < 0) {
+      return null;
+    }
+    return parsed;
+  }
+
+  /// Null until enough has been tendered to cover the total, so the UI can
+  /// distinguish "not entered yet" from "short".
+  double? get changeDue {
+    final tendered = cashTenderedValue;
+    if (tendered == null || tendered < total) {
+      return null;
+    }
+    return tendered - total;
+  }
+
+  /// Whether checkout is allowed to proceed on the payment side.
+  bool get cashTenderedIsSufficient {
+    if (!requiresCashTendered) {
+      return true;
+    }
+    final tendered = cashTenderedValue;
+    return tendered != null && tendered >= total;
+  }
+
   PosState copyWith({
     List<BazaarEvent>? events,
     BazaarEvent? selectedEvent,
     List<Product>? products,
-    List<Product>? filteredProducts,
     List<CartItem>? cart,
     List<PaymentMethodMeta>? paymentMethods,
     String? selectedPaymentMethod,
     String? customerName,
     String? paymentExtraFieldValue,
-    int? quantity,
-    int? discountPercent,
-    String? category,
-    Map<int, String>? categoryNames,
+    String? cashTendered,
     bool clearSelectedEvent = false,
   }) {
     return PosState(
@@ -118,18 +164,14 @@ class PosState {
           ? null
           : (selectedEvent ?? this.selectedEvent),
       products: products ?? this.products,
-      filteredProducts: filteredProducts ?? this.filteredProducts,
       cart: cart ?? this.cart,
       paymentMethods: paymentMethods ?? this.paymentMethods,
       selectedPaymentMethod:
           selectedPaymentMethod ?? this.selectedPaymentMethod,
       customerName: customerName ?? this.customerName,
-        paymentExtraFieldValue:
+      paymentExtraFieldValue:
           paymentExtraFieldValue ?? this.paymentExtraFieldValue,
-      quantity: quantity ?? this.quantity,
-      discountPercent: discountPercent ?? this.discountPercent,
-      category: category ?? this.category,
-      categoryNames: categoryNames ?? this.categoryNames,
+      cashTendered: cashTendered ?? this.cashTendered,
     );
   }
 }
@@ -143,6 +185,8 @@ class PosCubit extends Cubit<PosState> {
     this._settingsRepository,
   ) : super(const PosState());
 
+  static const _uuid = Uuid();
+
   final EventRepository _eventRepository;
   final ProductRepository _productRepository;
   final SalesRepository _salesRepository;
@@ -153,32 +197,24 @@ class PosCubit extends Cubit<PosState> {
   Future<void> load(AppUser user) async {
     final events = await _eventRepository.listVisibleForUser(user);
     final products = await _productRepository.listProducts();
-    final categories = await _productRepository.listCategories();
     final globalMethods = await _settingsRepository.paymentMethods();
     _basePaymentMethods = globalMethods;
     final methods = _methodsForEvent(null, globalMethods);
-    final categoryNames = {
-      for (final category in categories) category.id: category.name,
-    };
     emit(
       state.copyWith(
         events: events,
         clearSelectedEvent: true,
         products: products,
-        filteredProducts: products,
         paymentMethods: methods,
         selectedPaymentMethod: methods.isEmpty ? 'CASH' : methods.first.name,
-        categoryNames: categoryNames,
       ),
     );
   }
 
   Future<void> selectEvent(BazaarEvent event) async {
     final allProducts = await _productRepository.listProducts();
-    final allCategories = await _productRepository.listCategories();
-    final allocations = await _eventRepository.allocationsForEventByAllocationKey(
-      event.id,
-    );
+    final allocations = await _eventRepository
+        .allocationsForEventByAllocationKey(event.id);
 
     final allocatedProductIds = allocations.entries
         .where((entry) => entry.value > 0)
@@ -189,16 +225,8 @@ class PosCubit extends Cubit<PosState> {
     final allowedProducts = allocatedProductIds.isEmpty
         ? <Product>[]
         : allProducts
-            .where((product) => allocatedProductIds.contains(product.id))
-            .toList();
-
-    final allowedCategoryIds = allowedProducts
-        .map((product) => product.categoryId)
-        .toSet();
-    final categoryNames = {
-      for (final category in allCategories)
-        if (allowedCategoryIds.contains(category.id)) category.id: category.name,
-    };
+              .where((product) => allocatedProductIds.contains(product.id))
+              .toList();
 
     final methods = _methodsForEvent(
       event,
@@ -208,9 +236,6 @@ class PosCubit extends Cubit<PosState> {
       state.copyWith(
         selectedEvent: event,
         products: allowedProducts,
-        filteredProducts: allowedProducts,
-        category: 'All',
-        categoryNames: categoryNames,
         paymentMethods: methods,
         selectedPaymentMethod: methods.isEmpty ? 'CASH' : methods.first.name,
       ),
@@ -218,91 +243,76 @@ class PosCubit extends Cubit<PosState> {
   }
 
   void backToEventSelection() {
-    emit(state.copyWith(clearSelectedEvent: true, cart: const [], quantity: 1));
+    emit(state.copyWith(clearSelectedEvent: true, cart: const []));
   }
 
-  void selectCategory(String category) {
-    if (category == 'All') {
-      emit(
-        state.copyWith(category: category, filteredProducts: state.products),
-      );
-      return;
-    }
-
-    final categoryId = state.categoryNames.entries
-        .where((entry) => entry.value == category)
-        .cast<MapEntry<int, String>?>()
-        .firstWhere((entry) => entry != null, orElse: () => null)
-        ?.key;
-    if (categoryId == null) {
-      return;
-    }
-
-    emit(
-      state.copyWith(
-        category: category,
-        filteredProducts: state.products
-            .where((p) => p.categoryId == categoryId)
-            .toList(),
-      ),
-    );
-  }
-
+  // Switching method clears both per-method inputs: a reference number typed
+  // for GCash means nothing once the customer decides to pay cash, and a
+  // stale tendered amount would silently compute the wrong change.
   void updatePaymentMethod(String value) => emit(
     state.copyWith(
       selectedPaymentMethod: value,
       paymentExtraFieldValue: '',
+      cashTendered: '',
     ),
   );
   void updateCustomerName(String value) =>
       emit(state.copyWith(customerName: value));
   void updatePaymentExtraFieldValue(String value) =>
       emit(state.copyWith(paymentExtraFieldValue: value));
-  void setQuantity(int value) =>
-      emit(state.copyWith(quantity: value.clamp(1, 99)));
-
-  void setDiscountPercent(int value) {
-    emit(state.copyWith(discountPercent: value.clamp(0, 100)));
-  }
-
+  void updateCashTendered(String value) =>
+      emit(state.copyWith(cashTendered: value));
   Future<int> availableStock({
     required int productId,
-    required int? variantOptionId,
+    int? optionIdA,
+    int? optionIdB,
   }) {
-    return _productRepository.availableStock(
+    return _productRepository.combinationStock(
       productId: productId,
-      variantOptionId: variantOptionId,
+      optionIdA: optionIdA,
+      optionIdB: optionIdB,
     );
   }
 
-  Future<Map<int, int>> variantStocksByOptionId(int productId) {
-    return _productRepository.variantStocksByOptionId(productId);
+  Future<Map<(int?, int?), int>> combinationStocksForProduct(int productId) {
+    return _productRepository.combinationStocksForProduct(productId);
   }
 
-  int _reservedInCart({required int productId, required int? variantOptionId}) {
+  int _reservedInCart({
+    required int productId,
+    int? optionIdA,
+    int? optionIdB,
+  }) {
     return state.cart
         .where(
           (item) =>
-              item.product.id == productId && item.variantOptionId == variantOptionId,
+              item.product.id == productId &&
+              item.variantOptionIdA == optionIdA &&
+              item.variantOptionIdB == optionIdB,
         )
         .fold<int>(0, (sum, item) => sum + item.quantity);
   }
 
   Future<bool> addToCart(
     Product product, {
-    ProductVariantGroup? variantGroup,
-    ProductVariantOption? variantOption,
+    ProductVariantGroup? groupA,
+    ProductVariantOption? optionA,
+    ProductVariantGroup? groupB,
+    ProductVariantOption? optionB,
     int quantity = 1,
   }) async {
     final requested = quantity.clamp(1, 9999);
-    final variantOptionId = variantOption?.id;
+    final optionIdA = optionA?.id;
+    final optionIdB = optionB?.id;
     final available = await availableStock(
       productId: product.id,
-      variantOptionId: variantOptionId,
+      optionIdA: optionIdA,
+      optionIdB: optionIdB,
     );
     final alreadyInCart = _reservedInCart(
       productId: product.id,
-      variantOptionId: variantOptionId,
+      optionIdA: optionIdA,
+      optionIdB: optionIdB,
     );
     if ((alreadyInCart + requested) > available) {
       return false;
@@ -312,7 +322,8 @@ class PosCubit extends Cubit<PosState> {
     final idx = updated.indexWhere(
       (item) =>
           item.product.id == product.id &&
-          item.variantOptionId == variantOptionId,
+          item.variantOptionIdA == optionIdA &&
+          item.variantOptionIdB == optionIdB,
     );
 
     if (idx == -1) {
@@ -320,14 +331,16 @@ class PosCubit extends Cubit<PosState> {
         CartItem(
           product: product,
           quantity: requested,
-          variantGroup: variantGroup,
-          variantOption: variantOption,
+          groupA: groupA,
+          optionA: optionA,
+          groupB: groupB,
+          optionB: optionB,
         ),
       );
     } else {
       updated[idx].quantity += requested;
     }
-    emit(state.copyWith(cart: updated, quantity: 1));
+    emit(state.copyWith(cart: updated));
     return true;
   }
 
@@ -337,11 +350,13 @@ class PosCubit extends Cubit<PosState> {
     final item = updated[index];
     final available = await availableStock(
       productId: item.product.id,
-      variantOptionId: item.variantOptionId,
+      optionIdA: item.variantOptionIdA,
+      optionIdB: item.variantOptionIdB,
     );
     final reserved = _reservedInCart(
       productId: item.product.id,
-      variantOptionId: item.variantOptionId,
+      optionIdA: item.variantOptionIdA,
+      optionIdB: item.variantOptionIdB,
     );
     if ((reserved + 1) > available) {
       return false;
@@ -368,10 +383,10 @@ class PosCubit extends Cubit<PosState> {
         cart: const [],
         customerName: '',
         paymentExtraFieldValue: '',
-        quantity: 1,
-        discountPercent: 0,
-        selectedPaymentMethod:
-            state.paymentMethods.isEmpty ? 'CASH' : state.paymentMethods.first.name,
+        cashTendered: '',
+        selectedPaymentMethod: state.paymentMethods.isEmpty
+            ? 'CASH'
+            : state.paymentMethods.first.name,
       ),
     );
   }
@@ -435,44 +450,59 @@ class PosCubit extends Cubit<PosState> {
     await load(user);
   }
 
-  Future<ProductVariantGroup?> variantGroupForProduct(int productId) {
-    return _productRepository.variantGroupForProduct(productId);
+  Future<List<ProductVariantGroup>> variantGroupsForProduct(int productId) {
+    return _productRepository.variantGroupsForProduct(productId);
   }
 
-  Future<List<ProductVariantOption>> variantOptionsForProduct(int productId) {
-    return _productRepository.variantOptionsForProduct(productId);
+  Future<List<ProductVariantOption>> variantOptionsForGroup(int groupId) {
+    return _productRepository.variantOptionsForGroup(groupId);
   }
 
-  Future<bool> completeSale({
-    required AppUser user,
-    required OrderStatus status,
-  }) async {
+  /// Commits the sale and returns the receipt for it, or null if it could not
+  /// be committed.
+  ///
+  /// Returns [ReceiptData] rather than a bool because the receipt can only be
+  /// assembled from the cart, and the cart is cleared as the last act of this
+  /// method. The persisted `Sale` rows are no substitute: one row per line
+  /// item, sharing no basket id, storing no unit price and no product name.
+  /// So the receipt is snapshotted here, at the one moment all of it is known.
+  Future<ReceiptData?> completeSale({required AppUser user}) async {
+    const status = OrderStatus.completed;
     final event = state.selectedEvent;
     if (event == null || state.cart.isEmpty) {
-      return false;
+      return null;
     }
 
     final subtotal = state.subtotal;
     final ratio = subtotal <= 0 ? 1.0 : state.total / subtotal;
+    final soldAt = DateTime.now();
 
     for (final item in state.cart) {
       final deducted = await _productRepository.reserveForSale(
         productId: item.product.id,
-        variantOptionId: item.variantOptionId,
+        optionIdA: item.variantOptionIdA,
+        optionIdB: item.variantOptionIdB,
         quantity: item.quantity,
       );
       if (!deducted) {
-        return false;
+        return null;
       }
 
       final sale = Sale(
         id: DateTime.now().millisecondsSinceEpoch + item.product.id,
+        // One uuid per cart line, minted here at the moment of sale rather than
+        // when the sale is uploaded. The server dedupes on it, so a batch that
+        // reaches it but whose reply is lost can be re-sent safely — which is
+        // the normal case on bazaar wifi, not the exceptional one.
+        //
+        // Per line rather than per basket because the server's Sale is one
+        // stock row plus a quantity, so each line has to dedupe on its own.
+        clientUuid: _uuid.v4(),
         eventId: event.id,
         productId: item.product.id,
-        variantOptionId: item.variantOptionId,
-        customerName: state.customerName.isEmpty
-            ? 'Walk-in'
-            : state.customerName,
+        variantOptionIdA: item.variantOptionIdA,
+        variantOptionIdB: item.variantOptionIdB,
+        customerName: normalizeCustomerName(state.customerName),
         employeeId: state.paymentExtraFieldValue,
         paymentMethod: state.selectedPaymentMethod,
         qty: item.quantity,
@@ -499,17 +529,94 @@ class PosCubit extends Cubit<PosState> {
       );
     }
 
+    // Built before the emit below, which clears the cart it reads from.
+    final receipt = await _buildReceipt(user: user, event: event, at: soldAt);
+
     emit(
       state.copyWith(
         cart: const [],
         customerName: '',
         paymentExtraFieldValue: '',
-        discountPercent: 0,
-        selectedPaymentMethod:
-            state.paymentMethods.isEmpty ? 'CASH' : state.paymentMethods.first.name,
+        cashTendered: '',
+        selectedPaymentMethod: state.paymentMethods.isEmpty
+            ? 'CASH'
+            : state.paymentMethods.first.name,
       ),
     );
-    return true;
+    return receipt;
+  }
+
+  Future<ReceiptData> _buildReceipt({
+    required AppUser user,
+    required BazaarEvent event,
+    required DateTime at,
+  }) async {
+    final storeName = await _settingsRepository.storeName();
+
+    // The venue hosting the bazaar. Absent from the receipt rather than fatal
+    // to it if the event points at a company that no longer exists.
+    final companies = await _settingsRepository.listCompanies();
+    final venue = companies
+        .where((company) => company.id == event.companyId)
+        .cast<Company?>()
+        .firstWhere((company) => company != null, orElse: () => null);
+
+    final section = state.paymentSection;
+    final paymentContext = ReceiptPaymentContext(
+      total: state.total,
+      paymentMethod: state.selectedPaymentMethod,
+      extraFieldLabel: state.selectedExtraFieldLabel,
+      extraFieldValue: state.paymentExtraFieldValue,
+      cashTendered: section.requiresTendered ? state.cashTenderedValue : null,
+    );
+
+    return ReceiptData(
+      storeName: storeName,
+      venueName: venue?.name ?? '',
+      venueAddress: venue?.address ?? '',
+      venueContact: venue?.contact ?? '',
+      eventName: event.name,
+      receiptNo: _receiptNo(at),
+      cashierName: user.name,
+      customerName: normalizeCustomerName(state.customerName),
+      paymentMethod: state.selectedPaymentMethod,
+      timestamp: at,
+      lines: [
+        for (final item in state.cart)
+          ReceiptLine(
+            name: item.product.name,
+            variantLabel: _variantLabel(item),
+            qty: item.quantity,
+            unitPrice: item.unitPrice,
+            lineTotal: item.lineTotal,
+          ),
+      ],
+      subtotal: state.subtotal,
+      total: state.total,
+      paymentDetails: section.details(paymentContext),
+      footerNote: section.footerNote(paymentContext),
+    );
+  }
+
+  /// `SB-260810-144233` — readable at a glance and sorts chronologically,
+  /// unlike the epoch-millisecond ids the `Sale` rows carry.
+  static String _receiptNo(DateTime at) {
+    String two(int value) => value.toString().padLeft(2, '0');
+    return 'SB-${two(at.year % 100)}${two(at.month)}${two(at.day)}'
+        '-${two(at.hour)}${two(at.minute)}${two(at.second)}';
+  }
+
+  /// "Color Black, Size 42" — the variant part of [CartItem.cartLabel], without
+  /// the product name the receipt already prints on its own line.
+  static String _variantLabel(CartItem item) {
+    final parts = <String>[];
+    if (item.groupA != null && item.optionA != null) {
+      parts.add('${item.groupA!.name} ${item.optionA!.value}');
+    }
+    if (item.groupB != null && item.optionB != null) {
+      parts.add('${item.groupB!.name} ${item.optionB!.value}');
+    }
+    return parts.join(', ');
   }
 
   List<PaymentMethodMeta> _methodsForEvent(
@@ -555,9 +662,7 @@ class PosCubit extends Cubit<PosState> {
     }
 
     if (result.isEmpty) {
-      return const [
-        PaymentMethodMeta(name: 'CASH'),
-      ];
+      return const [PaymentMethodMeta(name: 'CASH')];
     }
 
     return result;
