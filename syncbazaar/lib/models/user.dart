@@ -94,10 +94,10 @@ class AppUser {
   /// it returns `user_id`, `role`, `name`, `vendor_id`, `vendor_name` — and the
   /// address the cashier typed is the one they signed in with.
   ///
-  /// Event assignments are absent here by design: the server keeps them in
-  /// `EventAssignment`, reachable at `/api/bazaar/event/<id>/assignment/`. Until
-  /// that endpoint is wired, an employee signing in against the real API has no
-  /// assigned events.
+  /// `assigned_event_ids` matters more than it looks. The event list is scoped
+  /// server-side for employees, but the client filters it again against these
+  /// ids — so leaving them empty turned a correctly scoped list of four bazaars
+  /// into none, and an employee signed in to an app with nothing to sell.
   factory AppUser.fromLoginResponse(
     Map<String, dynamic> json, {
     required String email,
@@ -108,6 +108,10 @@ class AppUser {
         : email,
     email: email,
     role: userRoleFromApiCode(json['role'] as String?),
+    assignedEventIds: ((json['assigned_event_ids'] as List?) ?? const [])
+        .whereType<num>()
+        .map((value) => value.toInt())
+        .toList(),
   );
 
   factory AppUser.fromJson(Map<String, dynamic> json) => AppUser(

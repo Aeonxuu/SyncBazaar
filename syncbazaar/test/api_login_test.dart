@@ -160,6 +160,52 @@ void main() {
     expect(revived.api.token, isNull);
   });
 
+  test('carries the employee event assignments off the login response', () async {
+    final repository = repositoryReturning({
+      'token': 'abc123',
+      'user_id': 4,
+      'role': 'EM',
+      'name': 'Missy',
+      'vendor_id': 1,
+      'vendor_name': 'SV KICKz',
+      'assigned_event_ids': [1, 3, 7, 11],
+    });
+
+    final user = await repository.login(
+      email: 'missy@syncbazaar.com',
+      password: 'missy123',
+      rememberMe: false,
+    );
+
+    // The event list is scoped server-side *and* filtered again on the client
+    // against these ids. Dropping them turned a correct list of four bazaars
+    // into none, and an employee signed in to an app with nothing to sell.
+    expect(user!.assignedEventIdsEffective, [1, 3, 7, 11]);
+  });
+
+  test('an owner with no assignments is not scoped to nothing', () async {
+    final repository = repositoryReturning({
+      'token': 'abc123',
+      'user_id': 2,
+      'role': 'OW',
+      'name': 'Lalaine',
+      'vendor_id': 1,
+      'vendor_name': 'SV KICKz',
+      'assigned_event_ids': <int>[],
+    });
+
+    final user = await repository.login(
+      email: 'owner@syncbazaar.com',
+      password: '123456',
+      rememberMe: false,
+    );
+
+    expect(user!.assignedEventIdsEffective, isEmpty);
+    // Owners see every bazaar regardless, which is what stops an empty list
+    // here from hiding the whole app from them.
+    expect(user.isAdminOrOwner, isTrue);
+  });
+
   test('maps every backend role code', () {
     expect(userRoleFromApiCode('AD'), UserRole.admin);
     expect(userRoleFromApiCode('OW'), UserRole.owner);
