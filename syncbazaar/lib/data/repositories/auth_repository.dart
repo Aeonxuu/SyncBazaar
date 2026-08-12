@@ -5,13 +5,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/user.dart';
 import '../remote/api_client.dart';
 
-/// Signing in goes to the API; everything else here is still in memory.
+/// Signing in and managing staff both go to the API.
 ///
-/// [login] and [restoreSession] talk to `/api/auth/login/`. The `_users` list
-/// below still backs [listUsers], [addUser] and the rest, which the Staff and
-/// Approvals screens read — so the signed-in user is real while the staff list
-/// is not, until `/api/user/` is wired up next. Deliberate: one endpoint at a
-/// time is what keeps this reviewable.
+/// The `_users` list below is the fallback for the mock-seeded build and the
+/// tests, where there is no session to read from. With one, it is replaced by
+/// the vendor's real staff on the first read.
 class AuthRepository {
   AuthRepository({ApiClient? apiClient})
     : _api = apiClient ?? ApiClient();
@@ -93,7 +91,75 @@ class AuthRepository {
     6: 'sen123',
   };
 
-  Future<List<AppUser>> listUsers() async => List<AppUser>.from(_users);
+  /// The vendor's staff.
+  ///
+  /// Read from the server once signed in, so the Staff screen shows the people
+  /// who can actually log in rather than the names this file used to carry.
+  Future<List<AppUser>> listUsers() async {
+    final loaded = await _loadUsersFromApi();
+    return loaded ?? List<AppUser>.from(_users);
+  }
+
+  /// Null without a session, which is the in-memory and mock-seeded path.
+  Future<List<AppUser>?> _loadUsersFromApi() async {
+    final vendorId = this.vendorId;
+    if (vendorId == null) {
+      return null;
+    }
+
+    // The vendor-scoped list, not `/api/user/`. That one is filtered to the
+    // caller's vendor anyway, but its POST creates a user with no vendor at
+    // all -- so both halves of the screen use the endpoint that keeps them
+    // consistent.
+    final payload =
+        await _api.get('/api/core/vendor/$vendorId/employee/') as List;
+
+    final assignments = await _eventAssignments();
+    final users = [
+      for (final entry in payload.cast<Map<String, dynamic>>())
+        AppUser(
+          id: (entry['id'] as num).toInt(),
+          name: entry['name'] as String? ?? '',
+          email: entry['email'] as String? ?? '',
+          role: userRoleFromApiCode(entry['role'] as String?),
+          assignedEventIds: assignments[(entry['id'] as num).toInt()] ?? const [],
+        ),
+    ];
+
+    _users
+      ..clear()
+      ..addAll(users);
+    return users;
+  }
+
+  /// Which bazaars each member of staff works.
+  ///
+  /// Assignments hang off the bazaar rather than the user, so this walks the
+  /// bazaars to build the other direction. The Staff screen shows a count per
+  /// person, and without it every one of them reads as working none.
+  ///
+  /// Failing soft: a staff list with the counts missing is worth more than no
+  /// staff list.
+  Future<Map<int, List<int>>> _eventAssignments() async {
+    final byUser = <int, List<int>>{};
+    try {
+      final events = await _api.get('/api/bazaar/event/') as List;
+      for (final entry in events.cast<Map<String, dynamic>>()) {
+        final eventId = (entry['id'] as num).toInt();
+        final rows =
+            await _api.get('/api/bazaar/event/$eventId/assignment/') as List;
+        for (final row in rows.cast<Map<String, dynamic>>()) {
+          final userId = (row['user'] as num?)?.toInt();
+          if (userId != null) {
+            byUser.putIfAbsent(userId, () => []).add(eventId);
+          }
+        }
+      }
+    } on ApiException {
+      return byUser;
+    }
+    return byUser;
+  }
 
   Future<AppUser> addUser({
     required String name,
@@ -101,6 +167,32 @@ class AuthRepository {
     required UserRole role,
     String? password,
   }) async {
+    final vendorId = this.vendorId;
+    if (vendorId != null) {
+      // Created through the vendor so the account is tied to it. Posting to
+      // `/api/user/` instead makes a real, log-in-able account with no vendor:
+      // invisible to the owner who just created it, and shown an empty app.
+      await _api.post(
+        '/api/core/vendor/$vendorId/employee/',
+        body: {
+          'email': email.trim().toLowerCase(),
+          'name': name.trim(),
+          'password': (password != null && password.isNotEmpty)
+              ? password
+              : _defaultPassword,
+          'role': role.apiCode,
+        },
+      );
+      // The create response omits the id, so the list is re-read to find the
+      // account that was just made rather than guessing at one.
+      final refreshed = await _loadUsersFromApi() ?? const <AppUser>[];
+      return refreshed.firstWhere(
+        (user) => user.email.toLowerCase() == email.trim().toLowerCase(),
+        orElse: () =>
+            AppUser(id: 0, name: name, email: email, role: role),
+      );
+    }
+
     final nextId = _users.isEmpty
         ? 1
         : _users.map((user) => user.id).reduce((a, b) => a > b ? a : b) + 1;
@@ -119,6 +211,18 @@ class AuthRepository {
     required UserRole role,
     String? password,
   }) async {
+    if (vendorId != null) {
+      // Only the fields the screen edits. A full replace would demand the
+      // password back, and this form does not ask for one unless it is being
+      // changed.
+      await _api.patch('/api/user/$id/', body: {
+        'name': name.trim(),
+        'email': email.trim().toLowerCase(),
+        'role': role.apiCode,
+        if (password != null && password.isNotEmpty) 'password': password,
+      });
+    }
+
     final index = _users.indexWhere((user) => user.id == id);
     if (index == -1) {
       return;
@@ -137,6 +241,9 @@ class AuthRepository {
   }
 
   Future<void> deleteUser(int id) async {
+    if (vendorId != null) {
+      await _api.delete('/api/user/$id/');
+    }
     _users.removeWhere((user) => user.id == id);
     _passwordByUserId.remove(id);
     await _clearRememberedIfDeleted(id);
@@ -147,6 +254,24 @@ class AuthRepository {
     required List<int> employeeIds,
   }) async {
     final employeeIdSet = employeeIds.toSet();
+
+    if (vendorId != null) {
+      // Assignments live on the bazaar server-side. Posting one that already
+      // exists is rejected by the pair constraint, which is the correct
+      // outcome and not worth failing the whole save over -- assigning the
+      // same person twice is a no-op, not an error the user needs told about.
+      for (final employeeId in employeeIdSet) {
+        try {
+          await _api.post(
+            '/api/bazaar/event/$eventId/assignment/',
+            body: {'user': employeeId, 'event': eventId},
+          );
+        } on ApiException {
+          // Already assigned.
+        }
+      }
+    }
+
     for (final employeeId in employeeIdSet) {
       final index = _users.indexWhere(
         (user) => user.id == employeeId && user.role == UserRole.employee,
