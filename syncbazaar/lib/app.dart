@@ -31,6 +31,7 @@ import 'dev/dev_mock_data_seeder.dart';
 import 'models/approval_request.dart';
 import 'models/user.dart';
 import 'services/notification_service.dart';
+import 'services/sale_upload_service.dart';
 import 'services/sync_service.dart';
 import 'ui/screens/approvals/approvals_screen.dart';
 import 'ui/screens/dashboard/dashboard_screen.dart';
@@ -83,6 +84,7 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
   late final SettingsRepository _settingsRepository;
   late final NotificationService _notificationService;
   late final SyncService _syncService;
+  SaleUploadService? _saleUploader;
   late bool _seeding;
 
   @override
@@ -106,6 +108,16 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
     );
     _salesRepository = SalesRepository();
     _ordersRepository = OrdersRepository();
+    // Null without a backend, so the in-memory build behaves exactly as before
+    // and the POS has nothing to push to.
+    _saleUploader = session == null
+        ? null
+        : SaleUploadService(
+            auth: session,
+            events: _eventRepository,
+            products: _productRepository,
+            sales: _salesRepository,
+          );
     _approvalsRepository = ApprovalsRepository();
     _settingsRepository = SettingsRepository();
     _notificationService = NotificationService();
@@ -175,6 +187,7 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
               _salesRepository,
               _ordersRepository,
               _settingsRepository,
+              saleUploader: _saleUploader,
             ),
           ),
           BlocProvider(

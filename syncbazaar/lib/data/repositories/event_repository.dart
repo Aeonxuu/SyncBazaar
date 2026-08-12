@@ -28,6 +28,19 @@ class EventRepository {
   final List<BazaarEvent> _events = [];
   final Map<int, Map<String, int>> _allocationsByEventId = {};
 
+  /// Event id, then combination, to the server's `EventStock` row id.
+  ///
+  /// What a sale upload sends. The server records a sale against the stock row,
+  /// not against a product or a variant: the same shoe allocated to two
+  /// bazaars is two rows with two counts, and only the row says which stall's
+  /// pile the sale came out of.
+  ///
+  /// Empty in the in-memory and mock-seeded paths, where no such row exists.
+  final Map<int, Map<String, int>> _stockIdsByEventId = {};
+
+  int? stockIdFor({required int eventId, required String allocationKey}) =>
+      _stockIdsByEventId[eventId]?[allocationKey];
+
   BazaarStatus _statusFor(DateTime startDate, DateTime endDate) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -116,13 +129,17 @@ class EventRepository {
       ..addAll(events);
 
     _allocationsByEventId.clear();
+    _stockIdsByEventId.clear();
     for (final event in events) {
       final stock =
           await auth.api.get('/api/bazaar/event/${event.id}/stock/') as List;
+      final stockIds = <String, int>{};
       _allocationsByEventId[event.id] = mapEventStockResponse(
         stock,
         allocationKeyForVariant: products.allocationKeyForVariant,
+        stockIdByAllocationKey: stockIds,
       );
+      _stockIdsByEventId[event.id] = stockIds;
     }
   }
 

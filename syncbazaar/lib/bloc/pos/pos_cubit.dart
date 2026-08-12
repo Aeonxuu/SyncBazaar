@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:uuid/uuid.dart';
 
@@ -15,6 +17,7 @@ import '../../models/receipt.dart';
 import '../../models/sale.dart';
 import '../../models/user.dart';
 import '../../services/receipt_payment_sections.dart';
+import '../../services/sale_upload_service.dart';
 
 class CartItem {
   CartItem({
@@ -206,8 +209,13 @@ class PosCubit extends Cubit<PosState> {
     this._productRepository,
     this._salesRepository,
     this._ordersRepository,
-    this._settingsRepository,
-  ) : super(const PosState());
+    this._settingsRepository, {
+    SaleUploadService? saleUploader,
+  }) : _saleUploader = saleUploader,
+       super(const PosState());
+
+  /// Absent in the in-memory build, where there is nowhere to upload to.
+  final SaleUploadService? _saleUploader;
 
   static const _uuid = Uuid();
 
@@ -280,6 +288,23 @@ class PosCubit extends Cubit<PosState> {
         allocations: allocations,
       ),
     );
+  }
+
+  /// Uploads pending sales, swallowing whatever goes wrong.
+  ///
+  /// Silent on purpose. The upload is not the sale — that already happened —
+  /// and interrupting a queue of customers to report bad wifi helps nobody.
+  /// The unsynced count is where this surfaces instead.
+  Future<void> _uploadSalesQuietly() async {
+    final uploader = _saleUploader;
+    if (uploader == null) {
+      return;
+    }
+    try {
+      await uploader.uploadPending();
+    } on Object {
+      // Stays unsynced, gets retried.
+    }
   }
 
   /// How many units of a product this bazaar has left across every
@@ -614,6 +639,12 @@ class PosCubit extends Cubit<PosState> {
 
     // Built before the emit below, which clears the cart it reads from.
     final receipt = await _buildReceipt(user: user, event: event, at: soldAt);
+
+    // Pushed after the sale is committed locally, and deliberately not awaited
+    // for anything the cashier is waiting on: the receipt must print whether or
+    // not the stall has signal. A failure leaves the sale recorded and
+    // unsynced, which is what the next attempt reads.
+    unawaited(_uploadSalesQuietly());
 
     // Re-read so the next customer sees what is actually left; the figures on
     // screen were correct until this sale took units out of them.

@@ -54,9 +54,15 @@ List<BazaarEvent> mapEventsResponse(
 /// happens when a variant was archived or belongs to a product the vendor no
 /// longer lists, and inventing a combination for it would put stock in the POS
 /// that cannot be sold.
+/// [stockIdByAllocationKey], when given, is filled with the `EventStock` row id
+/// behind each combination. Uploading a sale needs it: the server records what
+/// was sold against that row, not against a product or a variant, because the
+/// same variant has a separate row — and a separate count — at every bazaar it
+/// was allocated to.
 Map<String, int> mapEventStockResponse(
   List<dynamic> payload, {
   required String? Function(int variantId) allocationKeyForVariant,
+  Map<String, int>? stockIdByAllocationKey,
 }) {
   final allocations = <String, int>{};
   for (final entry in payload) {
@@ -77,6 +83,11 @@ Map<String, int> mapEventStockResponse(
     final sold = (row['amount_sold'] as num?)?.toInt() ?? 0;
     final remaining = allocated - sold;
     allocations[key] = (allocations[key] ?? 0) + (remaining < 0 ? 0 : remaining);
+
+    final stockId = (row['id'] as num?)?.toInt();
+    if (stockId != null) {
+      stockIdByAllocationKey?[key] = stockId;
+    }
   }
   return allocations;
 }
