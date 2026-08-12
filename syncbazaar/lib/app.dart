@@ -106,7 +106,9 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
       auth: session,
       products: _productRepository,
     );
-    _salesRepository = SalesRepository();
+    // Built after events, which it needs to turn a sale's stock row back into
+    // the combination it was sold from.
+    _salesRepository = SalesRepository(auth: session, events: _eventRepository);
     _ordersRepository = OrdersRepository();
     // Null without a backend, so the in-memory build behaves exactly as before
     // and the POS has nothing to push to.

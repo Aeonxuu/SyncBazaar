@@ -42,6 +42,30 @@ class EventRepository {
   int? stockIdFor({required int eventId, required String allocationKey}) =>
       _stockIdsByEventId[eventId]?[allocationKey];
 
+  /// The same mapping read backwards, for sales arriving from the server.
+  ///
+  /// A sale names the stock row it came out of; the app names things by
+  /// combination. Uploading needs one direction, reading history needs the
+  /// other.
+  String? allocationKeyForStockId({required int eventId, required int stockId}) {
+    final rows = _stockIdsByEventId[eventId];
+    if (rows == null) {
+      return null;
+    }
+    for (final entry in rows.entries) {
+      if (entry.value == stockId) {
+        return entry.key;
+      }
+    }
+    return null;
+  }
+
+  /// The bazaars this vendor has, for callers that need to sweep all of them.
+  Future<List<BazaarEvent>> loadedEvents() async {
+    await _ensureLoaded();
+    return List<BazaarEvent>.unmodifiable(_events);
+  }
+
   BazaarStatus _statusFor(DateTime startDate, DateTime endDate) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
