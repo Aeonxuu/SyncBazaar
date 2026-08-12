@@ -6,7 +6,10 @@ import '../../../data/repositories/event_repository.dart';
 import '../../../data/repositories/orders_repository.dart';
 import '../../../data/repositories/product_repository.dart';
 import '../../../data/repositories/sales_repository.dart';
+import '../../../data/repositories/auth_repository.dart';
 import '../../../data/repositories/settings_repository.dart';
+import '../../../data/remote/api_client.dart';
+import '../../../services/report_service.dart';
 import '../../../models/bazaar_event.dart';
 import '../../../models/order.dart';
 import '../../../models/product.dart';
@@ -42,6 +45,9 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
     final productRepository = context.read<ProductRepository>();
     final eventRepository = context.read<EventRepository>();
     final settingsRepository = context.read<SettingsRepository>();
+    // Read before the first await, with the other repositories: reaching for
+    // the context after one is what the analyzer objects to, and rightly.
+    final reportService = ReportService(auth: context.read<AuthRepository>());
 
     final sales = await salesRepository.listSales();
     final orders = await ordersRepository.listOrders();
@@ -52,6 +58,24 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
       allocationsByEventId[event.id] = await eventRepository
           .allocationsForEventByAllocationKey(event.id);
     }
+    // Fetched per bazaar rather than counted here: the client keeps only what
+    // is *left* of an allocation, so the opening figure a reconciliation is
+    // measured against is already gone by the time this screen opens.
+    final reports = <int, ReconciliationReport>{};
+    if (reportService.isAvailable) {
+      for (final event in events) {
+        try {
+          final report = await reportService.reconciliation(event.id);
+          if (report != null) {
+            reports[event.id] = report;
+          }
+        } on ApiException {
+          // One bazaar failing should not take the whole page down; the row
+          // falls back to the local figures.
+        }
+      }
+    }
+
     final eventNameById = {for (final event in events) event.id: event.name};
     final companies = await settingsRepository.listCompanies();
     final companyById = {for (final company in companies) company.id: company};
@@ -64,6 +88,7 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
       products: products,
       events: events,
       allocationsByEventId: allocationsByEventId,
+      reconciliationByEventId: reports,
       eventNameById: eventNameById,
       locationNameByEventId: {
         for (final event in events)
@@ -193,16 +218,25 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
       orElse: () => data.events.first,
     );
     final allocations = data.allocationsByEventId[selectedEvent.id] ?? const {};
-    final allocatedQty = allocations.values.fold<int>(
-      0,
-      (sum, qty) => sum + qty,
-    );
-    final salesCount = data.sales
-        .where((sale) => sale.eventId == selectedEvent.id)
-        .length;
-    final ordersCount = data.orders
-        .where((order) => order.eventId == selectedEvent.id)
-        .length;
+    final report = data.reconciliationByEventId[selectedEvent.id];
+
+    // The server's figures where available. The local ones cannot answer this
+    // screen's actual question: allocations here are what is *left*, having
+    // been decremented by every sale, so counting them reports a bazaar as
+    // having been given whatever survived the day rather than what it opened
+    // with. Falling back to them is better than a blank card, but they read as
+    // "remaining", which is why they are labelled that way.
+    final allocatedLines = report?.allocatedStockItems ?? allocations.length;
+    final allocatedQty =
+        report?.totalAllocatedQuantity ??
+        allocations.values.fold<int>(0, (sum, qty) => sum + qty);
+    final soldQty = report?.totalSoldQuantity;
+    final remainingQty =
+        report?.totalRemainingQuantity ??
+        allocations.values.fold<int>(0, (sum, qty) => sum + qty);
+    final salesCount =
+        report?.completedSalesRecords ??
+        data.sales.where((sale) => sale.eventId == selectedEvent.id).length;
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -279,9 +313,17 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
                   data.locationNameByEventId[selectedEvent.id] ??
                   'Unknown venue',
               quickMeta: [
-                'Allocated lines: ${allocations.length}',
-                'Allocated qty: $allocatedQty',
-                'Sales: $salesCount • Orders: $ordersCount',
+                if (report != null) ...[
+                  'Allocated: $allocatedQty across $allocatedLines lines',
+                  'Sold: $soldQty  •  Remaining: $remainingQty',
+                  'Completed sales: $salesCount',
+                  if (!report.balances)
+                    'Unaccounted for: ${report.discrepancy}',
+                ] else ...[
+                  'Remaining: $remainingQty across $allocatedLines lines',
+                  'Completed sales: $salesCount',
+                  'Opening figures need the server',
+                ],
               ],
               onTap: () =>
                   _openReconciliationDetails(context, data, selectedEvent),
@@ -1120,6 +1162,7 @@ class _PostBazaarData {
     required this.locationNameByEventId,
     required this.incentivePercentByEventId,
     required this.bufferPercentByEventId,
+    required this.reconciliationByEventId,
   });
 
   final List<Sale> sales;
@@ -1127,6 +1170,12 @@ class _PostBazaarData {
   final List<Product> products;
   final List<BazaarEvent> events;
   final Map<int, Map<String, int>> allocationsByEventId;
+
+  /// The server's own count of what each bazaar started with, sold and has
+  /// left. Empty without a session, and empty for a bazaar whose figures could
+  /// not be fetched -- the screen falls back to what it can see locally.
+  final Map<int, ReconciliationReport> reconciliationByEventId;
+
   final Map<int, String> eventNameById;
   final Map<int, String> locationNameByEventId;
   final Map<int, double> incentivePercentByEventId;

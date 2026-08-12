@@ -159,6 +159,7 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
     }
     return MultiRepositoryProvider(
       providers: [
+        RepositoryProvider<AuthRepository>.value(value: _authRepository),
         RepositoryProvider<EventRepository>.value(value: _eventRepository),
         RepositoryProvider<ProductRepository>.value(value: _productRepository),
         RepositoryProvider<SalesRepository>.value(value: _salesRepository),
