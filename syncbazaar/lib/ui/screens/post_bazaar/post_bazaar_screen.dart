@@ -149,6 +149,13 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
             child: FutureBuilder<_PostBazaarData>(
               future: _futureData,
               builder: (context, snapshot) {
+                // A failed load used to fall through to the spinner below,
+                // because `hasData` is false for an error too -- so anything
+                // going wrong here showed as loading, for ever, with nothing
+                // said about it.
+                if (snapshot.hasError) {
+                  return _loadFailed(context, snapshot.error!);
+                }
                 if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
@@ -204,6 +211,38 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
       locationNameByEventId: data.locationNameByEventId,
       compactCardLayout: true,
       onOpenDetails: (event) => _openOrdersDetails(context, data, event),
+    );
+  }
+
+  /// Says what went wrong and offers the one useful action.
+  Widget _loadFailed(BuildContext context, Object error) {
+    final message = error is ApiException
+        ? error.message
+        : 'Something went wrong preparing this page.';
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline, size: 28, color: AppColors.error),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(height: 1.4),
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: _refresh,
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Try again'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
