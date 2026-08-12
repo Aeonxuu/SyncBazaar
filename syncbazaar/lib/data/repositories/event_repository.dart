@@ -85,6 +85,41 @@ class EventRepository {
     return BazaarStatus.ongoing;
   }
 
+  /// Orders bazaars the way someone standing at a till would look for them.
+  ///
+  /// The API returns them by creation, which buries the bazaar being sold at
+  /// today among ones that finished months ago. Ongoing come first, then
+  /// upcoming, then ended — so the one the app is actually for is the one at
+  /// the top of the screen.
+  ///
+  /// Within each group the order follows what the reader wants next: an
+  /// ongoing bazaar closing soonest, the next upcoming one to prepare for, and
+  /// the most recently finished, since older history matters less the further
+  /// back it goes.
+  ///
+  /// Sorted here rather than in the two screens that show the grid, which
+  /// would be two orderings to keep in step.
+  List<BazaarEvent> _sortedForDisplay(List<BazaarEvent> events) {
+    const rank = {
+      BazaarStatus.ongoing: 0,
+      BazaarStatus.upcoming: 1,
+      BazaarStatus.ended: 2,
+    };
+    final sorted = [...events];
+    sorted.sort((a, b) {
+      final byStatus = rank[a.status]!.compareTo(rank[b.status]!);
+      if (byStatus != 0) {
+        return byStatus;
+      }
+      return switch (a.status) {
+        BazaarStatus.ongoing => a.endDate.compareTo(b.endDate),
+        BazaarStatus.upcoming => a.startDate.compareTo(b.startDate),
+        BazaarStatus.ended => b.endDate.compareTo(a.endDate),
+      };
+    });
+    return sorted;
+  }
+
   void _refreshStatuses() {
     for (var i = 0; i < _events.length; i++) {
       final event = _events[i];
@@ -213,7 +248,7 @@ class EventRepository {
   Future<List<BazaarEvent>> listAll() async {
     await _ensureLoaded();
     _refreshStatuses();
-    return _events;
+    return _sortedForDisplay(_events);
   }
 
   Future<BazaarEvent> createEvent({
@@ -363,10 +398,12 @@ class EventRepository {
     await _ensureLoaded();
     _refreshStatuses();
     if (user.isAdminOrOwner) {
-      return _events;
+      return _sortedForDisplay(_events);
     }
     final assignedEventIds = user.assignedEventIdsEffective.toSet();
-    return _events.where((e) => assignedEventIds.contains(e.id)).toList();
+    return _sortedForDisplay(
+      _events.where((e) => assignedEventIds.contains(e.id)).toList(),
+    );
   }
 
   /// Closes a bazaar and returns its unsold stock to the master inventory.
