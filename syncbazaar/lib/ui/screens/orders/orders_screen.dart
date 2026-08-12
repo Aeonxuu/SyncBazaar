@@ -339,8 +339,15 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
     return BlocBuilder<PosCubit, PosState>(
       builder: (context, state) {
-        return Padding(
-          padding: const EdgeInsets.all(16),
+        // Scrollable, because the list is as long as the vendor's season. With
+        // twelve bazaars the grid ran 843px past the bottom of the window and
+        // there was no way to reach the last row -- including, for the user who
+        // found it, the bazaar they were currently selling at.
+        //
+        // Page padding is 24: this is a full top-level screen, and Section 4 of
+        // the design guidelines names this one.
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -371,97 +378,106 @@ class _OrdersScreenState extends State<OrdersScreen> {
                             borderRadius: BorderRadius.circular(12),
                             boxShadow: _kCardShadow,
                           ),
-                          child: AspectRatio(
-                            aspectRatio: 0.95,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        event.name,
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
+                          // Height comes from the content, not from the width.
+                          // A 0.95 aspect ratio made every card near-square --
+                          // about 284px tall at this width for roughly 110px of
+                          // title, badge and link, so more than half of each
+                          // card was empty and the grid was twice as tall as it
+                          // needed to be. Section 4 of the guidelines makes the
+                          // same point about dashboard tiles: card height must
+                          // not be a function of the viewport.
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      event.name,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                    ),
+                                  ),
+                                  Container(
+                                    width: 32,
+                                    height: 32,
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFF2ECFC),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Icon(
+                                      Icons.storefront_outlined,
+                                      color: AppColors.primary,
+                                      size: 18,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0x1A2E7D32),
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Text(
+                                  'ACTIVE BAZAAR',
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        color: const Color(0xFF2E7D32),
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                ),
+                              ),
+                              // A fixed gap rather than a Spacer: with the
+                              // height no longer forced there is no slack for
+                              // one to push against.
+                              const SizedBox(height: 16),
+                              Align(
+                                alignment: Alignment.bottomRight,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF2ECFC),
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        'View Orders',
                                         style: Theme.of(context)
                                             .textTheme
-                                            .titleMedium
+                                            .bodySmall
                                             ?.copyWith(
+                                              color: AppColors.primary,
                                               fontWeight: FontWeight.w700,
                                             ),
                                       ),
-                                    ),
-                                    Container(
-                                      width: 32,
-                                      height: 32,
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFF2ECFC),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: const Icon(
-                                        Icons.storefront_outlined,
+                                      const SizedBox(width: 4),
+                                      const Icon(
+                                        Icons.arrow_forward_rounded,
                                         color: AppColors.primary,
-                                        size: 18,
+                                        size: 16,
                                       ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0x1A2E7D32),
-                                    borderRadius: BorderRadius.circular(999),
-                                  ),
-                                  child: Text(
-                                    'ACTIVE BAZAAR',
-                                    style: Theme.of(context).textTheme.bodySmall
-                                        ?.copyWith(
-                                          color: const Color(0xFF2E7D32),
-                                          fontWeight: FontWeight.w700,
-                                        ),
+                                    ],
                                   ),
                                 ),
-                                const Spacer(),
-                                Align(
-                                  alignment: Alignment.bottomRight,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 6,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFF2ECFC),
-                                      borderRadius: BorderRadius.circular(999),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(
-                                          'View Orders',
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodySmall
-                                              ?.copyWith(
-                                                color: AppColors.primary,
-                                                fontWeight: FontWeight.w700,
-                                              ),
-                                        ),
-                                        const SizedBox(width: 4),
-                                        const Icon(
-                                          Icons.arrow_forward_rounded,
-                                          color: AppColors.primary,
-                                          size: 16,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
                         ),
                       ),

@@ -155,7 +155,15 @@ class DashboardCubit extends Cubit<DashboardState> {
         : const <String>[_employeeScopeFilter];
 
     final allSales = await _salesRepository.listSales();
-    final eventNameById = {for (final event in events) event.id: event.name};
+    // Scoped to the bazaars the filter actually offers, which excludes ended
+    // ones. "All bazaars" used to total every sale ever recorded while the
+    // dropdown beside it listed only the live bazaars — so the aggregate was
+    // larger than the sum of its own parts, and no choice in the list could
+    // reproduce it. Finished bazaars are reported on in Post-Bazaar, where
+    // their figures are final rather than moving.
+    final eventNameById = {
+      for (final event in summaryEvents) event.id: event.name,
+    };
     final salesForVisibleEvents = allSales
         .where((sale) => eventNameById.containsKey(sale.eventId))
         .toList();
