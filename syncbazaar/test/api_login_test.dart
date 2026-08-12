@@ -70,7 +70,7 @@ void main() {
     );
 
     await repository.login(
-      email: '  owner@fashionhub.com  ',
+      email: '  Owner@FashionHub.com  ',
       password: 'ownerpass',
       rememberMe: false,
     );
@@ -78,8 +78,10 @@ void main() {
     expect(captured.url.path, '/api/auth/login/');
     expect(captured.method, 'POST');
     expect(jsonDecode(captured.body), {
-      // Trimmed: a tablet keyboard readily adds a trailing space that the
-      // server would otherwise reject as a different address.
+      // Trimmed and lower-cased. The API matches the address exactly, and a
+      // tablet keyboard capitalises the first letter by default -- so the way
+      // a cashier normally types their address would otherwise be rejected as
+      // an unknown user, indistinguishable on screen from a wrong password.
       'email': 'owner@fashionhub.com',
       'password': 'ownerpass',
     });

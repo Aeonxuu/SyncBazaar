@@ -242,6 +242,50 @@ class EventRepository {
     return Map<String, int>.from(_allocationsByEventId[eventId] ?? const {});
   }
 
+  /// Takes [quantity] out of what this bazaar has left of one combination.
+  ///
+  /// This is what a sale spends. Stock moves out of the master inventory when
+  /// it is allocated to a bazaar — the shoes are physically at the stall — so
+  /// selling one must come off the bazaar's own pile, not the warehouse's. The
+  /// POS used to deduct from the master inventory instead, which both showed a
+  /// cashier stock that was not at their table and counted every sale against
+  /// the warehouse a second time.
+  ///
+  /// Returns false and changes nothing when the bazaar does not have that many
+  /// left, so a caller can refuse the sale rather than drive the figure
+  /// negative.
+  Future<bool> consumeAllocation({
+    required int eventId,
+    required String allocationKey,
+    required int quantity,
+  }) async {
+    await _ensureLoaded();
+    if (quantity <= 0) {
+      return false;
+    }
+    final allocations = _allocationsByEventId[eventId];
+    final remaining = allocations?[allocationKey] ?? 0;
+    if (allocations == null || remaining < quantity) {
+      return false;
+    }
+    allocations[allocationKey] = remaining - quantity;
+    return true;
+  }
+
+  /// Puts [quantity] back, for a sale that could not be completed.
+  Future<void> restoreAllocation({
+    required int eventId,
+    required String allocationKey,
+    required int quantity,
+  }) async {
+    await _ensureLoaded();
+    final allocations = _allocationsByEventId[eventId];
+    if (allocations == null || quantity <= 0) {
+      return;
+    }
+    allocations[allocationKey] = (allocations[allocationKey] ?? 0) + quantity;
+  }
+
   Future<void> updateEvent({
     required int eventId,
     required String name,

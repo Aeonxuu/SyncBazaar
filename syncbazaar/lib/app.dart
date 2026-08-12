@@ -40,6 +40,7 @@ import 'ui/screens/notifications/notifications_screen.dart';
 import 'ui/screens/venues/venues_screen.dart';
 import 'ui/screens/orders/orders_screen.dart';
 import 'ui/screens/pos/pos_screen.dart';
+import 'ui/screens/pos/widgets/discard_sale_guard.dart';
 import 'ui/screens/post_bazaar/post_bazaar_screen.dart';
 import 'ui/screens/pre_bazaar/pre_bazaar_screen.dart';
 import 'ui/screens/settings/settings_screen.dart';
@@ -91,9 +92,13 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
     _authRepository = AuthRepository();
     // Handed the session rather than an API client: the vendor whose data to
     // fetch is only known once someone signs in, and these are built before
-    // that. With mock seeding on there is no session, so both stay in memory
-    // and the seeder fills them as before.
-    final session = widget.seedMockData ? null : _authRepository;
+    // that. Without it both stay in memory and the seeder fills them as before.
+    //
+    // Keyed on the build flag rather than on `seedMockData`, which those are
+    // not the same question. Widget tests boot with seeding off to avoid the
+    // asset load, and tying the two together silently pointed them at a live
+    // server — a test suite has no business making HTTP requests.
+    final session = ApiConfig.useBackend ? _authRepository : null;
     _productRepository = ProductRepository(auth: session);
     _eventRepository = EventRepository(
       auth: session,
@@ -150,7 +155,12 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
       ],
       child: MultiBlocProvider(
         providers: [
-          BlocProvider(create: (_) => AuthCubit(_authRepository)),
+          // Restored immediately, otherwise the saved session is written on
+          // every login and read by nobody: `restoreSession` existed but had no
+          // caller, so "remember me" never survived a relaunch.
+          BlocProvider(
+            create: (_) => AuthCubit(_authRepository)..restoreSession(),
+          ),
           BlocProvider(
             create: (_) => DashboardCubit(
               _eventRepository,
@@ -211,7 +221,12 @@ class AuthGate extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocBuilder<AuthCubit, AuthState>(
       builder: (context, state) {
-        if (state.isLoading && !state.isAuthenticated) {
+        // Only the startup session read replaces the screen. A sign-in in
+        // flight must not: swapping the login form out for a spinner disposes
+        // its controllers, so a rejected password came back to an empty form,
+        // and the rebuilt screen subscribed too late to ever show the error.
+        // The form reports its own progress on the button instead.
+        if (state.isRestoring && !state.isAuthenticated) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
@@ -263,7 +278,20 @@ class _MainShellState extends State<MainShell> {
     context.read<NotificationsCubit>().load();
   }
 
-  void _handleSectionSelect(AppSection section) {
+  Future<void> _handleSectionSelect(AppSection section) async {
+    // Leaving the POS mid-sale discards the cart, and the rail is the easiest
+    // way to do it by accident — one stray tap while a customer waits. Asked
+    // here rather than inside the POS because the rail sits outside it and the
+    // section has already changed by the time the POS could react.
+    if (section != _section && _section == AppSection.pos) {
+      if (!await confirmLeavingSale(context)) {
+        return;
+      }
+      if (!mounted) {
+        return;
+      }
+    }
+
     setState(() => _section = section);
     switch (section) {
       case AppSection.dashboard:

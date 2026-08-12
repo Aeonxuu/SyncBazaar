@@ -15,6 +15,7 @@ import '../../../models/product_variant.dart';
 import '../../../models/user.dart';
 import '../../../data/repositories/product_repository.dart';
 import '../../widgets/confirmation_dialog.dart';
+import 'widgets/discard_sale_guard.dart';
 import '../../widgets/date_range_picker_dialog.dart';
 import '../../widgets/custom_card.dart';
 import '../../widgets/product_thumbnail.dart';
@@ -331,7 +332,15 @@ class _PosScreenState extends State<PosScreen> {
             // question the panel never used to: which bazaar am I selling at?
             _BazaarBreadcrumb(
               eventName: eventName,
-              onBack: () => context.read<PosCubit>().backToEventSelection(),
+              onBack: () async {
+                if (!await confirmLeavingSale(context)) {
+                  return;
+                }
+                if (!context.mounted) {
+                  return;
+                }
+                context.read<PosCubit>().backToEventSelection();
+              },
             ),
             const Spacer(),
             ConstrainedBox(

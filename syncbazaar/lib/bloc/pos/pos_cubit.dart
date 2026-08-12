@@ -68,11 +68,21 @@ class PosState {
     this.customerName = '',
     this.paymentExtraFieldValue = '',
     this.cashTendered = '',
+    this.allocations = const {},
   });
 
   final List<BazaarEvent> events;
   final BazaarEvent? selectedEvent;
   final List<Product> products;
+
+  /// What the selected bazaar has left, by combination.
+  ///
+  /// The till sells from the stall's own pile, never from the master
+  /// inventory: stock leaves the warehouse when it is allocated to a bazaar, so
+  /// the two are different numbers and only this one is standing on the table.
+  /// Reading the warehouse figure instead offered sizes that were never
+  /// brought and quantities that could not be handed over.
+  final Map<String, int> allocations;
   final List<CartItem> cart;
   final List<PaymentMethodMeta> paymentMethods;
   final String selectedPaymentMethod;
@@ -82,6 +92,13 @@ class PosState {
   /// Raw text of the "Cash received" field, kept as typed so a half-entered
   /// amount does not get rounded or reformatted under the cashier's cursor.
   final String cashTendered;
+
+  /// Whether there is unfinished work a cashier would lose by navigating away.
+  bool get hasSaleInProgress => cart.isNotEmpty;
+
+  /// Pieces in the cart, not distinct lines — what the cashier counted out onto
+  /// the counter, and the number that means something to them in a warning.
+  int get cartUnitCount => cart.fold(0, (sum, item) => sum + item.quantity);
 
   double get subtotal => cart.fold(0, (sum, item) => sum + item.lineTotal);
 
@@ -156,6 +173,7 @@ class PosState {
     String? customerName,
     String? paymentExtraFieldValue,
     String? cashTendered,
+    Map<String, int>? allocations,
     bool clearSelectedEvent = false,
   }) {
     return PosState(
@@ -172,6 +190,12 @@ class PosState {
       paymentExtraFieldValue:
           paymentExtraFieldValue ?? this.paymentExtraFieldValue,
       cashTendered: cashTendered ?? this.cashTendered,
+      // Dropped along with the event: allocations belong to one bazaar, and
+      // carrying them into the next would price a sale against another
+      // stall's stock.
+      allocations: clearSelectedEvent
+          ? const {}
+          : (allocations ?? this.allocations),
     );
   }
 }
@@ -222,11 +246,26 @@ class PosCubit extends Cubit<PosState> {
         .whereType<int>()
         .toSet();
 
+    // Rebuilt with this bazaar's own count, not the master inventory's. The
+    // product card prints `stockQuantity`, and the objects coming out of the
+    // catalogue carry the warehouse total — so a stall holding three pairs
+    // advertised two hundred.
     final allowedProducts = allocatedProductIds.isEmpty
         ? <Product>[]
-        : allProducts
-              .where((product) => allocatedProductIds.contains(product.id))
-              .toList();
+        : [
+            for (final product in allProducts)
+              if (allocatedProductIds.contains(product.id))
+                Product(
+                  id: product.id,
+                  name: product.name,
+                  description: product.description,
+                  basePrice: product.basePrice,
+                  stockQuantity: _allocatedTotalFor(product.id, allocations),
+                  imagePath: product.imagePath,
+                  imageBytes: product.imageBytes,
+                  status: product.status,
+                ),
+          ];
 
     final methods = _methodsForEvent(
       event,
@@ -238,8 +277,21 @@ class PosCubit extends Cubit<PosState> {
         products: allowedProducts,
         paymentMethods: methods,
         selectedPaymentMethod: methods.isEmpty ? 'CASH' : methods.first.name,
+        allocations: allocations,
       ),
     );
+  }
+
+  /// How many units of a product this bazaar has left across every
+  /// combination it was given.
+  static int _allocatedTotalFor(int productId, Map<String, int> allocations) {
+    var total = 0;
+    for (final entry in allocations.entries) {
+      if (int.tryParse(entry.key.split(':').first) == productId) {
+        total += entry.value;
+      }
+    }
+    return total;
   }
 
   void backToEventSelection() {
@@ -262,20 +314,44 @@ class PosCubit extends Cubit<PosState> {
       emit(state.copyWith(paymentExtraFieldValue: value));
   void updateCashTendered(String value) =>
       emit(state.copyWith(cashTendered: value));
+  /// What the selected bazaar has left of one combination.
+  ///
+  /// Answered from the event's allocation, not the master inventory. Those are
+  /// different numbers — stock leaves the warehouse when it is allocated — and
+  /// only this one is physically at the till.
   Future<int> availableStock({
     required int productId,
     int? optionIdA,
     int? optionIdB,
-  }) {
-    return _productRepository.combinationStock(
-      productId: productId,
+  }) async {
+    final key = _productRepository.allocationKey(
+      productId,
       optionIdA: optionIdA,
       optionIdB: optionIdB,
     );
+    return state.allocations[key] ?? 0;
   }
 
-  Future<Map<(int?, int?), int>> combinationStocksForProduct(int productId) {
-    return _productRepository.combinationStocksForProduct(productId);
+  /// The combinations this bazaar was actually given, and how many are left.
+  ///
+  /// Only allocated combinations appear. Listing every combination the product
+  /// exists in offered the cashier sizes that were never brought to the stall,
+  /// which reads as "in stock" right up until the customer asks for one.
+  Future<Map<(int?, int?), int>> combinationStocksForProduct(
+    int productId,
+  ) async {
+    final stocks = <(int?, int?), int>{};
+    for (final entry in state.allocations.entries) {
+      final parts = entry.key.split(':');
+      if (parts.length != 3 || int.tryParse(parts.first) != productId) {
+        continue;
+      }
+      final optionA = int.tryParse(parts[1]) ?? 0;
+      final optionB = int.tryParse(parts[2]) ?? 0;
+      stocks[(optionA == 0 ? null : optionA, optionB == 0 ? null : optionB)] =
+          entry.value;
+    }
+    return stocks;
   }
 
   int _reservedInCart({
@@ -478,10 +554,17 @@ class PosCubit extends Cubit<PosState> {
     final soldAt = DateTime.now();
 
     for (final item in state.cart) {
-      final deducted = await _productRepository.reserveForSale(
-        productId: item.product.id,
-        optionIdA: item.variantOptionIdA,
-        optionIdB: item.variantOptionIdB,
+      // Spent against the bazaar's allocation, not the master inventory. Those
+      // units already left the warehouse when they were allocated here, so
+      // deducting there as well counted every sale twice — and let the till
+      // sell stock that was never at the stall.
+      final deducted = await _eventRepository.consumeAllocation(
+        eventId: event.id,
+        allocationKey: _productRepository.allocationKey(
+          item.product.id,
+          optionIdA: item.variantOptionIdA,
+          optionIdB: item.variantOptionIdB,
+        ),
         quantity: item.quantity,
       );
       if (!deducted) {
@@ -532,8 +615,30 @@ class PosCubit extends Cubit<PosState> {
     // Built before the emit below, which clears the cart it reads from.
     final receipt = await _buildReceipt(user: user, event: event, at: soldAt);
 
+    // Re-read so the next customer sees what is actually left; the figures on
+    // screen were correct until this sale took units out of them.
+    final remaining = await _eventRepository.allocationsForEventByAllocationKey(
+      event.id,
+    );
+
     emit(
       state.copyWith(
+        allocations: remaining,
+        // Recounted too, or the card keeps advertising the figure from before
+        // this sale while the picker behind it shows the truth.
+        products: [
+          for (final product in state.products)
+            Product(
+              id: product.id,
+              name: product.name,
+              description: product.description,
+              basePrice: product.basePrice,
+              stockQuantity: _allocatedTotalFor(product.id, remaining),
+              imagePath: product.imagePath,
+              imageBytes: product.imageBytes,
+              status: product.status,
+            ),
+        ],
         cart: const [],
         customerName: '',
         paymentExtraFieldValue: '',

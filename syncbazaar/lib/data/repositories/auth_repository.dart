@@ -53,13 +53,16 @@ class AuthRepository {
       email: 'owner@syncbazaar.com',
       role: UserRole.owner,
     ),
+    // No assignment here. This used to pin Via to event 1, which the seeder
+    // creates as August Fair — while the dataset also puts her on Weekend
+    // Pop-Up, whose dates swallow it. That is a double-booking: one person at
+    // two stalls on the same day. Assignments come from the dataset alone now,
+    // so the two cannot disagree.
     const AppUser(
       id: 3,
       name: 'Via',
       email: 'employee@syncbazaar.com',
       role: UserRole.employee,
-      assignedEventId: 1,
-      assignedEventIds: [1],
     ),
     const AppUser(
       id: 4,
@@ -180,12 +183,19 @@ class AuthRepository {
     required String password,
     required bool rememberMe,
   }) async {
+    // Lower-cased, not just trimmed. The API matches the address exactly, so
+    // "Owner@..." is rejected as unknown -- and a tablet keyboard capitalises
+    // the first letter of a field by default, which makes that the *normal*
+    // way a cashier types their address rather than an unlucky one. Nothing on
+    // screen distinguishes it from a wrong password.
+    final normalizedEmail = email.trim().toLowerCase();
+
     final Map<String, dynamic> body;
     try {
       body =
           await _api.post(
                 '/api/auth/login/',
-                body: {'email': email.trim(), 'password': password},
+                body: {'email': normalizedEmail, 'password': password},
               )
               as Map<String, dynamic>;
     } on ApiException catch (error) {
@@ -195,7 +205,7 @@ class AuthRepository {
       rethrow;
     }
 
-    final user = AppUser.fromLoginResponse(body, email: email.trim());
+    final user = AppUser.fromLoginResponse(body, email: normalizedEmail);
     final token = body['token'] as String?;
 
     _api.token = token;

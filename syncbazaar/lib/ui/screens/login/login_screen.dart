@@ -69,14 +69,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(36, 40, 36, 36),
-                      child: BlocConsumer<AuthCubit, dynamic>(
-                        listener: (context, state) {
-                          if (state.error != null) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(state.error)),
-                            );
-                          }
-                        },
+                      // The error is drawn into the form below rather than
+                      // announced in a snackbar, so there is one message
+                      // instead of two and it stays put while it is fixed.
+                      child: BlocBuilder<AuthCubit, dynamic>(
                         builder: (context, state) {
                           if (_showForgotPassword) {
                             return _buildForgotPasswordContent(context);
@@ -166,6 +162,43 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
         ),
+        // Rendered from state rather than shown as a snackbar, so it is still
+        // on screen while the cashier retypes. A snackbar for the one message
+        // that says why the button did nothing is gone before they look up.
+        if (state.error != null) ...[
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppColors.error.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: AppColors.error.withValues(alpha: 0.35),
+              ),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  Icons.error_outline,
+                  size: 18,
+                  color: AppColors.error,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    state.error as String,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppColors.error,
+                      height: 1.35,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
         const SizedBox(height: 18),
         SizedBox(
           height: 56,

@@ -185,11 +185,33 @@ void main() {
     }
 
     // Both assigned staff exist, so the bazaar is reachable from an employee
-    // login and not just the owner's.
+    // login and not just the owner's. Two of them, because a bazaar running
+    // several days is covered by staff working alternating shifts.
     final staff = (await authRepository.listUsers())
         .where((u) => u.assignedEventIdsEffective.contains(fair.id))
         .toList();
-    expect(staff.length, 2);
+    expect(staff.map((u) => u.name).toSet(), {'Missy', 'TG'});
+
+    // Nobody may be on two bazaars whose dates overlap — one person cannot
+    // stand at two stalls at once. Asserted here because the failure is
+    // invisible until someone reads the roster.
+    final allEvents = await eventRepository.listAll();
+    for (final user in await authRepository.listUsers()) {
+      final worked = allEvents
+          .where((e) => user.assignedEventIdsEffective.contains(e.id))
+          .toList();
+      for (var i = 0; i < worked.length; i++) {
+        for (var j = i + 1; j < worked.length; j++) {
+          final a = worked[i];
+          final b = worked[j];
+          expect(
+            a.startDate.isAfter(b.endDate) || b.startDate.isAfter(a.endDate),
+            isTrue,
+            reason: '${user.name} is on "${a.name}" and "${b.name}" at once',
+          );
+        }
+      }
+    }
 
     // Sold units have to come out of what was allocated, or the POS will
     // show stock the bazaar never had.

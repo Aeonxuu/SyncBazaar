@@ -1266,8 +1266,8 @@
         "GCASH"
       ],
       "assigned_employee_emails": [
-        "employee@syncbazaar.com",
-        "missy@syncbazaar.com"
+        "missy@syncbazaar.com",
+        "tg@syncbazaar.com"
       ],
       "allocations": [
         {
@@ -1545,7 +1545,7 @@
       "name": "Midweek Office Bazaar",
       "company_id": "c3",
       "start_date": "2026-08-10",
-      "end_date": "2026-08-12",
+      "end_date": "2026-08-14",
       "payment_methods": [
         "CASH",
         "GCASH"

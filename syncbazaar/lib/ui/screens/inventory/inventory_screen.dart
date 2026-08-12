@@ -2286,6 +2286,16 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
               Wrap(
                 spacing: 10,
                 runSpacing: 10,
+                // Cells are aligned by their bottoms, not their tops. Option
+                // names are free text and the cell is a fixed 104px, so one of
+                // them wrapping to a second line is normal — "Light Orewood
+                // Brown" beside "Triple White". Top-aligned, that pushed the
+                // longer name's input a line below its neighbours' and broke
+                // the row of boxes the eye scans down. Aligning the bottoms
+                // keeps every input on one line for any number of label lines,
+                // and leaves a consistent gap between each label and its own
+                // box.
+                crossAxisAlignment: WrapCrossAlignment.end,
                 children: [
                   for (final valueB in valuesB)
                     SizedBox(

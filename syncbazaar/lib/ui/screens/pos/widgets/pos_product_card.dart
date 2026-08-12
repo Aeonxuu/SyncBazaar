@@ -100,8 +100,13 @@ class _PosProductCardState extends State<PosProductCard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // 8:12 rather than an even split. Giving the price its own
+                // line costs a line's worth of height, and the text block is
+                // where that has to come from — at the smallest size the grid
+                // produces, an even split overflows by 15px. The photo loses
+                // proportionally little and is still the largest element.
                 Expanded(
-                  flex: 5,
+                  flex: 8,
                   child: ProductThumbnail(
                     imagePath: product.imagePath,
                     imageBytes: product.imageBytes,
@@ -112,7 +117,7 @@ class _PosProductCardState extends State<PosProductCard> {
                   ),
                 ),
                 Expanded(
-                  flex: 5,
+                  flex: 12,
                   child: Padding(
                     // Sides and bottom are the gap the corner rule is
                     // measured against, so they have to match each other.
@@ -135,23 +140,24 @@ class _PosProductCardState extends State<PosProductCard> {
                               ?.copyWith(fontWeight: FontWeight.w700),
                         ),
                         const Spacer(),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                formatPeso(product.basePrice),
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.bodyMedium
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.w700,
-                                      color: AppColors.primary,
-                                    ),
+                        // Price on its own line rather than sharing a row with
+                        // the stock pill. Sharing one meant the two competed
+                        // for a 150-190px tile, and the price — the longer and
+                        // more variable of the two — was the one that lost,
+                        // ellipsing "PHP 1,900.00" into "PHP 1,900...." right
+                        // where the cashier is checking it.
+                        Text(
+                          formatPeso(product.basePrice),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.primary,
                               ),
-                            ),
-                            const SizedBox(width: 4),
-                            StockPill(quantity: product.stockQuantity),
-                          ],
                         ),
+                        const SizedBox(height: 4),
+                        StockPill(quantity: product.stockQuantity),
                         const SizedBox(height: 8),
                         SizedBox(
                           width: double.infinity,

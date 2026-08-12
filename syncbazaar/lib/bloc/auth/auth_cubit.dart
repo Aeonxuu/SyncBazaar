@@ -10,9 +10,9 @@ class AuthCubit extends Cubit<AuthState> {
   final AuthRepository _authRepository;
 
   Future<void> restoreSession() async {
-    emit(state.copyWith(isLoading: true, clearError: true));
+    emit(state.copyWith(isRestoring: true, clearError: true));
     final user = await _authRepository.restoreSession();
-    emit(state.copyWith(user: user, isLoading: false));
+    emit(state.copyWith(user: user, isRestoring: false));
   }
 
   /// Signs in, distinguishing a rejected password from an unreachable server.

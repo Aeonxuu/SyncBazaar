@@ -1,9 +1,15 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:syncbazaar/app.dart';
 import 'package:syncbazaar/ui/screens/login/login_screen.dart';
 
 void main() {
+  // The app restores any saved session on boot, which reads
+  // `shared_preferences`. Without a mock store that plugin call never resolves
+  // in a test and `pumpAndSettle` below spins until it times out.
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
   testWidgets('SyncBazaar boots to the login screen', (tester) async {
     // Seeding is off here on purpose. The dev seeder reads
     // `assets/dev/mock_data.json` through `rootBundle`, which is real I/O and

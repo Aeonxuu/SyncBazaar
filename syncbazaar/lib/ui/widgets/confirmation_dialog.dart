@@ -13,6 +13,21 @@ enum ConfirmationTone {
   destructive,
 }
 
+/// Which choice gets the filled button, the focus, and the Enter key.
+enum ConfirmationEmphasis {
+  /// The confirming action. Right when the user asked for it and the dialog is
+  /// a speed bump — they tapped "Delete product", so the dialog is confirming
+  /// an intent they already expressed.
+  confirm,
+
+  /// The cancelling action. Right when the destructive part is a *consequence*
+  /// rather than the request — tapping a navigation item that happens to throw
+  /// away a half-rung sale. The user did not ask to lose anything, so backing
+  /// out is the likely intent and must be the easy path; the destructive option
+  /// stays reachable but quiet, and Enter can no longer trigger it.
+  cancel,
+}
+
 /// The app's one confirmation modal.
 ///
 /// Rebuilt to match the dialog language used by the product form and the
@@ -36,6 +51,8 @@ Future<bool> showConfirmationDialog({
   String cancelLabel = 'Cancel',
   String confirmLabel = 'Confirm',
   ConfirmationTone tone = ConfirmationTone.normal,
+  ConfirmationEmphasis emphasis = ConfirmationEmphasis.confirm,
+  IconData? icon,
 }) async {
   final result = await showDialog<bool>(
     context: context,
@@ -46,8 +63,12 @@ Future<bool> showConfirmationDialog({
       cancelLabel: cancelLabel,
       confirmLabel: confirmLabel,
       tone: tone,
+      emphasis: emphasis,
+      icon: icon,
     ),
   );
+  // Dismissing by tapping the barrier reads as backing out, so the absence of
+  // an answer is a "no" -- never a silent yes to something irreversible.
   return result ?? false;
 }
 
@@ -58,6 +79,8 @@ class _ConfirmationDialog extends StatelessWidget {
     required this.cancelLabel,
     required this.confirmLabel,
     required this.tone,
+    required this.emphasis,
+    this.icon,
   });
 
   final String title;
@@ -65,6 +88,16 @@ class _ConfirmationDialog extends StatelessWidget {
   final String cancelLabel;
   final String confirmLabel;
   final ConfirmationTone tone;
+
+  final ConfirmationEmphasis emphasis;
+
+  /// Overrides the tone's default glyph.
+  ///
+  /// [ConfirmationTone.destructive] draws a wastebasket, which is right for
+  /// deleting a record and wrong for anything else that is merely irreversible
+  /// — discarding a half-rung sale loses work without deleting anything the
+  /// cashier would call a thing. The tone still decides the colour.
+  final IconData? icon;
 
   @override
   Widget build(BuildContext context) {
@@ -105,9 +138,10 @@ class _ConfirmationDialog extends StatelessWidget {
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Icon(
-                        isDestructive
-                            ? Icons.delete_outline_rounded
-                            : Icons.help_outline_rounded,
+                        icon ??
+                            (isDestructive
+                                ? Icons.delete_outline_rounded
+                                : Icons.help_outline_rounded),
                         size: 19,
                         color: accent,
                       ),
@@ -141,40 +175,40 @@ class _ConfirmationDialog extends StatelessWidget {
               const Divider(height: 1, color: AppColors.border),
               Padding(
                 padding: const EdgeInsets.fromLTRB(24, 14, 24, 16),
+                // The filled button is whichever choice the dialog wants to be
+                // easy, and it always sits on the right where the eye and the
+                // thumb finish. Under `ConfirmationEmphasis.cancel` that is
+                // backing out, so the destructive option becomes a quiet text
+                // button — still red, still one tap away, but no longer the
+                // thing you hit by reflex or by pressing Enter.
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context, false),
-                      style: TextButton.styleFrom(
-                        foregroundColor: Colors.black54,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 10,
-                        ),
+                    if (emphasis == ConfirmationEmphasis.confirm) ...[
+                      _QuietButton(
+                        label: cancelLabel,
+                        color: Colors.black54,
+                        onPressed: () => Navigator.pop(context, false),
                       ),
-                      child: Text(cancelLabel),
-                    ),
-                    const SizedBox(width: 12),
-                    ElevatedButton(
-                      // Focused by default so Enter confirms and Esc cancels,
-                      // which is what a keyboard user will try first.
-                      autofocus: true,
-                      onPressed: () => Navigator.pop(context, true),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: accent,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 22,
-                          vertical: 14,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+                      const SizedBox(width: 12),
+                      _FilledButton(
+                        label: confirmLabel,
+                        color: accent,
+                        onPressed: () => Navigator.pop(context, true),
                       ),
-                      child: Text(confirmLabel),
-                    ),
+                    ] else ...[
+                      _QuietButton(
+                        label: confirmLabel,
+                        color: accent,
+                        onPressed: () => Navigator.pop(context, true),
+                      ),
+                      const SizedBox(width: 12),
+                      _FilledButton(
+                        label: cancelLabel,
+                        color: AppColors.primary,
+                        onPressed: () => Navigator.pop(context, false),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -182,6 +216,65 @@ class _ConfirmationDialog extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The dialog's easy choice: filled, and focused so Enter picks it.
+///
+/// Secondary-action sizing from the design guidelines' button tiers — auto
+/// width, not stretched. A dialog action is not a primary CTA.
+class _FilledButton extends StatelessWidget {
+  const _FilledButton({
+    required this.label,
+    required this.color,
+    required this.onPressed,
+  });
+
+  final String label;
+  final Color color;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return ElevatedButton(
+      // Enter picks this one and Esc dismisses, which is what a keyboard user
+      // tries first. It is only ever the safe choice when the dialog says so.
+      autofocus: true,
+      onPressed: onPressed,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: color,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+      child: Text(label),
+    );
+  }
+}
+
+/// The dialog's deliberate choice: present and legible, but not the reflex.
+class _QuietButton extends StatelessWidget {
+  const _QuietButton({
+    required this.label,
+    required this.color,
+    required this.onPressed,
+  });
+
+  final String label;
+  final Color color;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton(
+      onPressed: onPressed,
+      style: TextButton.styleFrom(
+        foregroundColor: color,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      ),
+      child: Text(label),
     );
   }
 }
