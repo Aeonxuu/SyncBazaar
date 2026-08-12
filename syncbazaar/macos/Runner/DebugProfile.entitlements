@@ -8,6 +8,14 @@
 	<true/>
 	<key>com.apple.security.network.server</key>
 	<true/>
+	<!-- Outgoing connections, which is how this app reaches the backend. The
+	     `network.server` key above is the opposite direction and is there for
+	     Flutter's own debug tooling, so its presence is not a substitute:
+	     without this one the sandbox refuses every request before it leaves
+	     the process, and the app reports the server as unreachable while the
+	     server is running perfectly well. -->
+	<key>com.apple.security.network.client</key>
+	<true/>
 	<!-- Without this the sandbox redirects a saved receipt into the app's
 	     private container instead of the user's real ~/Downloads. -->
 	<key>com.apple.security.files.downloads.read-write</key>
