@@ -36,6 +36,7 @@ class Sale {
     this.variantOptionIdA,
     this.variantOptionIdB,
     required this.customerName,
+    this.soldById = 0,
     required this.employeeId,
     required this.paymentMethod,
     required this.qty,
@@ -63,6 +64,15 @@ class Sale {
   final int? variantOptionIdA;
   final int? variantOptionIdB;
   final String customerName;
+
+  /// Which user rang it up, so an employee's transaction history can be
+  /// narrowed to their own. Zero when unknown — a sale recorded before this
+  /// was tracked, or one entered server-side.
+  ///
+  /// Not to be confused with [employeeId], which despite its name holds the
+  /// reference a payment method asked for.
+  final int soldById;
+
   final String employeeId;
   final String paymentMethod;
   final int qty;
@@ -83,6 +93,7 @@ class Sale {
       variantOptionIdA: variantOptionIdA,
       variantOptionIdB: variantOptionIdB,
       customerName: customerName,
+      soldById: soldById,
       employeeId: employeeId,
       paymentMethod: paymentMethod,
       qty: qty,

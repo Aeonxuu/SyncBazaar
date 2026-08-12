@@ -1,6 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../data/repositories/orders_repository.dart';
+import '../../data/repositories/product_repository.dart';
 import '../../data/repositories/sales_repository.dart';
 import '../../models/user.dart';
 
@@ -75,41 +76,74 @@ class OrdersState {
 }
 
 class OrdersCubit extends Cubit<OrdersState> {
-  OrdersCubit(this._ordersRepository, this._salesRepository)
+  OrdersCubit(
+    this._ordersRepository,
+    this._salesRepository,
+    this._productRepository,
+  )
     : super(const OrdersState());
 
   final OrdersRepository _ordersRepository;
   final SalesRepository _salesRepository;
+  final ProductRepository _productRepository;
 
+  /// Builds the transaction history from sales.
+  ///
+  /// It used to be built from `Order` records, looking each one's sale up by
+  /// id. Orders live only in this device's memory, so once sales started
+  /// coming back from the server the history was empty on every launch: a
+  /// bazaar with a day of takings behind it reported nothing sold.
+  ///
+  /// The sale is the record of what happened; an order carried the same facts
+  /// again, plus a label. So the label is the only thing still read from it,
+  /// and only when a matching order happens to be in memory — otherwise it is
+  /// rebuilt from the catalogue.
   Future<void> load() async {
-    final orders = await _ordersRepository.listOrders();
     final sales = await _salesRepository.listSales();
-    final saleById = {for (final sale in sales) sale.id: sale};
+    final orders = await _ordersRepository.listOrders();
+    final labelBySaleId = {
+      for (final order in orders) order.saleId: order.productLabel,
+    };
+    final labels = await _productLabels();
 
-    final records = <TransactionRecord>[];
-    for (final order in orders) {
-      final sale = saleById[order.saleId];
-      if (sale == null) {
-        continue;
-      }
-      records.add(
+    final records = <TransactionRecord>[
+      for (final sale in sales)
         TransactionRecord(
-          orderId: order.id,
-          customerName: order.customerName,
+          orderId: sale.id,
+          customerName: sale.customerName,
           timestamp: sale.timestamp,
-          productLabel: order.productLabel,
+          productLabel:
+              labelBySaleId[sale.id] ??
+              labels.labelFor(
+                productId: sale.productId,
+                optionIdA: sale.variantOptionIdA,
+                optionIdB: sale.variantOptionIdB,
+              ),
           unitPrice: sale.qty > 0 ? sale.total / sale.qty : sale.total,
           quantity: sale.qty,
           total: sale.total,
-          eventId: order.eventId,
-          paymentMethod: order.paymentMethod,
-          userId: order.userId,
+          eventId: sale.eventId,
+          paymentMethod: sale.paymentMethod,
+          userId: sale.soldById,
         ),
-      );
-    }
+    ];
     records.sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
     emit(state.copyWith(records: records));
+  }
+
+  /// Product and option names, for rebuilding "what was sold" from a sale.
+  Future<_ProductLabels> _productLabels() async {
+    final products = await _productRepository.listProducts();
+    final names = {for (final product in products) product.id: product.name};
+    final options = <int, String>{};
+    for (final product in products) {
+      for (final option in await _productRepository
+          .allVariantOptionsForProduct(product.id)) {
+        options[option.id] = option.value;
+      }
+    }
+    return _ProductLabels(names: names, optionValues: options);
   }
 
   void filterByEvent(int? eventId) {
@@ -122,4 +156,29 @@ class OrdersCubit extends Cubit<OrdersState> {
 
   void filterByPayment(String payment) =>
       emit(state.copyWith(paymentMethod: payment));
+}
+
+/// Product and option names, so a sale can say what was sold.
+class _ProductLabels {
+  const _ProductLabels({required this.names, required this.optionValues});
+
+  final Map<int, String> names;
+  final Map<int, String> optionValues;
+
+  /// "Nike Air Max SC (42, Triple White)".
+  ///
+  /// Falls back to the product alone when an option is unknown -- an archived
+  /// variant, say -- rather than printing a bare id at a cashier.
+  String labelFor({
+    required int productId,
+    int? optionIdA,
+    int? optionIdB,
+  }) {
+    final name = names[productId] ?? 'Unknown product';
+    final parts = [
+      for (final id in [optionIdA, optionIdB])
+        if (id != null && optionValues[id] != null) optionValues[id]!,
+    ];
+    return parts.isEmpty ? name : '$name (${parts.join(', ')})';
+  }
 }

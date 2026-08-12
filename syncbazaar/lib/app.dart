@@ -194,7 +194,11 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
           ),
           BlocProvider(
             create: (_) =>
-                OrdersCubit(_ordersRepository, _salesRepository)..load(),
+                OrdersCubit(
+                  _ordersRepository,
+                  _salesRepository,
+                  _productRepository,
+                )..load(),
           ),
           BlocProvider(
             create: (_) => ApprovalsCubit(

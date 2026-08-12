@@ -62,6 +62,7 @@ List<Sale> mapSalesResponse(
         variantOptionIdA: optionA == 0 ? null : optionA,
         variantOptionIdB: optionB == 0 ? null : optionB,
         customerName: normalizeCustomerName(map['customer_name'] as String?),
+        soldById: (map['sold_by'] as num?)?.toInt() ?? 0,
         // Holds the reference a payment method asked for -- a GCash number,
         // say. Named employeeId for historical reasons; the POS fills it from
         // the payment's extra field.

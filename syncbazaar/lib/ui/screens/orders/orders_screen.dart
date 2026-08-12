@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../bloc/orders/orders_cubit.dart';
 import '../../../bloc/pos/pos_cubit.dart';
 import '../../../core/constants/colors.dart';
+import '../../../models/bazaar_event.dart';
 import '../../../models/user.dart';
 import '../../screens/dashboard/widgets/dashboard_section_card.dart';
 import '../../../core/utils/formatters.dart';
@@ -357,8 +358,11 @@ class _OrdersScreenState extends State<OrdersScreen> {
               ),
               const SizedBox(height: 16),
               Wrap(
-                spacing: 12,
-                runSpacing: 12,
+                // One gutter, equal in both axes, per Section 4. Twelve at this
+                // card size read as crowded once the cards stopped being mostly
+                // whitespace.
+                spacing: 16,
+                runSpacing: 16,
                 children: state.events.asMap().entries.map((entry) {
                   final index = entry.key;
                   final event = entry.value;
@@ -390,55 +394,25 @@ class _OrdersScreenState extends State<OrdersScreen> {
                             mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      event.name,
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .titleMedium
-                                          ?.copyWith(
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                    ),
-                                  ),
-                                  Container(
-                                    width: 32,
-                                    height: 32,
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFF2ECFC),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: const Icon(
-                                      Icons.storefront_outlined,
-                                      color: AppColors.primary,
-                                      size: 18,
-                                    ),
-                                  ),
-                                ],
+                              // No storefront icon. It was the same glyph on
+                              // every card, so it distinguished nothing and
+                              // only competed with the one thing that does --
+                              // the name. Dropping it also gives a long bazaar
+                              // name the full width before it wraps.
+                              Text(
+                                event.name,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w700),
                               ),
                               const SizedBox(height: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(0x1A2E7D32),
-                                  borderRadius: BorderRadius.circular(999),
-                                ),
-                                child: Text(
-                                  'ACTIVE BAZAAR',
-                                  style: Theme.of(context).textTheme.bodySmall
-                                      ?.copyWith(
-                                        color: const Color(0xFF2E7D32),
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                ),
-                              ),
+                              // The bazaar's actual status. Every card used to
+                              // read ACTIVE BAZAAR regardless, so one that
+                              // finished in June looked like one selling today
+                              // -- and the badge, being always identical, told
+                              // the reader nothing at all.
+                              _StatusBadge(status: event.status),
                               // A fixed gap rather than a Spacer: with the
                               // height no longer forced there is no slack for
                               // one to push against.
@@ -565,6 +539,41 @@ class _InteractiveCardState extends State<_InteractiveCard> {
           onTapUp: (_) => setState(() => _pressed = false),
           onTapCancel: () => setState(() => _pressed = false),
           child: widget.child,
+        ),
+      ),
+    );
+  }
+}
+
+/// The bazaar's status, coloured by what it means for the reader.
+///
+/// Green for the one you can sell at now, amber for one still to come, grey for
+/// one that is done — so the state is legible from the colour before the word
+/// is read, and an ended bazaar stops looking like a live one.
+class _StatusBadge extends StatelessWidget {
+  const _StatusBadge({required this.status});
+
+  final BazaarStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, colour) = switch (status) {
+      BazaarStatus.ongoing => ('ACTIVE BAZAAR', const Color(0xFF2E7D32)),
+      BazaarStatus.upcoming => ('UPCOMING', const Color(0xFF8A6100)),
+      BazaarStatus.ended => ('ENDED', Colors.black54),
+    };
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: colour.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: colour,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );

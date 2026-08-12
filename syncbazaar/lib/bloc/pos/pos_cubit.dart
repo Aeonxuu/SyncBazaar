@@ -611,6 +611,7 @@ class PosCubit extends Cubit<PosState> {
         variantOptionIdA: item.variantOptionIdA,
         variantOptionIdB: item.variantOptionIdB,
         customerName: normalizeCustomerName(state.customerName),
+        soldById: user.id,
         employeeId: state.paymentExtraFieldValue,
         paymentMethod: state.selectedPaymentMethod,
         qty: item.quantity,
