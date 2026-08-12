@@ -1,5 +1,6 @@
 import '../../models/bazaar_event.dart';
 import '../../models/user.dart';
+import '../remote/api_client.dart';
 import '../remote/event_api_mapper.dart';
 import 'auth_repository.dart';
 import 'product_repository.dart';
@@ -13,8 +14,8 @@ class EventRepository {
   /// first use rather than at construction, since `app.dart` builds every
   /// repository before anyone has signed in.
   ///
-  /// Reads only. Creating, editing, finalizing and clearing allocations still
-  /// happen in memory and do not reach the server yet.
+  /// Creating a bazaar and its allocations reaches the server. Editing,
+  /// finalizing and clearing allocations still happen in memory only.
   EventRepository({AuthRepository? auth, ProductRepository? products})
     : _auth = auth,
       _products = products;
@@ -200,26 +201,138 @@ class EventRepository {
     List<BazaarPaymentMethod> customOtherMethods = const [],
     Map<String, int> allocationsByAllocationKey = const {},
   }) async {
-    final nextId = _events.isEmpty
-        ? 1
-        : _events.map((e) => e.id).reduce((a, b) => a > b ? a : b) + 1;
-    final eventStatus = _statusFor(startDate, endDate);
+    await _ensureLoaded();
 
-    final event = BazaarEvent(
-      id: nextId,
+    // Created on the server first, so the bazaar carries the id the server
+    // assigned. Inventing one locally and reconciling later would mean the
+    // allocations, and every sale rung against them, pointing at a bazaar that
+    // does not exist anywhere else.
+    final serverId = await _createEventOnServer(
       name: name,
       companyId: companyId,
       startDate: startDate,
       endDate: endDate,
-      status: eventStatus,
+      allocationsByAllocationKey: allocationsByAllocationKey,
+    );
+
+    final id = serverId ?? _nextLocalEventId();
+    final event = BazaarEvent(
+      id: id,
+      name: name,
+      companyId: companyId,
+      startDate: startDate,
+      endDate: endDate,
+      status: _statusFor(startDate, endDate),
       acceptedPaymentMethods: acceptedPaymentMethods,
       customOtherMethods: customOtherMethods,
     );
     _events.add(event);
-    _allocationsByEventId[nextId] = Map<String, int>.from(
+    _allocationsByEventId[id] = Map<String, int>.from(
       allocationsByAllocationKey,
     );
     return event;
+  }
+
+  int _nextLocalEventId() => _events.isEmpty
+      ? 1
+      : _events.map((e) => e.id).reduce((a, b) => a > b ? a : b) + 1;
+
+  /// Creates the bazaar and its stock allocations, returning the server's id.
+  ///
+  /// Null without a session, which is the in-memory build.
+  ///
+  /// Throws on failure rather than falling back to a local-only bazaar: a
+  /// bazaar that exists on one tablet and nowhere else is worse than none at
+  /// all, because staff will allocate stock to it and sell against it before
+  /// anyone notices. The caller reports the failure and the user tries again.
+  Future<int?> _createEventOnServer({
+    required String name,
+    required int companyId,
+    required DateTime startDate,
+    required DateTime endDate,
+    required Map<String, int> allocationsByAllocationKey,
+  }) async {
+    final auth = _auth;
+    final products = _products;
+    final vendorId = auth?.vendorId;
+    if (auth == null || products == null || vendorId == null) {
+      return null;
+    }
+
+    final created =
+        await auth.api.post(
+              '/api/bazaar/event/',
+              body: {
+                'name': name,
+                'establishment': companyId,
+                // Required even though the view sets it from the signed-in
+                // user's vendor; the serializer declares it without
+                // read_only.
+                'vendor': vendorId,
+                'address': await _addressForEstablishment(auth, companyId),
+                'start_date': startDate.toUtc().toIso8601String(),
+                'end_date': endDate.toUtc().toIso8601String(),
+                // The client has no approval step for a bazaar its own owner
+                // just created, and an unapproved one is filtered out of the
+                // "ongoing" query.
+                'is_approved': true,
+              },
+            )
+            as Map<String, dynamic>;
+
+    final eventId = (created['id'] as num).toInt();
+
+    final stockIds = <String, int>{};
+    for (final entry in allocationsByAllocationKey.entries) {
+      if (entry.value <= 0) {
+        continue;
+      }
+      final variantId = products.variantIdFor(entry.key);
+      if (variantId == null) {
+        // A combination the catalogue does not know. Skipped rather than
+        // guessed: there is no variant to allocate against.
+        continue;
+      }
+      final row =
+          await auth.api.post(
+                '/api/bazaar/event/$eventId/stock/',
+                body: {
+                  'event': eventId,
+                  'variant': variantId,
+                  'amount_allocated': entry.value,
+                  'amount_sold': 0,
+                },
+              )
+              as Map<String, dynamic>;
+      stockIds[entry.key] = (row['id'] as num).toInt();
+    }
+    _stockIdsByEventId[eventId] = stockIds;
+
+    return eventId;
+  }
+
+  /// The venue's street address, which the server requires on an event.
+  ///
+  /// The client models the address on the venue rather than the bazaar, so it
+  /// is read back from the venue rather than asked for twice. Falls back to an
+  /// empty string, since a missing address should not stop a bazaar being
+  /// created.
+  Future<String> _addressForEstablishment(
+    AuthRepository auth,
+    int establishmentId,
+  ) async {
+    try {
+      final payload = await auth.api.get('/api/core/establishment/') as List;
+      for (final entry in payload) {
+        final map = entry as Map<String, dynamic>;
+        if ((map['id'] as num?)?.toInt() == establishmentId) {
+          return map['address'] as String? ?? '';
+        }
+      }
+    } on ApiException {
+      // Not worth failing the whole creation over.
+    }
+    return '';
   }
 
   Future<List<BazaarEvent>> listVisibleForUser(AppUser user) async {
