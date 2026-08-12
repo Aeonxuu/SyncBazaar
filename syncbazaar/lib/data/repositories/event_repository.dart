@@ -14,8 +14,8 @@ class EventRepository {
   /// first use rather than at construction, since `app.dart` builds every
   /// repository before anyone has signed in.
   ///
-  /// Creating a bazaar and its allocations reaches the server. Editing,
-  /// finalizing and clearing allocations still happen in memory only.
+  /// Creating, editing, deleting and finalizing a bazaar all reach the server,
+  /// as do its stock allocations.
   EventRepository({AuthRepository? auth, ProductRepository? products})
     : _auth = auth,
       _products = products;
@@ -369,7 +369,24 @@ class EventRepository {
     return _events.where((e) => assignedEventIds.contains(e.id)).toList();
   }
 
+  /// Closes a bazaar and returns its unsold stock to the master inventory.
+  ///
+  /// The server does all three steps -- release the stock, clear the
+  /// allocations, mark the bazaar finished -- inside one transaction, which is
+  /// why this calls the endpoint rather than doing them one at a time from
+  /// here. Done separately, a failure between two of them would count the same
+  /// stock twice.
   Future<void> finalizeEvent(int eventId) async {
+    await _ensureLoaded();
+    final auth = _auth;
+    if (auth != null && auth.vendorId != null) {
+      await auth.api.post('/api/bazaar/event/$eventId/finalize/', body: {});
+      // The bazaar's stock went back to the warehouse, so nothing here is
+      // sellable any more and the catalogue's figures have moved.
+      _allocationsByEventId[eventId] = {};
+      _stockIdsByEventId[eventId] = {};
+      await _products?.refresh();
+    }
     final idx = _events.indexWhere((e) => e.id == eventId);
     if (idx == -1) return;
     final event = _events[idx];
@@ -449,9 +466,23 @@ class EventRepository {
     List<BazaarPaymentMethod>? customOtherMethods,
     Map<String, int>? allocationsByAllocationKey,
   }) async {
+    await _ensureLoaded();
     final idx = _events.indexWhere((e) => e.id == eventId);
     if (idx == -1) return;
     final previous = _events[idx];
+
+    // Written to the server before the local copy, so a rejected edit leaves
+    // the bazaar as it was rather than showing a change that only exists here.
+    // Editing the dates and finding them reverted on the next launch was how
+    // this gap showed itself.
+    await _updateEventOnServer(
+      eventId: eventId,
+      name: name,
+      startDate: startDate,
+      endDate: endDate,
+      allocationsByAllocationKey: allocationsByAllocationKey,
+    );
+
     _events[idx] = BazaarEvent(
       id: previous.id,
       name: name,
@@ -470,8 +501,103 @@ class EventRepository {
     }
   }
 
+  Future<void> _updateEventOnServer({
+    required int eventId,
+    required String name,
+    required DateTime startDate,
+    required DateTime endDate,
+    Map<String, int>? allocationsByAllocationKey,
+  }) async {
+    final auth = _auth;
+    final products = _products;
+    if (auth == null || products == null || auth.vendorId == null) {
+      return;
+    }
+
+    // Only the fields that changed. A full replace would have to resend the
+    // venue, the vendor and the address, none of which this screen edits.
+    await auth.api.patch(
+      '/api/bazaar/event/$eventId/',
+      body: {
+        'name': name,
+        'start_date': startDate.toUtc().toIso8601String(),
+        'end_date': endDate.toUtc().toIso8601String(),
+      },
+    );
+
+    if (allocationsByAllocationKey == null) {
+      return;
+    }
+
+    final existing = Map<String, int>.from(_stockIdsByEventId[eventId] ?? {});
+    for (final entry in allocationsByAllocationKey.entries) {
+      final stockId = existing.remove(entry.key);
+      if (stockId != null) {
+        await auth.api.patch(
+          '/api/bazaar/event/$eventId/stock/$stockId/',
+          body: {'amount_allocated': entry.value},
+        );
+        continue;
+      }
+      final variantId = products.variantIdFor(entry.key);
+      if (variantId == null || entry.value <= 0) {
+        continue;
+      }
+      final row =
+          await auth.api.post(
+                '/api/bazaar/event/$eventId/stock/',
+                body: {
+                  'event': eventId,
+                  'variant': variantId,
+                  'amount_allocated': entry.value,
+                  'amount_sold': 0,
+                },
+              )
+              as Map<String, dynamic>;
+      _stockIdsByEventId
+          .putIfAbsent(eventId, () => {})[entry.key] = (row['id'] as num)
+          .toInt();
+    }
+
+    // Whatever is left was allocated before and is not any more.
+    for (final stockId in existing.values) {
+      try {
+        await auth.api.delete('/api/bazaar/event/$eventId/stock/$stockId/');
+      } on ApiException {
+        // The row has sales against it, and the server protects those. Nothing
+        // more can be sold from it instead, which is what removing it meant.
+        await auth.api.patch(
+          '/api/bazaar/event/$eventId/stock/$stockId/',
+          body: {'amount_allocated': 0},
+        );
+      }
+    }
+    for (final key in existing.keys) {
+      _stockIdsByEventId[eventId]?.remove(key);
+    }
+  }
+
   Future<void> deleteEvent(int eventId) async {
+    await _ensureLoaded();
+    final auth = _auth;
+    if (auth != null && auth.vendorId != null) {
+      // Its stock rows go first. The server protects a bazaar that still has
+      // any, and returns a 500 rather than a refusal when one is attempted --
+      // so without this, deleting a bazaar fails with nothing to explain why.
+      //
+      // A row that has sales against it is protected in turn, and that failure
+      // is allowed through: a bazaar with takings recorded against it should
+      // not be deletable, and the error is how the screen says so.
+      for (final stockId in (_stockIdsByEventId[eventId] ?? {}).values) {
+        await auth.api.delete('/api/bazaar/event/$eventId/stock/$stockId/');
+      }
+      // Deleted on the server before here. Removing it locally alone would
+      // make it reappear on the next launch, which is more confusing than a
+      // delete that visibly failed.
+      await auth.api.delete('/api/bazaar/event/$eventId/');
+    }
     _events.removeWhere((e) => e.id == eventId);
     _allocationsByEventId.remove(eventId);
+    _stockIdsByEventId.remove(eventId);
   }
 }
