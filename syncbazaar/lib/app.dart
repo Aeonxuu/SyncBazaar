@@ -119,7 +119,7 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
             sales: _salesRepository,
           );
     _approvalsRepository = ApprovalsRepository();
-    _settingsRepository = SettingsRepository();
+    _settingsRepository = SettingsRepository(auth: session);
     _notificationService = NotificationService();
     _syncService = SyncService(
       apiService: ApiService(),
