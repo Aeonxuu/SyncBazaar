@@ -1,6 +1,7 @@
 import '../data/remote/api_client.dart';
 import '../data/repositories/auth_repository.dart';
 import 'document_saver.dart';
+import 'orders_workbook.dart';
 
 /// What a bazaar started with, what it sold, and what came back.
 ///
@@ -95,6 +96,10 @@ class ReportService {
   );
 
   /// Downloads the list of orders as a spreadsheet-friendly CSV.
+  ///
+  /// Superseded for the venue's copy by [exportOrdersWorkbook], which the
+  /// venue actually reconciles against; kept because a flat single-table CSV
+  /// is still the easier thing to feed to another system.
   Future<String> exportListOfOrders({
     required int eventId,
     required String eventName,
@@ -104,6 +109,37 @@ class ReportService {
     fallbackName: 'ListOfOrders_${_slug(eventName)}',
     what: 'list of orders',
   );
+
+  /// Writes the order list as an Excel workbook, one sheet per payment method.
+  ///
+  /// Built on the device rather than fetched, unlike every other report here.
+  /// The server renders a single flat CSV, and this report is a workbook whose
+  /// columns differ between sheets -- a shape a .csv cannot express at all. It
+  /// therefore does not check [isAvailable]: the sales are already on the
+  /// tablet, so this is the one document that can still be produced with the
+  /// server unreachable.
+  Future<String> exportOrdersWorkbook({
+    required String eventName,
+    required List<OrderLine> lines,
+    required Map<String, String?> extraFieldLabelByMethod,
+    OrdersWorkbook workbook = const OrdersWorkbook(),
+  }) async {
+    try {
+      final bytes = workbook.build(
+        lines: lines,
+        extraFieldLabelByMethod: extraFieldLabelByMethod,
+      );
+      return _saver.save(
+        bytes: bytes,
+        fileName: 'ListOfOrders_${_slug(eventName)}',
+        format: DocumentFormat.xlsx,
+      );
+    } on StateError {
+      throw const ReportException(
+        'The order list could not be written. Try again.',
+      );
+    }
+  }
 
   Future<String> _export({
     required String path,
@@ -116,10 +152,12 @@ class ReportService {
         'Sign in to export documents — they are prepared by the server.',
       );
     }
+    final exportValue = format.apiValue;
+    if (exportValue == null) {
+      throw ReportException('The $what is not rendered by the server.');
+    }
     try {
-      final download = await _auth.api.getFile(
-        '$path?export=${format.apiValue}',
-      );
+      final download = await _auth.api.getFile('$path?export=$exportValue');
       return _saver.save(
         bytes: download.bytes,
         // The server's own name, minus its extension, which file_saver adds.

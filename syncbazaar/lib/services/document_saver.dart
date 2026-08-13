@@ -38,21 +38,30 @@ enum DocumentFormat {
   docx,
 
   /// For the list of orders, which is a table someone will open in Excel.
-  csv;
+  csv,
+
+  /// Excel proper, for the list of orders. Chosen over [csv] because that
+  /// report is a workbook -- one sheet per payment method, with columns that
+  /// differ between them -- and a .csv is a single flat table by definition.
+  xlsx;
 
   String get extension => switch (this) {
     DocumentFormat.docx => 'docx',
     DocumentFormat.csv => 'csv',
+    DocumentFormat.xlsx => 'xlsx',
   };
 
   MimeType get mimeType => switch (this) {
     DocumentFormat.docx => MimeType.microsoftWord,
     DocumentFormat.csv => MimeType.csv,
+    DocumentFormat.xlsx => MimeType.microsoftExcel,
   };
 
-  /// What the API expects in `?export=`.
-  String get apiValue => switch (this) {
+  /// What the API expects in `?export=`. Null for a format the server does
+  /// not render -- [xlsx] is built on the device, so it never asks.
+  String? get apiValue => switch (this) {
     DocumentFormat.docx => 'docx',
     DocumentFormat.csv => 'csv',
+    DocumentFormat.xlsx => null,
   };
 }

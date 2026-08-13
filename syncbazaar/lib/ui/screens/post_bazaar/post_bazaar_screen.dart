@@ -7,8 +7,10 @@ import '../../../data/repositories/orders_repository.dart';
 import '../../../data/repositories/product_repository.dart';
 import '../../../data/repositories/sales_repository.dart';
 import '../../../data/repositories/auth_repository.dart';
+import '../../../bloc/settings/settings_cubit.dart';
 import '../../../data/repositories/settings_repository.dart';
 import '../../../data/remote/api_client.dart';
+import '../../../services/orders_workbook.dart';
 import '../../../services/report_service.dart';
 import '../../../models/bazaar_event.dart';
 import '../../../models/order.dart';
@@ -82,6 +84,35 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
       }
     }
 
+    // Built once for every product rather than per row: the order list joins
+    // each sale's option ids back to "Color Black, Size 42", and doing that
+    // lookup per sale would re-read the same product forty-nine times.
+    final optionLabelById = <int, String>{};
+    for (final product in products) {
+      final groups = await productRepository.variantGroupsForProduct(
+        product.id,
+      );
+      final groupNameById = {for (final group in groups) group.id: group.name};
+      final options = await productRepository.allVariantOptionsForProduct(
+        product.id,
+      );
+      for (final option in options) {
+        final groupName = groupNameById[option.variantGroupId];
+        optionLabelById[option.id] = groupName == null
+            ? option.value
+            : '$groupName ${option.value}';
+      }
+    }
+
+    // Which methods a bazaar took, and what each one asked the cashier for --
+    // a GCash reference, a bank slip number. Resolved per bazaar because a
+    // venue can override a method's field for its own event.
+    final basePaymentMethods = await settingsRepository.paymentMethods();
+    final extraFieldLabelsByEventId = {
+      for (final event in events)
+        event.id: _extraFieldLabels(event, basePaymentMethods),
+    };
+
     final eventNameById = {for (final event in events) event.id: event.name};
     final companies = await settingsRepository.listCompanies();
     final companyById = {for (final company in companies) company.id: company};
@@ -95,6 +126,8 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
       events: events,
       allocationsByEventId: allocationsByEventId,
       reconciliationByEventId: reports,
+      optionLabelById: optionLabelById,
+      extraFieldLabelsByEventId: extraFieldLabelsByEventId,
       eventNameById: eventNameById,
       locationNameByEventId: {
         for (final event in events)
@@ -109,6 +142,71 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
           event.id: companyById[event.companyId]?.bufferPercent ?? 10,
       },
     );
+  }
+
+  /// What each of a bazaar's payment methods asks the cashier for, keyed by
+  /// method name in upper case so a sale's stored method matches whatever case
+  /// it was configured in.
+  ///
+  /// Mirrors how the POS resolves the same thing when it decides which field to
+  /// show at checkout: the venue's own override for an event wins over the
+  /// method's global setting, so the workbook's column is headed with the
+  /// wording the cashier was actually typing into.
+  static Map<String, String?> _extraFieldLabels(
+    BazaarEvent event,
+    List<PaymentMethodMeta> baseMethods,
+  ) {
+    final labels = <String, String?>{};
+    for (final method in baseMethods) {
+      labels[method.name.trim().toUpperCase()] = method.extraFieldLabel;
+    }
+    for (final custom in event.customOtherMethods) {
+      labels[custom.name.trim().toUpperCase()] = custom.extraFieldLabel;
+    }
+    return labels;
+  }
+
+  /// Turns a bazaar's sales into spreadsheet rows.
+  ///
+  /// A [Sale] is already one cart line, so this is a rename rather than a
+  /// regrouping. The one join is the product label, which the sale holds only
+  /// as ids.
+  List<OrderLine> _orderLines(_PostBazaarData data, BazaarEvent event) {
+    final productNameById = {
+      for (final product in data.products) product.id: product.name,
+    };
+
+    return [
+      for (final sale in data.sales.where((sale) => sale.eventId == event.id))
+        OrderLine(
+          date: sale.timestamp,
+          customerName: normalizeCustomerName(sale.customerName),
+          product: _productLabel(data, sale, productNameById),
+          paymentMethod: sale.paymentMethod,
+          // Named `employeeId` on the model, which it has never held: the
+          // POS writes the payment method's extra field into it.
+          reference: sale.employeeId,
+          quantity: sale.qty,
+          total: sale.total,
+          returned: sale.orderStatus == OrderStatus.returned,
+        ),
+    ];
+  }
+
+  /// `Nike Air Max SC (Color Black, Size 42)` — the same wording the cart and
+  /// the receipt use, so a row can be matched against a customer's copy.
+  String _productLabel(
+    _PostBazaarData data,
+    Sale sale,
+    Map<int, String> productNameById,
+  ) {
+    final name = productNameById[sale.productId] ?? 'Unknown product';
+    final parts = [
+      for (final optionId in [sale.variantOptionIdA, sale.variantOptionIdB])
+        if (optionId != null && data.optionLabelById[optionId] != null)
+          data.optionLabelById[optionId]!,
+    ];
+    return parts.isEmpty ? name : '$name (${parts.join(', ')})';
   }
 
   Future<void> _refresh() async {
@@ -746,79 +844,88 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
     final buffer = grossSales * (bufferPct / 100);
     final net = grossSales - incentive - buffer;
 
+    final dueToVenue = incentive + buffer;
+
+    // The vendor's own name, so the last row says whose money it is. Falls
+    // back to "us" rather than a hardcoded "SV KICKz" — the settings value is
+    // blank until someone fills it in, and this app is not single-tenant.
+    final configuredName = context.read<SettingsCubit>().state.storeName.trim();
+    final storeName = configuredName.isEmpty ? 'us' : configuredName;
+
+    // Owner-only: this is the money document, the one the venue is paid
+    // against. A cashier can read the figures but is shown no action.
+    final canExport = widget.user.isAdminOrOwner;
+
     await _showDetailsDialog(
       context: context,
       title: event.name,
-      subtitle: location,
+      // The count belongs with the bazaar, not among the peso figures: it is
+      // the only number on the card that is not money, and reading it in that
+      // column invites it to be read as one.
+      subtitle:
+          '$location  ·  ${eventSales.length} '
+          'transaction${eventSales.length == 1 ? '' : 's'}',
       content: [
+        // Laid out the way the exported statement is, so the preview and the
+        // document tell the same story: what was taken, what the venue is owed
+        // out of it, and what is left.
         _receiptRow(
           context,
           label: 'Gross sales',
           value: formatPeso(grossSales),
         ),
+        const SizedBox(height: 14),
+        _sectionLabel(context, 'Due to venue'),
+        const SizedBox(height: 8),
         _receiptRow(
           context,
-          label: 'Incentive (${incentivePct.toStringAsFixed(1)}%)',
+          label: 'Incentive (${_percent(incentivePct)})',
           value: formatPeso(incentive),
         ),
         _receiptRow(
           context,
-          label: 'Buffer (${bufferPct.toStringAsFixed(1)}%)',
+          label: 'Buffer (${_percent(bufferPct)})',
           value: formatPeso(buffer),
         ),
         const Divider(height: 18),
+        // The one emphasised figure. It is the money that actually changes
+        // hands, and the reason the document exists -- the app can show the
+        // total even though the template cannot yet.
         _receiptRow(
           context,
-          label: 'Net amount',
-          value: formatPeso(net),
+          label: 'Total due to venue',
+          value: formatPeso(dueToVenue),
           emphasize: true,
         ),
+        const SizedBox(height: 14),
         _receiptRow(
           context,
-          label: 'Transactions',
-          value: '${eventSales.length}',
+          // Named rather than "Net amount": the figure is what the vendor
+          // keeps, and the unlabelled version was read on the printed
+          // statement as what the venue was owed.
+          label: 'Retained by $storeName',
+          value: formatPeso(net),
         ),
       ],
-      footer: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _ExportButton(
-            // Owner-only: this is the money document, the one the venue is
-            // paid against.
-            enabled: widget.user.isAdminOrOwner,
-            icon: Icons.description_outlined,
-            label: 'Export SOA (.docx)',
-            onExport: () => ReportService(
-              auth: context.read<AuthRepository>(),
-            ).exportStatementOfAccount(
-              eventId: event.id,
-              eventName: event.name,
+      // Right-aligned and auto-width: one primary action, sized to itself
+      // rather than stretched across the dialog, per the button tiers in
+      // DESIGN_GUIDELINES.md.
+      footer: !canExport
+          ? null
+          : Align(
+              alignment: Alignment.centerRight,
+              child: _ExportButton(
+                icon: Icons.description_outlined,
+                label: 'Export SOA (.docx)',
+                onExport: () =>
+                    ReportService(
+                      auth: context.read<AuthRepository>(),
+                    ).exportStatementOfAccount(
+                      eventId: event.id,
+                      eventName: event.name,
+                    ),
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          OutlinedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('DOCX export queued for ${event.name}.'),
-                ),
-              );
-            },
-            child: const Text('Export DOCX'),
-          ),
-          const SizedBox(height: 8),
-          OutlinedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('CSV export queued for ${event.name}.')),
-              );
-            },
-            child: const Text('Export CSV'),
-          ),
-        ],
-      ),
     );
   }
 
@@ -830,24 +937,35 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
     final eventOrders = data.orders
         .where((order) => order.eventId == event.id)
         .toList();
-    final cashCount = eventOrders
-        .where((order) => order.paymentMethod == 'CASH')
-        .length;
-    final coopCount = eventOrders
-        .where((order) => order.paymentMethod == 'COOP')
-        .length;
-    final customCount = eventOrders
-        .where(
-          (order) =>
-              order.paymentMethod != 'CASH' && order.paymentMethod != 'COOP',
-        )
-        .length;
+
+    // Counted from the orders themselves rather than against a hardcoded
+    // CASH/COOP/other, which reported every method a venue had configured for
+    // itself as an anonymous "Custom methods" tally.
+    final countByMethod = <String, int>{};
+    for (final order in eventOrders) {
+      final method = order.paymentMethod.trim().isEmpty
+          ? 'CASH'
+          : order.paymentMethod.trim().toUpperCase();
+      countByMethod[method] = (countByMethod[method] ?? 0) + 1;
+    }
+    final methods = countByMethod.keys.toList()
+      ..sort((a, b) {
+        if (a == 'CASH') return -1;
+        if (b == 'CASH') return 1;
+        return a.compareTo(b);
+      });
+
     final completedCount = eventOrders
         .where((order) => order.orderStatus == OrderStatus.completed)
         .length;
     final returnedCount = eventOrders
         .where((order) => order.orderStatus == OrderStatus.returned)
         .length;
+
+    final canExport = widget.user.isAdminOrOwner;
+    final lines = _orderLines(data, event);
+    final extraFieldLabels =
+        data.extraFieldLabelsByEventId[event.id] ?? const {};
 
     await _showDetailsDialog(
       context: context,
@@ -860,59 +978,46 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
           value: '${eventOrders.length}',
           emphasize: true,
         ),
-        const Divider(height: 18),
-        _receiptRow(context, label: 'CASH', value: '$cashCount'),
-        _receiptRow(context, label: 'COOP', value: '$coopCount'),
-        _receiptRow(context, label: 'Custom methods', value: '$customCount'),
-        const Divider(height: 18),
+        const SizedBox(height: 14),
+        // The same two groupings the workbook is built on, so what is read
+        // here is what opens in Excel.
+        _sectionLabel(context, 'By payment method'),
+        const SizedBox(height: 8),
+        if (methods.isEmpty)
+          _receiptRow(context, label: 'No orders yet', value: '—')
+        else
+          for (final method in methods)
+            _receiptRow(
+              context,
+              label: method,
+              value: '${countByMethod[method]}',
+            ),
+        const SizedBox(height: 14),
+        _sectionLabel(context, 'By status'),
+        const SizedBox(height: 8),
         _receiptRow(context, label: 'Completed', value: '$completedCount'),
         _receiptRow(context, label: 'Returned', value: '$returnedCount'),
       ],
-      footer: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          ElevatedButton.icon(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Order list generated for ${event.name}.'),
-                ),
-              );
-            },
-            icon: const Icon(Icons.receipt_long_outlined),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
+      footer: !canExport
+          ? null
+          : Align(
+              alignment: Alignment.centerRight,
+              child: _ExportButton(
+                icon: Icons.table_chart_outlined,
+                label: 'Export order list (.xlsx)',
+                // Built on the device, unlike the statement of account: the
+                // server renders one flat CSV, and this is a workbook with a
+                // sheet per payment method.
+                onExport: () =>
+                    ReportService(
+                      auth: context.read<AuthRepository>(),
+                    ).exportOrdersWorkbook(
+                      eventName: event.name,
+                      lines: lines,
+                      extraFieldLabelByMethod: extraFieldLabels,
+                    ),
+              ),
             ),
-            label: const Text('Generate Order List'),
-          ),
-          const SizedBox(height: 8),
-          OutlinedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Exported order DOCX for ${event.name}.'),
-                ),
-              );
-            },
-            child: const Text('Export DOCX'),
-          ),
-          const SizedBox(height: 8),
-          OutlinedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Exported order CSV for ${event.name}.'),
-                ),
-              );
-            },
-            child: const Text('Export CSV'),
-          ),
-        ],
-      ),
     );
   }
 
@@ -1015,7 +1120,7 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
     required String title,
     required String subtitle,
     required List<Widget> content,
-    required Widget footer,
+    Widget? footer,
   }) async {
     await showDialog<void>(
       context: context,
@@ -1036,7 +1141,7 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
               child: Opacity(opacity: value, child: child),
             ),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+              padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -1069,14 +1174,21 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
                         IconButton(
                           onPressed: () => Navigator.of(dialogContext).pop(),
                           tooltip: 'Close',
+                          // Trimmed off the default 8pt so the icon sits on
+                          // the dialog's 24pt margin rather than 8pt inside
+                          // it, which reads as a lopsided right edge.
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints.tightFor(
+                            width: 40,
+                            height: 40,
+                          ),
                           icon: const Icon(Icons.close_rounded, size: 20),
                         ),
                       ],
                     ),
-                    const Divider(height: 16),
+                    const Divider(height: 24),
                     ...content,
-                    const SizedBox(height: 16),
-                    footer,
+                    if (footer != null) ...[const SizedBox(height: 24), footer],
                   ],
                 ),
               ),
@@ -1087,20 +1199,49 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
     );
   }
 
+  /// A heading over a group of rows, so the rows beneath it read as one thing.
+  ///
+  /// The statement's whole difficulty is that incentive and buffer are not two
+  /// unrelated deductions — they are the venue's share, and listing them flat
+  /// among the other figures is what made the printed version read wrongly.
+  Widget _sectionLabel(BuildContext context, String text) => Text(
+    text.toUpperCase(),
+    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+      color: Colors.black45,
+      fontWeight: FontWeight.w700,
+      letterSpacing: 0.8,
+    ),
+  );
+
+  /// `10` reads as "10%", `12.5` as "12.5%" — a whole percentage should not
+  /// carry a decimal it does not need.
+  static String _percent(num value) {
+    final text = value.toStringAsFixed(1);
+    return '${text.endsWith('.0') ? text.substring(0, text.length - 2) : text}%';
+  }
+
   Widget _receiptRow(
     BuildContext context, {
     required String label,
     required String value,
     bool emphasize = false,
   }) {
+    // The emphasised row carries a weight, a size and a colour rather than
+    // just a bolder font: at bodySmall, w600 against w700 is close to
+    // invisible, so the one figure that matters did not stand out from the
+    // working-out above it.
     final labelStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
-      color: Colors.black54,
-      fontWeight: FontWeight.w600,
-    );
-    final valueStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
-      color: AppColors.text,
+      color: emphasize ? AppColors.text : Colors.black54,
       fontWeight: emphasize ? FontWeight.w700 : FontWeight.w600,
     );
+    final valueStyle =
+        (emphasize
+                ? Theme.of(context).textTheme.titleMedium
+                : Theme.of(context).textTheme.bodyMedium)
+            ?.copyWith(
+              color: emphasize ? AppColors.primary : AppColors.text,
+              fontWeight: emphasize ? FontWeight.w700 : FontWeight.w600,
+            );
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
@@ -1200,6 +1341,8 @@ class _PostBazaarData {
     required this.products,
     required this.events,
     required this.allocationsByEventId,
+    required this.optionLabelById,
+    required this.extraFieldLabelsByEventId,
     required this.eventNameById,
     required this.locationNameByEventId,
     required this.incentivePercentByEventId,
@@ -1218,6 +1361,15 @@ class _PostBazaarData {
   /// not be fetched -- the screen falls back to what it can see locally.
   final Map<int, ReconciliationReport> reconciliationByEventId;
 
+  /// Variant option id to its printable label, e.g. 3 -> "Color Black". Built
+  /// across every product so the order list can name what was sold.
+  final Map<int, String> optionLabelById;
+
+  /// Per bazaar: payment method name to the extra field that method asks for,
+  /// or null where it asks for nothing. Names the extra column in the order
+  /// workbook, and only for the sheets that need one.
+  final Map<int, Map<String, String?>> extraFieldLabelsByEventId;
+
   final Map<int, String> eventNameById;
   final Map<int, String> locationNameByEventId;
   final Map<int, double> incentivePercentByEventId;
@@ -1232,14 +1384,11 @@ class _PostBazaarData {
 /// broken, and gets pressed again.
 class _ExportButton extends StatefulWidget {
   const _ExportButton({
-    required this.enabled,
     required this.icon,
     required this.label,
     required this.onExport,
   });
 
-  /// False for staff. Exports are the owner's paperwork.
-  final bool enabled;
   final IconData icon;
   final String label;
 
@@ -1276,9 +1425,6 @@ class _ExportButtonState extends State<_ExportButton> {
 
   @override
   Widget build(BuildContext context) {
-    if (!widget.enabled) {
-      return const SizedBox.shrink();
-    }
     return ElevatedButton.icon(
       // Disabled while running, so a slow render cannot be started twice.
       onPressed: _busy ? null : _run,
