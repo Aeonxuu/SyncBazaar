@@ -1,5 +1,6 @@
 import '../data/remote/api_client.dart';
 import '../data/repositories/auth_repository.dart';
+import 'document_saver.dart';
 
 /// What a bazaar started with, what it sold, and what came back.
 ///
@@ -52,9 +53,14 @@ class ReconciliationReport {
 
 /// The end-of-bazaar paperwork: reconciliation, and the documents that follow.
 class ReportService {
-  const ReportService({required AuthRepository auth}) : _auth = auth;
+  const ReportService({
+    required AuthRepository auth,
+    DocumentSaver saver = const DocumentSaver(),
+  }) : _auth = auth,
+       _saver = saver;
 
   final AuthRepository _auth;
+  final DocumentSaver _saver;
 
   bool get isAvailable => _auth.vendorId != null;
 
@@ -70,6 +76,65 @@ class ReportService {
             as Map<String, dynamic>;
     return ReconciliationReport.fromJson(payload);
   }
+
+  /// Downloads the statement of account and writes it to Downloads.
+  ///
+  /// The server renders the document from its own template and names the file
+  /// after the bazaar; both are honoured rather than rebuilt here, so the
+  /// paperwork looks the same however it was produced.
+  ///
+  /// Returns the phrase to show the user.
+  Future<String> exportStatementOfAccount({
+    required int eventId,
+    required String eventName,
+  }) => _export(
+    path: '/api/bazaar/event/$eventId/statement-of-account/',
+    format: DocumentFormat.docx,
+    fallbackName: 'SOA_${_slug(eventName)}',
+    what: 'statement of account',
+  );
+
+  /// Downloads the list of orders as a spreadsheet-friendly CSV.
+  Future<String> exportListOfOrders({
+    required int eventId,
+    required String eventName,
+  }) => _export(
+    path: '/api/bazaar/event/$eventId/list-of-orders/',
+    format: DocumentFormat.csv,
+    fallbackName: 'ListOfOrders_${_slug(eventName)}',
+    what: 'list of orders',
+  );
+
+  Future<String> _export({
+    required String path,
+    required DocumentFormat format,
+    required String fallbackName,
+    required String what,
+  }) async {
+    if (!isAvailable) {
+      throw const ReportException(
+        'Sign in to export documents — they are prepared by the server.',
+      );
+    }
+    try {
+      final download = await _auth.api.getFile(
+        '$path?export=${format.apiValue}',
+      );
+      return _saver.save(
+        bytes: download.bytes,
+        // The server's own name, minus its extension, which file_saver adds.
+        fileName: download.stem ?? fallbackName,
+        format: format,
+      );
+    } on ApiException catch (error) {
+      throw reportFailure(error, what);
+    }
+  }
+
+  /// A filename-safe version of a bazaar name, for the rare case where the
+  /// server does not send one.
+  static String _slug(String name) =>
+      name.trim().replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_');
 }
 
 /// Thrown for a report that cannot be produced, with something printable.

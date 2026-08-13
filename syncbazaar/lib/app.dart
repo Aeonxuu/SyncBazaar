@@ -496,7 +496,7 @@ class _MainShellState extends State<MainShell> {
       case AppSection.pos:
         return PosScreen(user: widget.user);
       case AppSection.postBazaar:
-        return const PostBazaarScreen();
+        return PostBazaarScreen(user: widget.user);
       case AppSection.orders:
         return OrdersScreen(user: widget.user);
       case AppSection.approvals:

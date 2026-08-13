@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -61,6 +62,68 @@ class ApiClient {
   String? token;
 
   Future<dynamic> get(String path) => _send('GET', path);
+
+  /// Fetches a file rather than JSON.
+  ///
+  /// The report endpoints answer with a .docx or a .csv, and [get] would try to
+  /// parse those as JSON and throw on the first byte. Returns the body and the
+  /// name the server chose, which is worth honouring: it already names the file
+  /// after the bazaar, and inventing one here would drift from the server's.
+  Future<ApiDownload> getFile(String path) async {
+    final uri = Uri.parse('$_baseUrl$path');
+    final request = http.Request('GET', uri);
+    final token = this.token;
+    if (token != null) {
+      request.headers['Authorization'] = 'Token $token';
+    }
+
+    try {
+      final streamed = await _http.send(request).timeout(_fileTimeout);
+      final response = await http.Response.fromStream(streamed);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw ApiException(
+          _kindFor(response.statusCode),
+          _messageFor(response, response.statusCode),
+          statusCode: response.statusCode,
+        );
+      }
+      return ApiDownload(
+        bytes: response.bodyBytes,
+        fileName: _fileNameFrom(response.headers['content-disposition']),
+      );
+    } on TimeoutException {
+      throw const ApiException(
+        ApiErrorKind.timeout,
+        'The server took too long to prepare the file.',
+      );
+    } on SocketException {
+      throw const ApiException(
+        ApiErrorKind.network,
+        'Cannot reach the server. Check your connection.',
+      );
+    } on http.ClientException {
+      throw const ApiException(
+        ApiErrorKind.network,
+        'Cannot reach the server. Check your connection.',
+      );
+    }
+  }
+
+  /// Longer than a normal call: the server renders a document before it
+  /// answers, and a free-tier host may be waking up as well.
+  static const Duration _fileTimeout = Duration(seconds: 60);
+
+  /// Pulls the filename out of `Content-Disposition`, or null if absent.
+  static String? _fileNameFrom(String? header) {
+    if (header == null) {
+      return null;
+    }
+    final match = RegExp(
+      'filename\\*?=(?:UTF-8\'\')?"?([^";]+)"?',
+    ).firstMatch(header);
+    final name = match?.group(1)?.trim();
+    return (name == null || name.isEmpty) ? null : name;
+  }
 
   Future<dynamic> post(String path, {Object? body}) =>
       _send('POST', path, body: body);
@@ -180,4 +243,24 @@ class ApiClient {
   }
 
   void close() => _http.close();
+}
+
+/// A file fetched from the API, with the name the server gave it.
+class ApiDownload {
+  const ApiDownload({required this.bytes, this.fileName});
+
+  final Uint8List bytes;
+
+  /// From `Content-Disposition`, e.g. `SOA_August_Fair.docx`. Null when the
+  /// server did not say, in which case the caller names it.
+  final String? fileName;
+
+  /// The name without its extension, which is what `file_saver` wants — it
+  /// appends the extension itself and would otherwise produce "x.docx.docx".
+  String? get stem {
+    final name = fileName;
+    if (name == null) return null;
+    final dot = name.lastIndexOf('.');
+    return dot <= 0 ? name : name.substring(0, dot);
+  }
 }

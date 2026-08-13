@@ -13,12 +13,18 @@ import '../../../services/report_service.dart';
 import '../../../models/bazaar_event.dart';
 import '../../../models/order.dart';
 import '../../../models/product.dart';
+import '../../../models/user.dart';
 import '../../../models/sale.dart';
 import '../../widgets/confirmation_dialog.dart';
 import '../../../core/utils/formatters.dart';
 
 class PostBazaarScreen extends StatefulWidget {
-  const PostBazaarScreen({super.key});
+  const PostBazaarScreen({super.key, required this.user});
+
+  /// Whose paperwork this is. Exports are gated on the role: a statement of
+  /// account is what the venue gets paid against, so it is the owner's to
+  /// produce rather than a cashier's.
+  final AppUser user;
 
   @override
   State<PostBazaarScreen> createState() => _PostBazaarScreenState();
@@ -776,21 +782,18 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
       footer: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          ElevatedButton.icon(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Draft SOA generated for ${event.name}.'),
-                ),
-              );
-            },
-            icon: const Icon(Icons.description_outlined),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
+          _ExportButton(
+            // Owner-only: this is the money document, the one the venue is
+            // paid against.
+            enabled: widget.user.isAdminOrOwner,
+            icon: Icons.description_outlined,
+            label: 'Export SOA (.docx)',
+            onExport: () => ReportService(
+              auth: context.read<AuthRepository>(),
+            ).exportStatementOfAccount(
+              eventId: event.id,
+              eventName: event.name,
             ),
-            label: const Text('Generate Draft SOA'),
           ),
           const SizedBox(height: 8),
           OutlinedButton(
@@ -1219,4 +1222,78 @@ class _PostBazaarData {
   final Map<int, String> locationNameByEventId;
   final Map<int, double> incentivePercentByEventId;
   final Map<int, double> bufferPercentByEventId;
+}
+
+/// Runs an export and reports where the file landed.
+///
+/// Its own widget because the work is slow enough to need saying so: the server
+/// renders the document before it answers, and a sleeping free-tier host can
+/// take most of a minute. A button that looks idle for that long reads as
+/// broken, and gets pressed again.
+class _ExportButton extends StatefulWidget {
+  const _ExportButton({
+    required this.enabled,
+    required this.icon,
+    required this.label,
+    required this.onExport,
+  });
+
+  /// False for staff. Exports are the owner's paperwork.
+  final bool enabled;
+  final IconData icon;
+  final String label;
+
+  /// Returns the phrase describing where the file went.
+  final Future<String> Function() onExport;
+
+  @override
+  State<_ExportButton> createState() => _ExportButtonState();
+}
+
+class _ExportButtonState extends State<_ExportButton> {
+  bool _busy = false;
+
+  Future<void> _run() async {
+    setState(() => _busy = true);
+    try {
+      final where = await widget.onExport();
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(where)));
+    } on ReportException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.message),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.enabled) {
+      return const SizedBox.shrink();
+    }
+    return ElevatedButton.icon(
+      // Disabled while running, so a slow render cannot be started twice.
+      onPressed: _busy ? null : _run,
+      icon: _busy
+          ? const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : Icon(widget.icon),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
+      ),
+      label: Text(_busy ? 'Preparing…' : widget.label),
+    );
+  }
 }
