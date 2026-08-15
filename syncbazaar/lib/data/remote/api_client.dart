@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../../core/config/api_config.dart';
@@ -13,7 +13,15 @@ import '../../core/config/api_config.dart';
 /// a till that cannot reach the server should keep selling and queue the sale,
 /// while a 400 means the request itself was wrong and retrying changes nothing.
 /// [ApiException.isOffline] is the question callers ask most, so it has a name.
-enum ApiErrorKind { network, timeout, unauthorized, forbidden, notFound, badRequest, server }
+enum ApiErrorKind {
+  network,
+  timeout,
+  unauthorized,
+  forbidden,
+  notFound,
+  badRequest,
+  server,
+}
 
 /// A failed API call, carrying something printable.
 ///
@@ -55,6 +63,32 @@ class ApiClient {
   final http.Client _http;
   final String _baseUrl;
 
+  /// When the server last answered anything at all.
+  ///
+  /// Any reply counts, including a 401: the question this tracks is whether
+  /// the host is awake, and a refusal proves it just as well as a success.
+  DateTime? _lastReplyAt;
+
+  /// The allowance for the next call.
+  ///
+  /// Long only while it is unknown whether the host is awake. During a bazaar
+  /// calls are constant, so this is [ApiConfig.timeout] throughout and a
+  /// cashier still learns within ten seconds that there is no signal.
+  Duration get _nextTimeout {
+    final last = _lastReplyAt;
+    if (last == null || DateTime.now().difference(last) > ApiConfig.warmFor) {
+      return ApiConfig.coldStartTimeout;
+    }
+    return ApiConfig.timeout;
+  }
+
+  /// Visible for tests, which have no real server to wake.
+  @visibleForTesting
+  Duration get nextTimeout => _nextTimeout;
+
+  @visibleForTesting
+  void markAwake([DateTime? at]) => _lastReplyAt = at ?? DateTime.now();
+
   /// The token from `POST /api/auth/login/`, or null once logged out.
   ///
   /// Held in memory here and persisted by `AuthRepository`; this class is not
@@ -80,6 +114,7 @@ class ApiClient {
     try {
       final streamed = await _http.send(request).timeout(_fileTimeout);
       final response = await http.Response.fromStream(streamed);
+      _lastReplyAt = DateTime.now();
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw ApiException(
           _kindFor(response.statusCode),
@@ -109,9 +144,13 @@ class ApiClient {
     }
   }
 
-  /// Longer than a normal call: the server renders a document before it
-  /// answers, and a free-tier host may be waking up as well.
-  static const Duration _fileTimeout = Duration(seconds: 60);
+  /// A document takes longer than a normal call: the server renders it before
+  /// it answers. Built on [_nextTimeout] so a file fetched while the host is
+  /// still waking gets the same allowance every other call does, plus the
+  /// rendering time on top.
+  ///
+  /// Warm this is 60s, unchanged from when it was a constant.
+  Duration get _fileTimeout => _nextTimeout + const Duration(seconds: 50);
 
   /// Pulls the filename out of `Content-Disposition`, or null if absent.
   static String? _fileNameFrom(String? header) {
@@ -153,8 +192,9 @@ class ApiClient {
     }
 
     try {
-      final streamed = await _http.send(request).timeout(ApiConfig.timeout);
+      final streamed = await _http.send(request).timeout(_nextTimeout);
       final response = await http.Response.fromStream(streamed);
+      _lastReplyAt = DateTime.now();
       return _decode(response);
     } on TimeoutException {
       throw const ApiException(

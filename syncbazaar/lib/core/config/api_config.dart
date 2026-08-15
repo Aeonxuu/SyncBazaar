@@ -49,5 +49,30 @@ class ApiConfig {
   /// Short on purpose: at a bazaar the answer to "is there signal?" needs to
   /// arrive before the cashier gives up, and every call has an offline path to
   /// fall back to.
+  ///
+  /// Applies only once the server is known to be awake — see
+  /// [coldStartTimeout].
   static const Duration timeout = Duration(seconds: 10);
+
+  /// The allowance for the first call after a quiet spell.
+  ///
+  /// The hosted backend runs on a free tier that sleeps after about fifteen
+  /// minutes idle. [timeout] alone would fail every first login of the day and
+  /// report it as no signal — the one diagnosis guaranteed to send someone
+  /// looking at the wifi instead of at the server.
+  ///
+  /// Sized from measurement rather than the host's advertised figure: two
+  /// wakes timed 22s and 39s, so the spread matters more than the average and
+  /// this leaves room above the slower one. Erring long costs a spinner on one
+  /// call; erring short costs a login that cannot be told from an outage.
+  ///
+  /// Only the waking call pays this. Once anything answers, [timeout] takes
+  /// over and a genuinely dead connection still fails fast.
+  static const Duration coldStartTimeout = Duration(seconds: 75);
+
+  /// How long a reply proves the server is still awake.
+  ///
+  /// Deliberately shorter than the host's own idle-shutdown, so the window
+  /// closes before the server actually sleeps rather than after.
+  static const Duration warmFor = Duration(minutes: 10);
 }
