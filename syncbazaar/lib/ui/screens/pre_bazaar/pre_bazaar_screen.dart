@@ -99,11 +99,13 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
   Future<void> _pickDateRange() async {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    // A bazaar can't start today or earlier, so the calendar simply doesn't
-    // offer those days — no need to accept a tap and then reject it.
+    // Today counts. A stall that opens this morning is the ordinary case at a
+    // pop-up, not an exception -- the calendar used to start tomorrow, which
+    // made a same-day bazaar impossible to enter at all. Yesterday still is:
+    // a bazaar cannot be planned into the past.
     final range = await showAppDateRangePicker(
       context: context,
-      firstDate: today.add(const Duration(days: 1)),
+      firstDate: today,
       lastDate: DateTime(2030, 12, 31),
       initialRange: _dateRange,
       title: 'Event dates',

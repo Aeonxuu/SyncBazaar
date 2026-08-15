@@ -980,9 +980,19 @@ class _PosScreenState extends State<PosScreen> {
                       const SizedBox(height: 10),
                       OutlinedButton.icon(
                         onPressed: () async {
+                          final now = DateTime.now();
+                          final today = DateTime(now.year, now.month, now.day);
+                          // Past days are closed, so a bazaar cannot be
+                          // dragged backwards over dates it never ran. A
+                          // bazaar that already started keeps its own start
+                          // as the floor instead -- otherwise the picker
+                          // could not show the range it is editing.
+                          final floor = selectedRange.start.isBefore(today)
+                              ? selectedRange.start
+                              : today;
                           final range = await showAppDateRangePicker(
                             context: context,
-                            firstDate: DateTime(2020),
+                            firstDate: floor,
                             lastDate: DateTime(2035),
                             initialRange: selectedRange,
                             title: 'Bazaar dates',

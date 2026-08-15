@@ -88,7 +88,7 @@ class DashboardState {
   List<BazaarSummaryData> get bazaarSummaries => _bazaarSummaries ?? const [];
 
   /// Mon-Fri revenue for the current week (5 values).
-  List<double> get dailySales => _dailySales ?? const [0, 0, 0, 0, 0];
+  List<double> get dailySales => _dailySales ?? const [0, 0, 0, 0, 0, 0, 0];
   List<CustomerHistoryData> get recentOrders => _recentOrders ?? const [];
   List<String> get bazaarFilterOptions =>
       _bazaarFilterOptions ?? const ['All bazaars'];
@@ -350,7 +350,9 @@ class DashboardCubit extends Cubit<DashboardState> {
     );
     final daily = <double>[];
 
-    for (var offset = 0; offset < 5; offset++) {
+    // The whole week. A weekday-only chart hid the two days a pop-up bazaar
+    // is most likely to be running.
+    for (var offset = 0; offset < 7; offset++) {
       final day = monday.add(Duration(days: offset));
       final total = filteredSales
           .where(

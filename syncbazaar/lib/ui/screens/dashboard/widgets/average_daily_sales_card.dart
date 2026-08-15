@@ -26,7 +26,7 @@ class AverageDailySalesCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return DashboardSectionCard(
       title: 'Average Daily Sales',
-      subtitle: 'This week, Monday to Friday',
+      subtitle: 'This week, Monday to Sunday',
       child: SizedBox(
         height: chartHeight,
         child: _SalesLineChart(dailySales: dailySales),
@@ -40,7 +40,7 @@ class _SalesLineChart extends StatelessWidget {
 
   final List<double> dailySales;
 
-  static const _labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+  static const _labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
   /// Uniform gridline step. Axis labels must be evenly spaced in *value* as
   /// well as in pixels — an axis that jumped 0 → 5k → 10k → 20k would draw
