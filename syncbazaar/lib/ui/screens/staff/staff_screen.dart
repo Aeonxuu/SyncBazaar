@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../bloc/staff/staff_cubit.dart';
 import '../../../core/constants/colors.dart';
+import '../../../core/utils/formatters.dart';
 import '../../../data/repositories/event_repository.dart';
 import '../../../models/bazaar_event.dart';
 import '../../../models/user.dart';
@@ -768,8 +769,7 @@ class _EmployeeBazaarsDialog extends StatelessWidget {
     BazaarStatus.ended: AppColors.error,
   };
 
-  static String _date(DateTime value) =>
-      '${value.month}/${value.day}/${value.year}';
+  static String _date(DateTime value) => formatDate(value);
 
   @override
   Widget build(BuildContext context) {

@@ -530,8 +530,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
   }
 
-  static String _shortDate(DateTime value) =>
-      '${value.month}/${value.day}/${value.year}';
+  static String _shortDate(DateTime value) => formatDate(value);
 }
 
 class _AnimatedEntrance extends StatefulWidget {

@@ -304,11 +304,7 @@ class _ApprovalList extends StatelessWidget {
     return 'Venue not specified';
   }
 
-  String _formatDate(DateTime date) {
-    final month = date.month.toString().padLeft(2, '0');
-    final day = date.day.toString().padLeft(2, '0');
-    return '${date.year}-$month-$day';
-  }
+  String _formatDate(DateTime date) => formatDate(date);
 
   Future<void> _showDetailsModal(
     BuildContext context,

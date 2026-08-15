@@ -30,4 +30,24 @@ void main() {
     expect(formatPercent(10.25), '10.3%');
     expect(formatPercent(10.04), '10%');
   });
+
+  group('dates', () {
+    test('a date reads the same wherever it is shown', () {
+      // Six files each grew their own copy of this, and one drifted to
+      // 2026-08-17 -- so the approvals screen wrote dates back to front from
+      // every other screen.
+      expect(formatDate(DateTime(2026, 8, 17)), '8/17/2026');
+      expect(formatDate(DateTime(2026, 12, 3)), '12/3/2026');
+    });
+
+    test('no zero padding', () {
+      // Padding is what the ISO spelling is for, and that one belongs in the
+      // export where a spreadsheet has to sort it.
+      expect(formatDate(DateTime(2026, 1, 5)), '1/5/2026');
+    });
+
+    test('the time of day is not part of a date', () {
+      expect(formatDate(DateTime(2026, 8, 17, 14, 32)), '8/17/2026');
+    });
+  });
 }

@@ -42,3 +42,14 @@ String formatPercent(num value) {
   final text = value.toStringAsFixed(1);
   return '${text.endsWith('.0') ? text.substring(0, text.length - 2) : text}%';
 }
+
+/// `8/17/2026` — how a date reads everywhere on screen.
+///
+/// Here for the same reason the money formats are: six files each grew their
+/// own copy, and one of them drifted to `2026-08-17`, so the approvals screen
+/// wrote dates back to front from every other screen in the app.
+///
+/// Deliberately not used for exports. The order workbook writes ISO dates
+/// because a spreadsheet sorts those correctly and this format sorts as text.
+String formatDate(DateTime value) =>
+    '${value.month}/${value.day}/${value.year}';

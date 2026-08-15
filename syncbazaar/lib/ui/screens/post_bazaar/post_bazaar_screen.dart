@@ -654,7 +654,7 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
   }
 
   String _formatDateRange(DateTime start, DateTime end) {
-    String fmt(DateTime d) => '${d.month}/${d.day}/${d.year}';
+    String fmt(DateTime d) => formatDate(d);
     return '${fmt(start)} - ${fmt(end)}';
   }
 

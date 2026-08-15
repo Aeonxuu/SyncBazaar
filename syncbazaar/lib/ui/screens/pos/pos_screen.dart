@@ -840,7 +840,7 @@ class _PosScreenState extends State<PosScreen> {
   }
 
   String _formatDate(DateTime date) {
-    return '${date.month}/${date.day}/${date.year}';
+    return formatDate(date);
   }
 
   /// Best-effort icon for a payment method name. Methods are free-text

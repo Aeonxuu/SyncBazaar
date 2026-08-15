@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../bloc/dashboard/dashboard_cubit.dart';
+import '../../../../core/utils/formatters.dart';
 import '../../../../models/bazaar_event.dart';
 import 'dashboard_section_card.dart';
 
@@ -69,7 +70,7 @@ class _BazaarRow extends StatelessWidget {
   }
 
   String _formatDateRange(DateTime start, DateTime end) {
-    String fmt(DateTime d) => '${d.month}/${d.day}/${d.year}';
+    String fmt(DateTime d) => formatDate(d);
     return '${fmt(start)} - ${fmt(end)}';
   }
 }
