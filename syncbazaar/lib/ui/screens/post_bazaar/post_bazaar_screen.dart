@@ -762,7 +762,7 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
       // column invites it to be read as one.
       subtitle:
           '$location  ·  ${eventSales.length} '
-          'transaction${eventSales.length == 1 ? '' : 's'}',
+          'order${eventSales.length == 1 ? '' : 's'}',
       content: [
         // Laid out the way the exported statement is, so the preview and the
         // document tell the same story: what was taken, what the venue is owed

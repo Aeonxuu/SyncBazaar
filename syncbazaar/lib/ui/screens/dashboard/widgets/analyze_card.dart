@@ -41,9 +41,9 @@ class AnalyzeCard extends StatelessWidget {
     return DashboardSectionCard(
       title: 'Analyze',
       subtitle: analytics.isEmpty
-          ? 'No sales recorded for ${analytics.scopeLabel} yet'
+          ? 'No orders recorded for ${analytics.scopeLabel} yet'
           : 'Based on ${formatCount(analytics.transactionCount)} '
-                'recorded ${analytics.transactionCount == 1 ? 'sale' : 'sales'} '
+                'recorded ${analytics.transactionCount == 1 ? 'order' : 'orders'} '
                 'across ${analytics.scopeLabel}',
       child: analytics.isEmpty
           ? const _EmptyState()
@@ -162,7 +162,7 @@ class _HeadlineStat extends StatelessWidget {
         const SizedBox(height: 2),
         Text(
           trend == null
-              ? 'Revenue divided by transactions'
+              ? 'Revenue divided by orders'
               : 'vs. the previous 7 days',
           style: theme.textTheme.bodySmall?.copyWith(color: Colors.black38),
         ),

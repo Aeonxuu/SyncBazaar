@@ -13,7 +13,7 @@ class CustomerHistoryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DashboardSectionCard(
-      title: 'Transaction History',
+      title: 'Recent Orders',
       child: Column(
         children: [
           _headerRow(context),
@@ -24,7 +24,7 @@ class CustomerHistoryCard extends StatelessWidget {
             child: rows.isEmpty
                 ? Center(
                     child: Text(
-                      'Transaction History is currently empty.',
+                      'No orders recorded yet.',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: Colors.black.withValues(alpha: 0.4),
                       ),

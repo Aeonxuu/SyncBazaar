@@ -94,7 +94,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Transaction History',
+                    'Orders',
                     style: Theme.of(context).textTheme.headlineSmall,
                   ),
                   if (widget.user.isAdminOrOwner)
@@ -110,7 +110,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
               Expanded(
                 child: DashboardSectionCard(
                   title:
-                      '${records.length} transaction${records.length == 1 ? '' : 's'}',
+                      '${records.length} order${records.length == 1 ? '' : 's'}',
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -342,7 +342,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
             ),
             const SizedBox(height: 10),
             Text(
-              'No transactions found.',
+              'No orders found.',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: Colors.black54,
                 fontWeight: FontWeight.w600,

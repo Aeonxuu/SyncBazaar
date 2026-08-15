@@ -68,7 +68,7 @@ void main() {
 
     expect(find.text('Analyze'), findsOneWidget);
     expect(
-      find.text('Based on 308 recorded sales across all bazaars'),
+      find.text('Based on 308 recorded orders across all bazaars'),
       findsOneWidget,
     );
 
@@ -119,10 +119,10 @@ void main() {
 
     expect(find.byType(TrendPill), findsNothing);
     expect(find.textContaining('vs. the previous'), findsNothing);
-    expect(find.text('Revenue divided by transactions'), findsOneWidget);
+    expect(find.text('Revenue divided by orders'), findsOneWidget);
     // Singular, because "1 recorded sales" reads as a bug.
     expect(
-      find.text('Based on 1 recorded sale across all bazaars'),
+      find.text('Based on 1 recorded order across all bazaars'),
       findsOneWidget,
     );
   });
@@ -136,7 +136,10 @@ void main() {
     );
 
     expect(find.text('Nothing to analyze yet'), findsOneWidget);
-    expect(find.text('No sales recorded for Amkor Bazaar yet'), findsOneWidget);
+    expect(
+      find.text('No orders recorded for Amkor Bazaar yet'),
+      findsOneWidget,
+    );
     // The card this replaced fell back to four invented sentences.
     expect(find.textContaining('120,450'), findsNothing);
     expect(find.text('Average order value'), findsNothing);
