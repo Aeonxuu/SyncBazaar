@@ -541,12 +541,17 @@ class _ApprovalList extends StatelessWidget {
                       ),
                     ],
                   ),
-                  ...items.asMap().entries.map<TableRow>((entry) {
+                  // Unreadable entries are dropped before any row is built.
+                  // Returning a short row instead threw "Table contains
+                  // irregular row lengths" while the dialog was building --
+                  // and a dialog that throws mid-build never appears, so the
+                  // whole request became impossible to open, let alone
+                  // approve, with nothing on screen to say why.
+                  ...items.whereType<Map>().toList().asMap().entries.map<
+                    TableRow
+                  >((entry) {
                     final rowIndex = entry.key;
                     final item = entry.value;
-                    if (item is! Map<String, dynamic>) {
-                      return const TableRow(children: [SizedBox()]);
-                    }
                     final name = item['name'] ?? '—';
                     final variant = item['variant'] ?? '—';
                     // Tolerates both shapes: requests raised before the
