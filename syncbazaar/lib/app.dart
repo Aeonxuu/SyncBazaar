@@ -46,6 +46,7 @@ import 'ui/screens/post_bazaar/post_bazaar_screen.dart';
 import 'ui/screens/pre_bazaar/pre_bazaar_screen.dart';
 import 'ui/screens/settings/settings_screen.dart';
 import 'ui/screens/staff/staff_screen.dart';
+import 'ui/widgets/confirmation_dialog.dart';
 import 'ui/widgets/navigation_rail.dart';
 
 class SyncBazaarApp extends StatefulWidget {
@@ -339,6 +340,41 @@ class _MainShellState extends State<MainShell> {
     }
   }
 
+  /// Signs out, asking first.
+  ///
+  /// Logging out is one tap from every screen and sits directly under the
+  /// navigation, so it is easy to hit for a section rather than for the door.
+  ///
+  /// Where sales are still waiting to upload the question says so and counts
+  /// them. They survive in memory, but they are not on the server, and the
+  /// end of a shift is exactly when somebody needs telling that before they
+  /// hand the tablet back.
+  Future<void> _confirmLogout() async {
+    final auth = context.read<AuthCubit>();
+    final pending = await context.read<SalesRepository>().listUnsyncedSales();
+    if (!mounted) {
+      return;
+    }
+
+    final confirmed = await showConfirmationDialog(
+      context: context,
+      title: 'Log out?',
+      message: pending.isEmpty
+          ? 'You will need to sign in again to sell or see this bazaar.'
+          : '${pending.length} sale${pending.length == 1 ? '' : 's'} '
+                'ha${pending.length == 1 ? 's' : 've'} not reached the server '
+                'yet. Sync before logging out, or they stay on this tablet '
+                'only.',
+      confirmLabel: 'Log out',
+      cancelLabel: 'Stay signed in',
+      emphasis: ConfirmationEmphasis.cancel,
+    );
+
+    if (confirmed == true) {
+      await auth.logout();
+    }
+  }
+
   /// Destinations grouped by when in the job they are needed, rather than as
   /// one flat list. See [SideNavigationRail] for why.
   ///
@@ -467,8 +503,7 @@ class _MainShellState extends State<MainShell> {
                                 onToggle: () => setState(
                                   () => _isNavCollapsed = !_isNavCollapsed,
                                 ),
-                                onLogout: () =>
-                                    context.read<AuthCubit>().logout(),
+                                onLogout: _confirmLogout,
                                 isSyncing: syncState.isSyncing,
                                 onSync: () =>
                                     context.read<SyncCubit>().syncNow(),
