@@ -57,6 +57,22 @@ class ProductAllocationItem {
     }
     return '${product.name} - ${parts.join(', ')}';
   }
+
+  /// Just what separates this row from its siblings — "Color: Black, Size: 42"
+  /// — without the product name.
+  ///
+  /// Used where the product is already named above the row. Repeating it on
+  /// every line spends most of the width on the one word that does not change.
+  String get variantLabel {
+    final parts = <String>[];
+    if (groupA != null && optionA != null) {
+      parts.add('${groupA!.name}: ${optionA!.value}');
+    }
+    if (groupB != null && optionB != null) {
+      parts.add('${groupB!.name}: ${optionB!.value}');
+    }
+    return parts.isEmpty ? 'Standard' : parts.join(', ');
+  }
 }
 
 class ProductRepository {

@@ -23,6 +23,8 @@ import '../../../data/repositories/auth_repository.dart';
 import '../../../data/repositories/event_repository.dart';
 import '../../../data/repositories/settings_repository.dart';
 import '../../../services/staff_scheduling.dart';
+import '../../widgets/app_dropdown.dart';
+import '../../widgets/quantity_stepper.dart';
 import '../../widgets/product_thumbnail.dart';
 import '../../widgets/selectable_option_button.dart';
 import 'widgets/pos_product_card.dart';
@@ -1000,7 +1002,6 @@ class _PosScreenState extends State<PosScreen> {
     final messenger = ScaffoldMessenger.of(context);
     final dashboardCubit = context.read<DashboardCubit>();
     final inventoryCubit = context.read<InventoryCubit>();
-    final nameController = TextEditingController(text: event.name);
     // Everything about a finished bazaar is a record rather than a plan.
     final isEnded = event.status == BazaarStatus.ended;
     DateTimeRange selectedRange = DateTimeRange(
@@ -1038,269 +1039,40 @@ class _PosScreenState extends State<PosScreen> {
 
     if (!context.mounted) return;
 
-    final saved = await showDialog<bool>(
+    final result = await showDialog<_EditBazaarResult>(
       context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              title: const Text('Edit Bazaar'),
-              content: SizedBox(
-                width: 460,
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TextField(
-                        controller: nameController,
-                        decoration: const InputDecoration(
-                          labelText: 'Bazaar Name',
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      OutlinedButton.icon(
-                        // An ended bazaar's dates are a record of when it
-                        // actually ran. Moving them re-slices which sales fall
-                        // inside it, so the statement of account, the order
-                        // list and the dashboard would all report a different
-                        // week than the one the money came from.
-                        onPressed: isEnded
-                            ? null
-                            : () async {
-                                final now = DateTime.now();
-                                final today = DateTime(
-                                  now.year,
-                                  now.month,
-                                  now.day,
-                                );
-                                // Past days are closed, so a bazaar cannot be
-                                // dragged backwards over dates it never ran. A
-                                // bazaar that already started keeps its own start
-                                // as the floor instead -- otherwise the picker
-                                // could not show the range it is editing.
-                                final floor =
-                                    selectedRange.start.isBefore(today)
-                                    ? selectedRange.start
-                                    : today;
-                                final range = await showAppDateRangePicker(
-                                  context: context,
-                                  firstDate: floor,
-                                  lastDate: DateTime(2035),
-                                  initialRange: selectedRange,
-                                  title: 'Bazaar dates',
-                                );
-                                if (range != null) {
-                                  setState(() => selectedRange = range);
-                                }
-                              },
-                        icon: Icon(
-                          isEnded
-                              ? Icons.lock_outline
-                              : Icons.date_range_outlined,
-                        ),
-                        label: Text(
-                          '${_formatDate(selectedRange.start)} - ${_formatDate(selectedRange.end)}',
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Staffing',
-                        style: Theme.of(context).textTheme.titleSmall,
-                      ),
-                      const SizedBox(height: 6),
-                      Builder(
-                        builder: (context) {
-                          final conflicts = StaffScheduling.conflicts(
-                            range: selectedRange,
-                            employees: allEmployees,
-                            eventsById: eventsById,
-                            // Its own roster is not a clash with itself.
-                            excludingEventId: event.id,
-                          );
-                          final free = allEmployees
-                              .where((e) => !rostered.contains(e.id))
-                              .where((e) => !conflicts.containsKey(e.id))
-                              .toList();
-                          final busy = allEmployees
-                              .where((e) => !rostered.contains(e.id))
-                              .where((e) => conflicts.containsKey(e.id))
-                              .toList();
-
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (rostered.isEmpty)
-                                Text(
-                                  'Nobody is assigned to this bazaar.',
-                                  style: Theme.of(context).textTheme.bodySmall
-                                      ?.copyWith(color: AppColors.error),
-                                )
-                              else
-                                Wrap(
-                                  spacing: 6,
-                                  runSpacing: 6,
-                                  children: [
-                                    for (final id in rostered)
-                                      Chip(
-                                        label: Text(
-                                          allEmployees
-                                                  .where((e) => e.id == id)
-                                                  .map((e) => e.name)
-                                                  .firstOrNull ??
-                                              'Employee #$id',
-                                        ),
-                                        onDeleted: isEnded
-                                            ? null
-                                            : () => setState(
-                                                () => rostered.remove(id),
-                                              ),
-                                      ),
-                                  ],
-                                ),
-                              if (!isEnded) ...[
-                                const SizedBox(height: 8),
-                                DropdownButton<int>(
-                                  isExpanded: true,
-                                  value: null,
-                                  hint: Text(
-                                    free.isEmpty
-                                        ? (busy.isEmpty
-                                              ? 'Everyone is assigned'
-                                              : 'Nobody is free on these '
-                                                    'dates')
-                                        : 'Add an employee',
-                                  ),
-                                  items: [
-                                    for (final employee in free)
-                                      DropdownMenuItem(
-                                        value: employee.id,
-                                        child: Text(employee.name),
-                                      ),
-                                  ],
-                                  onChanged: (id) {
-                                    if (id != null) {
-                                      setState(() => rostered.add(id));
-                                    }
-                                  },
-                                ),
-                                for (final employee in busy)
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 2),
-                                    child: Text(
-                                      '${employee.name} — already at '
-                                      '${conflicts[employee.id]}',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodySmall
-                                          ?.copyWith(color: Colors.black45),
-                                    ),
-                                  ),
-                              ],
-                            ],
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Allocated Stocks',
-                        style: Theme.of(context).textTheme.titleSmall,
-                      ),
-                      if (isEnded)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4, bottom: 4),
-                          child: Text(
-                            'This bazaar has ended. Its dates and stock are '
-                            'fixed — send stock back through Inventory '
-                            'Reconciliation instead.',
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(color: Colors.black45, height: 1.35),
-                          ),
-                        ),
-                      const SizedBox(height: 8),
-                      ...allocationItems.map((item) {
-                        final allocated = allocations[item.allocationKey] ?? 0;
-                        final maxQty = maxByKey[item.allocationKey] ?? 0;
-                        final lineLabel = item.displayLabel;
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 6),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  lineLabel,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              // An ended bazaar takes no more stock. Sending
-                              // shoes to a stall that has packed up moves them
-                              // out of the warehouse to nowhere, and each
-                              // round of allocate-then-reconcile is another
-                              // pass through a return the server cannot yet
-                              // refuse to repeat.
-                              IconButton(
-                                onPressed: (isEnded || allocated <= 0)
-                                    ? null
-                                    : () => setState(
-                                        () => allocations[item.allocationKey] =
-                                            allocated - 1,
-                                      ),
-                                icon: const Icon(Icons.remove_circle_outline),
-                              ),
-                              Text('$allocated'),
-                              IconButton(
-                                onPressed: (isEnded || allocated >= maxQty)
-                                    ? null
-                                    : () => setState(
-                                        () => allocations[item.allocationKey] =
-                                            allocated + 1,
-                                      ),
-                                icon: const Icon(Icons.add_circle_outline),
-                              ),
-                            ],
-                          ),
-                        );
-                      }),
-                    ],
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: () => Navigator.pop(context, true),
-                  child: const Text('Save'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      builder: (dialogContext) => _EditBazaarDialog(
+        event: event,
+        isEnded: isEnded,
+        initialName: event.name,
+        initialRange: selectedRange,
+        allocationItems: allocationItems,
+        initialAllocations: allocations,
+        maxByKey: maxByKey,
+        allEmployees: allEmployees,
+        initialRoster: rostered,
+        eventsById: eventsById,
+        formatDate: _formatDate,
+      ),
     );
 
-    if (saved != true || !context.mounted) {
+    if (result == null || !context.mounted) {
       return;
     }
 
     final ok = await cubit.updateEventFromPos(
       user: widget.user,
       event: event,
-      name: nameController.text.trim().isEmpty
-          ? event.name
-          : nameController.text.trim(),
-      startDate: selectedRange.start,
-      endDate: selectedRange.end,
-      newAllocations: allocations,
+      name: result.name.isEmpty ? event.name : result.name,
+      startDate: result.range.start,
+      endDate: result.range.end,
+      newAllocations: result.allocations,
     );
 
     // Only the difference is written. Re-posting the whole roster would rely
     // on the server rejecting duplicates, and removals would never happen at
     // all -- a roster that can only grow cannot be corrected.
-    for (final id in originalRoster.difference(rostered)) {
+    for (final id in originalRoster.difference(result.roster)) {
       final assignmentId = assignmentIdByUserId[id];
       if (assignmentId != null) {
         await authRepository.unassignEmployeeFromBazaar(
@@ -1310,7 +1082,7 @@ class _PosScreenState extends State<PosScreen> {
         );
       }
     }
-    final added = rostered.difference(originalRoster).toList();
+    final added = result.roster.difference(originalRoster).toList();
     if (added.isNotEmpty) {
       await authRepository.assignEmployeesToBazaar(
         eventId: event.id,
@@ -2541,6 +2313,641 @@ class _QuietDeleteButtonState extends State<_QuietDeleteButton> {
           ),
           label: Text('Delete', style: TextStyle(color: color)),
         ),
+      ),
+    );
+  }
+}
+
+/// What the Edit Bazaar dialog agreed to, or null if it was cancelled.
+class _EditBazaarResult {
+  const _EditBazaarResult({
+    required this.name,
+    required this.range,
+    required this.allocations,
+    required this.roster,
+  });
+
+  final String name;
+  final DateTimeRange range;
+  final Map<String, int> allocations;
+  final Set<int> roster;
+}
+
+/// Editing a bazaar: what it is called, when it runs, who works it, what it
+/// sells.
+///
+/// Four questions, so four labelled blocks rather than one column of controls
+/// -- the old version ran a text field, a date button, a roster and eighty
+/// stock rows together with nothing to say where one ended.
+///
+/// The stock list is grouped by product. Every row used to restate the product
+/// name in full ("Nike Air Max SC - Color: Triple White, Size: 36", forty
+/// times over), which is most of a line spent on the one word that does not
+/// change between rows. The name is printed once and the variants sit under
+/// it, so what the eye scans is what actually differs.
+class _EditBazaarDialog extends StatefulWidget {
+  const _EditBazaarDialog({
+    required this.event,
+    required this.isEnded,
+    required this.initialName,
+    required this.initialRange,
+    required this.allocationItems,
+    required this.initialAllocations,
+    required this.maxByKey,
+    required this.allEmployees,
+    required this.initialRoster,
+    required this.eventsById,
+    required this.formatDate,
+  });
+
+  final BazaarEvent event;
+  final bool isEnded;
+  final String initialName;
+  final DateTimeRange initialRange;
+  final List<ProductAllocationItem> allocationItems;
+  final Map<String, int> initialAllocations;
+  final Map<String, int> maxByKey;
+  final List<AppUser> allEmployees;
+  final Set<int> initialRoster;
+  final Map<int, BazaarEvent> eventsById;
+  final String Function(DateTime) formatDate;
+
+  @override
+  State<_EditBazaarDialog> createState() => _EditBazaarDialogState();
+}
+
+class _EditBazaarDialogState extends State<_EditBazaarDialog> {
+  late final TextEditingController _name;
+  late final TextEditingController _search;
+  late DateTimeRange _range;
+  late Map<String, int> _allocations;
+  late Set<int> _roster;
+
+  @override
+  void initState() {
+    super.initState();
+    _name = TextEditingController(text: widget.initialName);
+    _search = TextEditingController();
+    _range = widget.initialRange;
+    _allocations = Map<String, int>.from(widget.initialAllocations);
+    _roster = Set<int>.from(widget.initialRoster);
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _search.dispose();
+    super.dispose();
+  }
+
+  int get _totalUnits =>
+      _allocations.values.fold<int>(0, (sum, quantity) => sum + quantity);
+
+  int get _linesWithStock =>
+      _allocations.values.where((quantity) => quantity > 0).length;
+
+  /// Allocation rows grouped under their product, filtered by the search box.
+  Map<String, List<ProductAllocationItem>> get _grouped {
+    final query = _search.text.trim().toLowerCase();
+    final grouped = <String, List<ProductAllocationItem>>{};
+    for (final item in widget.allocationItems) {
+      if (query.isNotEmpty &&
+          !item.product.name.toLowerCase().contains(query) &&
+          !item.displayLabel.toLowerCase().contains(query)) {
+        continue;
+      }
+      grouped.putIfAbsent(item.product.name, () => []).add(item);
+    }
+    return grouped;
+  }
+
+  Future<void> _pickDates() async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    // Past days are closed, so a bazaar cannot be dragged backwards over days
+    // it never ran. One that already started keeps its own start as the
+    // floor, or the picker could not show the range it is editing.
+    final floor = _range.start.isBefore(today) ? _range.start : today;
+    final picked = await showAppDateRangePicker(
+      context: context,
+      firstDate: floor,
+      lastDate: DateTime(2035),
+      initialRange: _range,
+      title: 'Bazaar dates',
+    );
+    if (picked != null && mounted) {
+      setState(() => _range = picked);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final conflicts = StaffScheduling.conflicts(
+      range: _range,
+      employees: widget.allEmployees,
+      eventsById: widget.eventsById,
+      excludingEventId: widget.event.id,
+    );
+    final free = widget.allEmployees
+        .where((e) => !_roster.contains(e.id))
+        .where((e) => !conflicts.containsKey(e.id))
+        .toList();
+    final busy = widget.allEmployees
+        .where((e) => !_roster.contains(e.id))
+        .where((e) => conflicts.containsKey(e.id))
+        .toList();
+
+    return Dialog(
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      child: ConstrainedBox(
+        // Wider than a form dialog usually is, because the stock list has a
+        // label and a stepper side by side and neither should wrap.
+        constraints: const BoxConstraints(maxWidth: 620, maxHeight: 720),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header and footer are outside the scroll view. The old version
+            // scrolled everything, so the first field's label slid under the
+            // title and read as clipped.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Edit Bazaar',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    tooltip: 'Close',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(
+                      width: 32,
+                      height: 32,
+                    ),
+                    icon: const Icon(Icons.close_rounded, size: 18),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Divider(height: 1, color: Color(0xFFEDEDF1)),
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const _EditSectionLabel('Bazaar'),
+                    const SizedBox(height: 8),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          flex: 3,
+                          child: TextField(
+                            controller: _name,
+                            style: theme.textTheme.bodyMedium,
+                            decoration: _editFieldDecoration(
+                              hint: 'Bazaar name',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 2,
+                          child: _DateFieldButton(
+                            label:
+                                '${widget.formatDate(_range.start)} – '
+                                '${widget.formatDate(_range.end)}',
+                            enabled: !widget.isEnded,
+                            onPressed: _pickDates,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (widget.isEnded) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        'This bazaar has ended. Its dates, staffing and stock '
+                        'are fixed — send stock back through Inventory '
+                        'Reconciliation.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: Colors.black45,
+                          height: 1.35,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 24),
+                    const _EditSectionLabel('Staffing'),
+                    const SizedBox(height: 8),
+                    if (_roster.isEmpty)
+                      Text(
+                        'Nobody is assigned to this bazaar.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: AppColors.error,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      )
+                    else
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (final id in _roster)
+                            _StaffChip(
+                              name:
+                                  widget.allEmployees
+                                      .where((e) => e.id == id)
+                                      .map((e) => e.name)
+                                      .firstOrNull ??
+                                  'Employee #$id',
+                              onRemove: widget.isEnded
+                                  ? null
+                                  : () => setState(() => _roster.remove(id)),
+                            ),
+                        ],
+                      ),
+                    if (!widget.isEnded) ...[
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: 280,
+                        child: AppDropdown<AppUser>(
+                          options: free,
+                          selected: null,
+                          labelOf: (employee) => employee.name,
+                          hint: free.isEmpty
+                              ? (busy.isEmpty
+                                    ? 'Everyone is assigned'
+                                    : 'Nobody is free on these dates')
+                              : 'Add an employee',
+                          leadingIcon: Icons.person_add_alt,
+                          onSelected: (employee) =>
+                              setState(() => _roster.add(employee.id)),
+                        ),
+                      ),
+                      for (final employee in busy)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.event_busy_outlined,
+                                size: 14,
+                                color: Colors.black38,
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  '${employee.name} — already at '
+                                  '${conflicts[employee.id]}',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: Colors.black45,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                    const SizedBox(height: 24),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        const _EditSectionLabel('Allocated stock'),
+                        const Spacer(),
+                        // Says what is being committed without making the
+                        // reader add up eighty rows.
+                        Text(
+                          '${formatCount(_totalUnits)} units · '
+                          '$_linesWithStock lines',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: Colors.black45,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    if (widget.allocationItems.length > 8)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: TextField(
+                          controller: _search,
+                          onChanged: (_) => setState(() {}),
+                          style: theme.textTheme.bodyMedium,
+                          decoration: _editFieldDecoration(
+                            hint: 'Search products',
+                            icon: Icons.search,
+                          ),
+                        ),
+                      ),
+                    for (final entry in _grouped.entries) ...[
+                      _AllocationGroup(
+                        product: entry.key,
+                        items: entry.value,
+                        allocations: _allocations,
+                        maxByKey: widget.maxByKey,
+                        enabled: !widget.isEnded,
+                        onChanged: (key, value) =>
+                            setState(() => _allocations[key] = value),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    if (_grouped.isEmpty)
+                      Text(
+                        'No products match that search.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: Colors.black45,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            const Divider(height: 1, color: Color(0xFFEDEDF1)),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel'),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: () => Navigator.pop(
+                      context,
+                      _EditBazaarResult(
+                        name: _name.text.trim(),
+                        range: _range,
+                        allocations: _allocations,
+                        roster: _roster,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: const Text('Save'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+InputDecoration _editFieldDecoration({required String hint, IconData? icon}) =>
+    InputDecoration(
+      hintText: hint,
+      hintStyle: const TextStyle(color: Colors.black38),
+      prefixIcon: icon == null
+          ? null
+          : Icon(icon, size: 18, color: Colors.black38),
+      filled: true,
+      fillColor: AppColors.inputFill,
+      isDense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide.none,
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide.none,
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: AppColors.primary),
+      ),
+    );
+
+/// A quiet all-caps heading over a block of the form.
+class _EditSectionLabel extends StatelessWidget {
+  const _EditSectionLabel(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Text(
+    text.toUpperCase(),
+    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+      color: Colors.black38,
+      fontWeight: FontWeight.w700,
+      letterSpacing: 0.8,
+    ),
+  );
+}
+
+/// Shaped like the text field beside it rather than like a button, because it
+/// holds a value rather than performing an action.
+class _DateFieldButton extends StatelessWidget {
+  const _DateFieldButton({
+    required this.label,
+    required this.enabled,
+    required this.onPressed,
+  });
+
+  final String label;
+  final bool enabled;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: enabled ? onPressed : null,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        height: 44,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          color: AppColors.inputFill,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              enabled ? Icons.calendar_today_outlined : Icons.lock_outline,
+              size: 15,
+              color: Colors.black38,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: enabled ? AppColors.text : Colors.black45,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StaffChip extends StatelessWidget {
+  const _StaffChip({required this.name, this.onRemove});
+
+  final String name;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.only(left: 12, right: onRemove == null ? 12 : 6),
+      height: 32,
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            name,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: AppColors.primary,
+            ),
+          ),
+          if (onRemove != null) ...[
+            const SizedBox(width: 4),
+            InkWell(
+              onTap: onRemove,
+              borderRadius: BorderRadius.circular(10),
+              child: const Padding(
+                padding: EdgeInsets.all(2),
+                child: Icon(
+                  Icons.close_rounded,
+                  size: 14,
+                  color: AppColors.primary,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// One product's variants, under its name.
+///
+/// A bordered region rather than loose rows: the product name applies to
+/// everything inside it, and a boundary is what says how far "inside" reaches.
+class _AllocationGroup extends StatelessWidget {
+  const _AllocationGroup({
+    required this.product,
+    required this.items,
+    required this.allocations,
+    required this.maxByKey,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final String product;
+  final List<ProductAllocationItem> items;
+  final Map<String, int> allocations;
+  final Map<String, int> maxByKey;
+  final bool enabled;
+  final void Function(String key, int value) onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final allocated = items.fold<int>(
+      0,
+      (sum, item) => sum + (allocations[item.allocationKey] ?? 0),
+    );
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFEDEDF1)),
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: const BoxDecoration(
+              color: Color(0xFFFAFAFB),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(9)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    product,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                if (allocated > 0)
+                  Text(
+                    formatCount(allocated),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          for (var i = 0; i < items.length; i++) ...[
+            if (i > 0) const Divider(height: 1, color: Color(0xFFF2F2F5)),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      // The product name is on the header; this is only what
+                      // separates one row from the next.
+                      items[i].variantLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  QuantityStepper(
+                    value: allocations[items[i].allocationKey] ?? 0,
+                    max: maxByKey[items[i].allocationKey] ?? 0,
+                    enabled: enabled,
+                    onChanged: (value) =>
+                        onChanged(items[i].allocationKey, value),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

@@ -204,9 +204,7 @@ class AuthRepository {
     required int employeeId,
   }) async {
     if (vendorId != null) {
-      await _api.delete(
-        '/api/bazaar/event/$eventId/assignment/$assignmentId/',
-      );
+      await _api.delete('/api/bazaar/event/$eventId/assignment/$assignmentId/');
     }
 
     final index = _users.indexWhere((user) => user.id == employeeId);
