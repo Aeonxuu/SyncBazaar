@@ -777,12 +777,12 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
         const SizedBox(height: 8),
         _receiptRow(
           context,
-          label: 'Incentive (${_percent(incentivePct)})',
+          label: 'Incentive (${formatPercent(incentivePct)})',
           value: formatPeso(incentive),
         ),
         _receiptRow(
           context,
-          label: 'Buffer (${_percent(bufferPct)})',
+          label: 'Buffer (${formatPercent(bufferPct)})',
           value: formatPeso(buffer),
         ),
         const Divider(height: 18),
@@ -1021,13 +1021,6 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
       letterSpacing: 0.8,
     ),
   );
-
-  /// `10` reads as "10%", `12.5` as "12.5%" — a whole percentage should not
-  /// carry a decimal it does not need.
-  static String _percent(num value) {
-    final text = value.toStringAsFixed(1);
-    return '${text.endsWith('.0') ? text.substring(0, text.length - 2) : text}%';
-  }
 
   Widget _receiptRow(
     BuildContext context, {

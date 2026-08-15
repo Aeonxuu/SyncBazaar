@@ -30,3 +30,15 @@ String formatAmount(num value) => _amountFormat.format(value);
 
 /// `12,495` — a whole number: stock counts, units, transactions.
 String formatCount(num value) => _countFormat.format(value);
+
+/// `10%`, `12.5%` — a whole percentage does not carry a decimal it does not
+/// need.
+///
+/// Here rather than at each call site for the reason the money formats are:
+/// the same rate was being written three ways across the app -- `10.0%` on the
+/// venue list, `10%` in the statement of account, `10.0` in the approvals
+/// table -- and a formatting rule re-implemented per file drifts.
+String formatPercent(num value) {
+  final text = value.toStringAsFixed(1);
+  return '${text.endsWith('.0') ? text.substring(0, text.length - 2) : text}%';
+}

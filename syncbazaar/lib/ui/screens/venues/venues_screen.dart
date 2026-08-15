@@ -6,6 +6,7 @@ import '../../../bloc/settings/settings_cubit.dart';
 import '../../../core/constants/colors.dart';
 import '../../../data/repositories/settings_repository.dart';
 import '../../../models/company.dart';
+import '../../../core/utils/formatters.dart';
 import '../../../models/user.dart';
 
 /// Venues the bazaars are held at, and the commercial terms agreed with each.
@@ -14,78 +15,198 @@ import '../../../models/user.dart';
 /// carries the incentive and buffer percentages that come off the payout and
 /// the payment methods the POS will offer there. Nobody hunting for "where do
 /// I enable GCash" was going to look under a word that sounds like an address.
-class VenuesScreen extends StatelessWidget {
+class VenuesScreen extends StatefulWidget {
   const VenuesScreen({super.key, required this.user});
 
   final AppUser user;
 
   @override
+  State<VenuesScreen> createState() => _VenuesScreenState();
+}
+
+class _VenuesScreenState extends State<VenuesScreen> {
+  final TextEditingController _search = TextEditingController();
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final canManage = user.isAdminOrOwner;
+    final theme = Theme.of(context);
+    final canManage = widget.user.isAdminOrOwner;
+
+    if (!canManage) {
+      return const Center(child: Text('Access denied'));
+    }
 
     return BlocBuilder<SettingsCubit, SettingsState>(
       builder: (context, state) {
-        return ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Venues & Terms',
-                    style: Theme.of(context).textTheme.headlineSmall,
+        final query = _search.text.trim().toLowerCase();
+        final visible = state.companies
+            .where(
+              (company) =>
+                  query.isEmpty ||
+                  company.name.toLowerCase().contains(query) ||
+                  company.address.toLowerCase().contains(query),
+            )
+            .toList();
+
+        return Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Venues & Terms',
+                          style: theme.textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          // Says what a venue row carries, because the name
+                          // "venue" only covers half of it -- the rates here
+                          // come off every payout.
+                          state.companies.isEmpty
+                              ? 'Where you sell, and the terms agreed there'
+                              : _describeScope(
+                                  state.companies.length,
+                                  visible.length,
+                                ),
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: Colors.black45,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                if (canManage)
                   ElevatedButton.icon(
                     onPressed: () => _openVenueEditor(context),
-                    icon: const Icon(Icons.add),
+                    icon: const Icon(Icons.add, size: 18),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
                     label: const Text('Add venue'),
                   ),
+                ],
+              ),
+              if (state.companies.length > 4) ...[
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: 320,
+                  child: TextField(
+                    controller: _search,
+                    onChanged: (_) => setState(() {}),
+                    style: theme.textTheme.bodyMedium,
+                    decoration: _venueFieldDecoration(
+                      hint: 'Search venue or address',
+                    ),
+                  ),
+                ),
               ],
-            ),
-            const SizedBox(height: 12),
-            if (!canManage)
-              const Card(
-                child: Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text('No access'),
-                ),
-              )
-            else if (state.companies.isEmpty)
-              const Card(
-                child: Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text(
-                    'No venues yet. Add the first place you sell at.',
-                  ),
-                ),
-              )
-            else
-              ...state.companies.map((company) {
-                final methods =
-                    state.locationPaymentMethodsByCompanyId[company.id] ??
-                    const [];
-                return Card(
-                  child: ListTile(
-                    title: Text(company.name),
-                    subtitle: Text(
-                      'Incentive ${company.incentivePercent.toStringAsFixed(1)}% • Buffer ${company.bufferPercent.toStringAsFixed(1)}% • Methods ${methods.length}',
-                    ),
-                    trailing: IconButton(
-                      onPressed: () => _openVenueEditor(
+              const SizedBox(height: 24),
+              Expanded(
+                child: state.companies.isEmpty
+                    ? _emptyState(
                         context,
-                        existing: company,
-                        existingMethods: methods,
+                        icon: Icons.storefront_outlined,
+                        message:
+                            'No venues yet. Add the first place you sell at.',
+                      )
+                    : visible.isEmpty
+                    ? _emptyState(
+                        context,
+                        icon: Icons.search_off_outlined,
+                        message: 'No venue matches that search.',
+                      )
+                    : GridView.builder(
+                        padding: EdgeInsets.zero,
+                        gridDelegate:
+                            const SliverGridDelegateWithMaxCrossAxisExtent(
+                              maxCrossAxisExtent: 420,
+                              // Fixed height rather than an aspect ratio: a
+                              // ratio derives height from width, so the same
+                              // card grows taller as the window widens and
+                              // its padding becomes a function of the
+                              // viewport.
+                              mainAxisExtent: 188,
+                              crossAxisSpacing: 16,
+                              mainAxisSpacing: 16,
+                            ),
+                        itemCount: visible.length,
+                        itemBuilder: (context, index) {
+                          final company = visible[index];
+                          return _VenueCard(
+                            company: company,
+                            methods:
+                                state.locationPaymentMethodsByCompanyId[company
+                                    .id] ??
+                                const [],
+                            onEdit: () => _openVenueEditor(
+                              context,
+                              existing: company,
+                              existingMethods:
+                                  state
+                                      .locationPaymentMethodsByCompanyId[company
+                                      .id] ??
+                                  const [],
+                            ),
+                          );
+                        },
                       ),
-                      icon: const Icon(Icons.edit_outlined),
-                    ),
-                  ),
-                );
-              }),
-          ],
+              ),
+            ],
+          ),
         );
       },
+    );
+  }
+
+  String _describeScope(int total, int shown) {
+    if (total == shown) {
+      return '$total ${total == 1 ? 'venue' : 'venues'}';
+    }
+    return '$shown of $total shown';
+  }
+
+  Widget _emptyState(
+    BuildContext context, {
+    required IconData icon,
+    required String message,
+  }) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 28, color: Colors.black26),
+          const SizedBox(height: 12),
+          Text(
+            message,
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: Colors.black45),
+          ),
+        ],
+      ),
     );
   }
 
@@ -562,6 +683,208 @@ class VenuesScreen extends StatelessWidget {
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(6),
           borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+        ),
+      ),
+    );
+  }
+}
+
+InputDecoration _venueFieldDecoration({required String hint}) =>
+    InputDecoration(
+      hintText: hint,
+      hintStyle: const TextStyle(color: Colors.black38),
+      prefixIcon: const Icon(Icons.search, size: 18, color: Colors.black38),
+      filled: true,
+      fillColor: AppColors.inputFill,
+      isDense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide.none,
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide.none,
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: AppColors.primary),
+      ),
+    );
+
+/// One venue and the terms agreed with it.
+///
+/// A card rather than a list row, because a venue is not one fact: it has an
+/// address, a contact, two rates that come off every payout, and the payment
+/// methods the till will offer there. All of that used to be a single run-on
+/// subtitle -- "Incentive 10.0% • Buffer 5.0% • Methods 2" -- which buried the
+/// two numbers that matter mid-sentence and never showed the address at all.
+class _VenueCard extends StatelessWidget {
+  const _VenueCard({
+    required this.company,
+    required this.methods,
+    required this.onEdit,
+  });
+
+  final Company company;
+  final List<PaymentMethodMeta> methods;
+  final VoidCallback onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFEDEDF1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      company.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      [
+                        if (company.address.trim().isNotEmpty) company.address,
+                        if (company.contact.trim().isNotEmpty) company.contact,
+                      ].join(' · '),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: Colors.black45,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              _VenueRowAction(onPressed: onEdit),
+            ],
+          ),
+          const Spacer(),
+          // The two rates get their own row, in the accent colour. They are
+          // the reason this screen is called "& Terms": every payout is
+          // computed from them, and in a sentence they read as trivia.
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _VenueFact(
+                  label: 'Incentive',
+                  value: formatPercent(company.incentivePercent),
+                  emphasise: true,
+                ),
+              ),
+              Expanded(
+                child: _VenueFact(
+                  label: 'Buffer',
+                  value: formatPercent(company.bufferPercent),
+                  emphasise: true,
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: _VenueFact(
+                  label: 'Takes',
+                  value: methods.isEmpty
+                      ? 'CASH'
+                      : methods.map((m) => m.name).join(' · '),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Label above, value below — the same shape used in the bazaar and staff
+/// dialogs, so a fact reads the same wherever it appears.
+class _VenueFact extends StatelessWidget {
+  const _VenueFact({
+    required this.label,
+    required this.value,
+    this.emphasise = false,
+  });
+
+  final String label;
+  final String value;
+  final bool emphasise;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: Colors.black38,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.8,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: emphasise ? AppColors.primary : AppColors.text,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _VenueRowAction extends StatefulWidget {
+  const _VenueRowAction({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  State<_VenueRowAction> createState() => _VenueRowActionState();
+}
+
+class _VenueRowActionState extends State<_VenueRowAction> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: IconButton(
+        onPressed: widget.onPressed,
+        tooltip: 'Edit venue',
+        splashRadius: 18,
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints.tightFor(width: 34, height: 34),
+        icon: Icon(
+          Icons.edit_outlined,
+          size: 18,
+          color: _hovered ? AppColors.primary : Colors.black38,
         ),
       ),
     );
