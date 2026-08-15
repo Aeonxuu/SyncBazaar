@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../bloc/orders/orders_cubit.dart';
 import '../../../bloc/pos/pos_cubit.dart';
 import '../../../core/constants/colors.dart';
+import '../../widgets/selectable_option_button.dart';
 import '../../../models/bazaar_event.dart';
 import '../../../models/user.dart';
 import '../../screens/dashboard/widgets/dashboard_section_card.dart';
@@ -19,11 +20,13 @@ class OrdersScreen extends StatefulWidget {
 }
 
 class _OrdersScreenState extends State<OrdersScreen> {
-  static const _kCardShadow = [
-    BoxShadow(color: Color(0x11000000), blurRadius: 20, offset: Offset(0, 4)),
-  ];
-
   final TextEditingController _searchController = TextEditingController();
+
+  /// Separate from the transaction search: this one filters the list of
+  /// bazaars, the other filters the rows inside one. Sharing a controller
+  /// would carry a customer's name into the bazaar picker.
+  final TextEditingController _bazaarSearch = TextEditingController();
+  String _bazaarStatusFilter = 'ALL';
 
   @override
   void initState() {
@@ -37,6 +40,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
   @override
   void dispose() {
     _searchController.dispose();
+    _bazaarSearch.dispose();
     super.dispose();
   }
 
@@ -335,129 +339,179 @@ class _OrdersScreenState extends State<OrdersScreen> {
   }
 
   Widget _bazaarSelector(BuildContext context) {
-    final width = MediaQuery.sizeOf(context).width;
-    final cardSize = width >= 1200 ? 270.0 : 230.0;
-
     return BlocBuilder<PosCubit, PosState>(
       builder: (context, state) {
-        // Scrollable, because the list is as long as the vendor's season. With
-        // twelve bazaars the grid ran 843px past the bottom of the window and
-        // there was no way to reach the last row -- including, for the user who
-        // found it, the bazaar they were currently selling at.
-        //
-        // Page padding is 24: this is a full top-level screen, and Section 4 of
-        // the design guidelines names this one.
-        return SingleChildScrollView(
+        final theme = Theme.of(context);
+        final query = _bazaarSearch.text.trim().toLowerCase();
+        final visible = state.events
+            .where(
+              (event) =>
+                  _bazaarStatusFilter == 'ALL' ||
+                  event.status.name.toUpperCase() == _bazaarStatusFilter,
+            )
+            .where(
+              (event) =>
+                  query.isEmpty || event.name.toLowerCase().contains(query),
+            )
+            .toList();
+
+        return Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Select Active Bazaar',
-                style: Theme.of(context).textTheme.headlineSmall,
+                // Not "active": this list is every bazaar the vendor has run
+                // or will run, and its own badges say ENDED on most of them.
+                'Select a bazaar',
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-              const SizedBox(height: 16),
-              Wrap(
-                // One gutter, equal in both axes, per Section 4. Twelve at this
-                // card size read as crowded once the cards stopped being mostly
-                // whitespace.
-                spacing: 16,
-                runSpacing: 16,
-                children: state.events.asMap().entries.map((entry) {
-                  final index = entry.key;
-                  final event = entry.value;
-                  return SizedBox(
-                    width: cardSize,
-                    child: _AnimatedEntrance(
-                      delayMs: 40 * (index % 8),
-                      child: _InteractiveCard(
-                        borderRadius: BorderRadius.circular(12),
-                        onTap: () {
-                          context.read<OrdersCubit>().filterByEvent(event.id);
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(12),
-                            boxShadow: _kCardShadow,
-                          ),
-                          // Height comes from the content, not from the width.
-                          // A 0.95 aspect ratio made every card near-square --
-                          // about 284px tall at this width for roughly 110px of
-                          // title, badge and link, so more than half of each
-                          // card was empty and the grid was twice as tall as it
-                          // needed to be. Section 4 of the guidelines makes the
-                          // same point about dashboard tiles: card height must
-                          // not be a function of the viewport.
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // No storefront icon. It was the same glyph on
-                              // every card, so it distinguished nothing and
-                              // only competed with the one thing that does --
-                              // the name. Dropping it also gives a long bazaar
-                              // name the full width before it wraps.
-                              Text(
-                                event.name,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.titleMedium
-                                    ?.copyWith(fontWeight: FontWeight.w700),
-                              ),
-                              const SizedBox(height: 8),
-                              // The bazaar's actual status. Every card used to
-                              // read ACTIVE BAZAAR regardless, so one that
-                              // finished in June looked like one selling today
-                              // -- and the badge, being always identical, told
-                              // the reader nothing at all.
-                              _StatusBadge(status: event.status),
-                              // A fixed gap rather than a Spacer: with the
-                              // height no longer forced there is no slack for
-                              // one to push against.
-                              const SizedBox(height: 16),
-                              Align(
-                                alignment: Alignment.bottomRight,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 6,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFF2ECFC),
-                                    borderRadius: BorderRadius.circular(999),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        'View Orders',
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodySmall
-                                            ?.copyWith(
-                                              color: AppColors.primary,
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                      ),
-                                      const SizedBox(width: 4),
-                                      const Icon(
-                                        Icons.arrow_forward_rounded,
-                                        color: AppColors.primary,
-                                        size: 16,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+              const SizedBox(height: 4),
+              Text(
+                state.events.isEmpty
+                    ? 'No bazaars yet.'
+                    : _describeScope(state.events.length, visible.length),
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: Colors.black45,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  SizedBox(
+                    width: 320,
+                    child: TextField(
+                      controller: _bazaarSearch,
+                      onChanged: (_) => setState(() {}),
+                      style: theme.textTheme.bodyMedium,
+                      decoration: _selectorFieldDecoration(
+                        hint: 'Search bazaar',
                       ),
                     ),
-                  );
-                }).toList(),
+                  ),
+                  const SizedBox(width: 12),
+                  for (final status in const [
+                    'ALL',
+                    'ONGOING',
+                    'UPCOMING',
+                    'ENDED',
+                  ])
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: SelectableOptionButton(
+                        label: status,
+                        isSelected: _bazaarStatusFilter == status,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        onTap: () =>
+                            setState(() => _bazaarStatusFilter = status),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              Expanded(
+                child: visible.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.search_off_outlined,
+                              size: 28,
+                              color: Colors.black26,
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              state.events.isEmpty
+                                  ? 'No bazaars yet.'
+                                  : 'No bazaar matches that.',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: Colors.black45,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    // A grid rather than a Wrap of fixed-width cards. Wrap
+                    // packs from the left and leaves whatever is left over as
+                    // dead space on the right, so the whole page read as
+                    // shoved into one corner. A grid divides the width
+                    // between its columns, which is symmetric by
+                    // construction and fills the row.
+                    : GridView.builder(
+                        padding: EdgeInsets.zero,
+                        gridDelegate:
+                            const SliverGridDelegateWithMaxCrossAxisExtent(
+                              maxCrossAxisExtent: 320,
+                              mainAxisExtent: 152,
+                              crossAxisSpacing: 16,
+                              mainAxisSpacing: 16,
+                            ),
+                        itemCount: visible.length,
+                        itemBuilder: (context, index) {
+                          final event = visible[index];
+                          return _AnimatedEntrance(
+                            delayMs: 40 * (index % 8),
+                            child: _InteractiveCard(
+                              borderRadius: BorderRadius.circular(10),
+                              onTap: () => context
+                                  .read<OrdersCubit>()
+                                  .filterByEvent(event.id),
+                              child: Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: const Color(0xFFEDEDF1),
+                                  ),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      event.name,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: theme.textTheme.titleMedium
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    // Dates, because two bazaars at the same
+                                    // venue a season apart are told apart by
+                                    // nothing else on this card.
+                                    Text(
+                                      '${_shortDate(event.startDate)} – '
+                                      '${_shortDate(event.endDate)}',
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(color: Colors.black45),
+                                    ),
+                                    const Spacer(),
+                                    Row(
+                                      children: [
+                                        _StatusBadge(status: event.status),
+                                        const Spacer(),
+                                        const Icon(
+                                          Icons.arrow_forward_rounded,
+                                          color: AppColors.primary,
+                                          size: 18,
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
               ),
             ],
           ),
@@ -465,7 +519,40 @@ class _OrdersScreenState extends State<OrdersScreen> {
       },
     );
   }
+
+  String _describeScope(int total, int shown) {
+    if (total == shown) {
+      return '$total ${total == 1 ? 'bazaar' : 'bazaars'}';
+    }
+    return '$shown of $total shown';
+  }
+
+  static String _shortDate(DateTime value) =>
+      '${value.month}/${value.day}/${value.year}';
 }
+
+InputDecoration _selectorFieldDecoration({required String hint}) =>
+    InputDecoration(
+      hintText: hint,
+      hintStyle: const TextStyle(color: Colors.black38),
+      prefixIcon: const Icon(Icons.search, size: 18, color: Colors.black38),
+      filled: true,
+      fillColor: AppColors.inputFill,
+      isDense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide.none,
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide.none,
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: AppColors.primary),
+      ),
+    );
 
 class _AnimatedEntrance extends StatefulWidget {
   const _AnimatedEntrance({required this.child, required this.delayMs});
