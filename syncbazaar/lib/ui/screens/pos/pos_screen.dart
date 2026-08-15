@@ -979,33 +979,58 @@ class _PosScreenState extends State<PosScreen> {
                       ),
                       const SizedBox(height: 10),
                       OutlinedButton.icon(
-                        onPressed: () async {
-                          final now = DateTime.now();
-                          final today = DateTime(now.year, now.month, now.day);
-                          // Past days are closed, so a bazaar cannot be
-                          // dragged backwards over dates it never ran. A
-                          // bazaar that already started keeps its own start
-                          // as the floor instead -- otherwise the picker
-                          // could not show the range it is editing.
-                          final floor = selectedRange.start.isBefore(today)
-                              ? selectedRange.start
-                              : today;
-                          final range = await showAppDateRangePicker(
-                            context: context,
-                            firstDate: floor,
-                            lastDate: DateTime(2035),
-                            initialRange: selectedRange,
-                            title: 'Bazaar dates',
-                          );
-                          if (range != null) {
-                            setState(() => selectedRange = range);
-                          }
-                        },
-                        icon: const Icon(Icons.date_range_outlined),
+                        // An ended bazaar's dates are a record of when it
+                        // actually ran. Moving them re-slices which sales fall
+                        // inside it, so the statement of account, the order
+                        // list and the dashboard would all report a different
+                        // week than the one the money came from.
+                        onPressed: event.status == BazaarStatus.ended
+                            ? null
+                            : () async {
+                                final now = DateTime.now();
+                                final today = DateTime(
+                                  now.year,
+                                  now.month,
+                                  now.day,
+                                );
+                                // Past days are closed, so a bazaar cannot be
+                                // dragged backwards over dates it never ran. A
+                                // bazaar that already started keeps its own start
+                                // as the floor instead -- otherwise the picker
+                                // could not show the range it is editing.
+                                final floor =
+                                    selectedRange.start.isBefore(today)
+                                    ? selectedRange.start
+                                    : today;
+                                final range = await showAppDateRangePicker(
+                                  context: context,
+                                  firstDate: floor,
+                                  lastDate: DateTime(2035),
+                                  initialRange: selectedRange,
+                                  title: 'Bazaar dates',
+                                );
+                                if (range != null) {
+                                  setState(() => selectedRange = range);
+                                }
+                              },
+                        icon: Icon(
+                          event.status == BazaarStatus.ended
+                              ? Icons.lock_outline
+                              : Icons.date_range_outlined,
+                        ),
                         label: Text(
                           '${_formatDate(selectedRange.start)} - ${_formatDate(selectedRange.end)}',
                         ),
                       ),
+                      if (event.status == BazaarStatus.ended)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(
+                            'Dates are fixed once a bazaar has ended.',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: Colors.black45),
+                          ),
+                        ),
                       const SizedBox(height: 12),
                       Text(
                         'Allocated Stocks',

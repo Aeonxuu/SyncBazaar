@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:syncbazaar/models/bazaar_event.dart';
 
 /// Which days a bazaar's calendar will accept.
 ///
@@ -52,6 +53,18 @@ void main() {
 
   test('a bazaar starting today edits against today', () {
     expect(editFloor(today), today);
+  });
+
+  test('an ended bazaar cannot have its dates moved at all', () {
+    // Its dates are the record of when it actually ran. Moving them re-slices
+    // which sales fall inside it, so the statement of account, the order list
+    // and the dashboard would each report a different week than the one the
+    // money came from.
+    bool editable(BazaarStatus status) => status != BazaarStatus.ended;
+
+    expect(editable(BazaarStatus.upcoming), isTrue);
+    expect(editable(BazaarStatus.ongoing), isTrue);
+    expect(editable(BazaarStatus.ended), isFalse);
   });
 
   test('the sales week covers all seven days', () {

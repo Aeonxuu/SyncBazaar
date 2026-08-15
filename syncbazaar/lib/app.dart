@@ -326,6 +326,14 @@ class _MainShellState extends State<MainShell> {
         context.read<ApprovalsCubit>().loadPending();
       case AppSection.notifications:
         context.read<NotificationsCubit>().load();
+      // Reloaded like the rest. Without this the catalogue showed whatever it
+      // held at launch, so returning a bazaar's unsold stock moved the figures
+      // on the server and left this screen insisting nothing had happened --
+      // the one screen where the whole point is the number.
+      case AppSection.inventory:
+        context.read<InventoryCubit>().load();
+      case AppSection.staff:
+        context.read<StaffCubit>().load();
       default:
         break;
     }
