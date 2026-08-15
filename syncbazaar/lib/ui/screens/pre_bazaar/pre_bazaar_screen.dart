@@ -295,7 +295,6 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
         final approvalsCubit = context.read<ApprovalsCubit>();
         await preBazaarCubit.submitAllocation(
           user: widget.user,
-          eventId: DateTime.now().millisecondsSinceEpoch,
           detailsJson: details,
         );
 

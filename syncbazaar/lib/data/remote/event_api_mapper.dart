@@ -23,6 +23,16 @@ List<BazaarEvent> mapEventsResponse(
   final events = <BazaarEvent>[];
   for (final entry in payload) {
     final map = entry as Map<String, dynamic>;
+
+    // An unapproved bazaar is an employee's proposal awaiting an owner. The
+    // server returns it alongside real ones -- only its `?status=` queries
+    // filter on approval, and this list asks for no status -- so it would
+    // otherwise appear in the till and the sales list as something to sell
+    // against, before anyone had agreed it was happening.
+    if (map['is_approved'] == false) {
+      continue;
+    }
+
     final start = DateTime.parse(map['start_date'] as String).toLocal();
     final end = DateTime.parse(map['end_date'] as String).toLocal();
 
@@ -82,7 +92,8 @@ Map<String, int> mapEventStockResponse(
     final allocated = (row['amount_allocated'] as num?)?.toInt() ?? 0;
     final sold = (row['amount_sold'] as num?)?.toInt() ?? 0;
     final remaining = allocated - sold;
-    allocations[key] = (allocations[key] ?? 0) + (remaining < 0 ? 0 : remaining);
+    allocations[key] =
+        (allocations[key] ?? 0) + (remaining < 0 ? 0 : remaining);
 
     final stockId = (row['id'] as num?)?.toInt();
     if (stockId != null) {

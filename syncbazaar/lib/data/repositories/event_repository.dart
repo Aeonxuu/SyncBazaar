@@ -47,7 +47,10 @@ class EventRepository {
   /// A sale names the stock row it came out of; the app names things by
   /// combination. Uploading needs one direction, reading history needs the
   /// other.
-  String? allocationKeyForStockId({required int eventId, required int stockId}) {
+  String? allocationKeyForStockId({
+    required int eventId,
+    required int stockId,
+  }) {
     final rows = _stockIdsByEventId[eventId];
     if (rows == null) {
       return null;
@@ -167,6 +170,26 @@ class EventRepository {
     await _load;
   }
 
+  /// Bazaars the server holds but has not approved, from the last load.
+  ///
+  /// These are employees' proposals. Nothing else keeps them -- they are
+  /// filtered out of [_events] on the way in, precisely so they cannot be sold
+  /// against -- but the approvals list has to find the requests attached to
+  /// them, and the API offers approvals only per event. Without this it would
+  /// have to ask every bazaar the vendor has ever run.
+  final Set<int> _proposalEventIds = <int>{};
+
+  Future<Set<int>> proposalEventIds() async {
+    await _ensureLoaded();
+    return Set<int>.unmodifiable(_proposalEventIds);
+  }
+
+  /// Called when a proposal is decided, so the next approvals load does not
+  /// ask about a bazaar that is now either real or gone.
+  void forgetProposal(int eventId) => _proposalEventIds.remove(eventId);
+
+  void rememberProposal(int eventId) => _proposalEventIds.add(eventId);
+
   Future<void> _loadFromApi(
     AuthRepository auth,
     ProductRepository products,
@@ -177,6 +200,14 @@ class EventRepository {
 
     final methods = await _paymentMethods(auth);
     final payload = await auth.api.get('/api/bazaar/event/') as List;
+    _proposalEventIds
+      ..clear()
+      ..addAll(
+        payload
+            .cast<Map<String, dynamic>>()
+            .where((map) => map['is_approved'] == false)
+            .map((map) => (map['id'] as num).toInt()),
+      );
     final events = mapEventsResponse(
       payload,
       statusFor: _statusFor,
@@ -226,7 +257,10 @@ class EventRepository {
         final label = map['required_information_name'] as String?;
         if (label != null && label.trim().isNotEmpty) {
           custom.add(
-            BazaarPaymentMethod(name: name.toUpperCase(), extraFieldLabel: label),
+            BazaarPaymentMethod(
+              name: name.toUpperCase(),
+              extraFieldLabel: label,
+            ),
           );
         }
       }
@@ -259,6 +293,7 @@ class EventRepository {
     List<String> acceptedPaymentMethods = const ['CASH'],
     List<BazaarPaymentMethod> customOtherMethods = const [],
     Map<String, int> allocationsByAllocationKey = const {},
+    bool isApproved = true,
   }) async {
     await _ensureLoaded();
 
@@ -272,6 +307,7 @@ class EventRepository {
       startDate: startDate,
       endDate: endDate,
       allocationsByAllocationKey: allocationsByAllocationKey,
+      isApproved: isApproved,
     );
 
     final id = serverId ?? _nextLocalEventId();
@@ -285,10 +321,18 @@ class EventRepository {
       acceptedPaymentMethods: acceptedPaymentMethods,
       customOtherMethods: customOtherMethods,
     );
-    _events.add(event);
-    _allocationsByEventId[id] = Map<String, int>.from(
-      allocationsByAllocationKey,
-    );
+    // An unapproved bazaar is a proposal waiting on an owner, not something
+    // to sell against. It exists on the server only so the approval request
+    // has an event to hang off, and is deliberately not added here: the till,
+    // the sales list and the dashboard all read this collection.
+    if (isApproved) {
+      _events.add(event);
+      _allocationsByEventId[id] = Map<String, int>.from(
+        allocationsByAllocationKey,
+      );
+    } else {
+      _proposalEventIds.add(id);
+    }
     return event;
   }
 
@@ -310,6 +354,7 @@ class EventRepository {
     required DateTime startDate,
     required DateTime endDate,
     required Map<String, int> allocationsByAllocationKey,
+    bool isApproved = true,
   }) async {
     final auth = _auth;
     final products = _products;
@@ -331,15 +376,23 @@ class EventRepository {
                 'address': await _addressForEstablishment(auth, companyId),
                 'start_date': startDate.toUtc().toIso8601String(),
                 'end_date': endDate.toUtc().toIso8601String(),
-                // The client has no approval step for a bazaar its own owner
-                // just created, and an unapproved one is filtered out of the
-                // "ongoing" query.
-                'is_approved': true,
+                // An owner creating a bazaar directly has nobody to ask, so
+                // it is approved on the spot. A proposal from an employee is
+                // not: it exists to give the approval request an event to
+                // belong to, and stays out of every listing until decided.
+                'is_approved': isApproved,
               },
             )
             as Map<String, dynamic>;
 
     final eventId = (created['id'] as num).toInt();
+
+    // Stock is committed when the proposal is approved, not when it is made.
+    // Reserving it here would let an employee whose request is never answered
+    // hold inventory that nobody can sell.
+    if (!isApproved) {
+      return eventId;
+    }
 
     final stockIds = <String, int>{};
     for (final entry in allocationsByAllocationKey.entries) {
@@ -591,9 +644,8 @@ class EventRepository {
                 },
               )
               as Map<String, dynamic>;
-      _stockIdsByEventId
-          .putIfAbsent(eventId, () => {})[entry.key] = (row['id'] as num)
-          .toInt();
+      _stockIdsByEventId.putIfAbsent(eventId, () => {})[entry.key] =
+          (row['id'] as num).toInt();
     }
 
     // Whatever is left was allocated before and is not any more.
@@ -612,6 +664,81 @@ class EventRepository {
     for (final key in existing.keys) {
       _stockIdsByEventId[eventId]?.remove(key);
     }
+  }
+
+  /// Turns an approved proposal into a real bazaar.
+  ///
+  /// The event already exists on the server, created unapproved so the
+  /// approval request had something to belong to. This is where it becomes
+  /// something staff can sell against: the flag flips and the stock rows are
+  /// written, which is also the moment the inventory is actually committed.
+  ///
+  /// Returns the bazaar, now present in every listing.
+  Future<BazaarEvent> approveProposal({
+    required int eventId,
+    required String name,
+    required int companyId,
+    required DateTime startDate,
+    required DateTime endDate,
+    List<String> acceptedPaymentMethods = const ['CASH'],
+    List<BazaarPaymentMethod> customOtherMethods = const [],
+    Map<String, int> allocationsByAllocationKey = const {},
+  }) async {
+    await _ensureLoaded();
+    final auth = _auth;
+    final products = _products;
+
+    if (auth != null && auth.vendorId != null && products != null) {
+      // Stock first. If a combination is short, this throws before the bazaar
+      // is marked approved -- leaving a proposal that can be decided again,
+      // rather than a live bazaar promising stock that is not there.
+      final stockIds = <String, int>{};
+      for (final entry in allocationsByAllocationKey.entries) {
+        if (entry.value <= 0) {
+          continue;
+        }
+        final variantId = products.variantIdFor(entry.key);
+        if (variantId == null) {
+          continue;
+        }
+        final row =
+            await auth.api.post(
+                  '/api/bazaar/event/$eventId/stock/',
+                  body: {
+                    'event': eventId,
+                    'variant': variantId,
+                    'amount_allocated': entry.value,
+                    'amount_sold': 0,
+                  },
+                )
+                as Map<String, dynamic>;
+        stockIds[entry.key] = (row['id'] as num).toInt();
+      }
+      _stockIdsByEventId[eventId] = stockIds;
+
+      await auth.api.patch(
+        '/api/bazaar/event/$eventId/',
+        body: {'is_approved': true},
+      );
+    }
+
+    final event = BazaarEvent(
+      id: eventId,
+      name: name,
+      companyId: companyId,
+      startDate: startDate,
+      endDate: endDate,
+      status: _statusFor(startDate, endDate),
+      acceptedPaymentMethods: acceptedPaymentMethods,
+      customOtherMethods: customOtherMethods,
+    );
+    _events.removeWhere((e) => e.id == eventId);
+    _events.add(event);
+    _allocationsByEventId[eventId] = Map<String, int>.from(
+      allocationsByAllocationKey,
+    );
+    _proposalEventIds.remove(eventId);
+    return event;
   }
 
   Future<void> deleteEvent(int eventId) async {

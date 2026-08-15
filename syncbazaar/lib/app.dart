@@ -120,7 +120,10 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
             products: _productRepository,
             sales: _salesRepository,
           );
-    _approvalsRepository = ApprovalsRepository();
+    _approvalsRepository = ApprovalsRepository(
+      auth: _authRepository,
+      events: _eventRepository,
+    );
     _settingsRepository = SettingsRepository(auth: session);
     _notificationService = NotificationService();
     _syncService = SyncService(
@@ -194,12 +197,11 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
             ),
           ),
           BlocProvider(
-            create: (_) =>
-                OrdersCubit(
-                  _ordersRepository,
-                  _salesRepository,
-                  _productRepository,
-                )..load(),
+            create: (_) => OrdersCubit(
+              _ordersRepository,
+              _salesRepository,
+              _productRepository,
+            )..load(),
           ),
           BlocProvider(
             create: (_) => ApprovalsCubit(
@@ -217,7 +219,10 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
           BlocProvider(
             create: (_) => SettingsCubit(_settingsRepository)..load(),
           ),
-          BlocProvider(create: (_) => PreBazaarCubit(_approvalsRepository)),
+          BlocProvider(
+            create: (_) =>
+                PreBazaarCubit(_approvalsRepository, _eventRepository),
+          ),
           BlocProvider(create: (_) => SyncCubit(_syncService)),
           BlocProvider(
             create: (_) => NotificationsCubit(_notificationService)..load(),
