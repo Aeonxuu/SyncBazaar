@@ -110,7 +110,7 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
       firstDate: today,
       lastDate: DateTime(2030, 12, 31),
       initialRange: _dateRange,
-      title: 'Event dates',
+      title: 'Bazaar dates',
     );
     if (range != null && mounted) {
       setState(() => _dateRange = range);
@@ -208,7 +208,7 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
-                'Complete event name, venue, and event dates before submitting.',
+                'Complete bazaar name, venue, and dates before submitting.',
               ),
             ),
           );
@@ -329,7 +329,7 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'Complete event name, venue, and event dates before finishing.',
+              'Complete bazaar name, venue, and dates before finishing.',
             ),
           ),
         );
@@ -490,8 +490,8 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
                 const SizedBox(height: 4),
                 Text(
                   isAdminOrOwner
-                      ? 'Set up the event, then allocate the stock it will sell.'
-                      : 'Set up the event and allocate stock, then submit for approval.',
+                      ? 'Set up the bazaar, then allocate the stock it will sell.'
+                      : 'Set up the bazaar and allocate stock, then submit for approval.',
                   style: Theme.of(
                     context,
                   ).textTheme.bodyMedium?.copyWith(color: Colors.black54),

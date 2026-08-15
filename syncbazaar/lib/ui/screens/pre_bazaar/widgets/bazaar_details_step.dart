@@ -75,7 +75,7 @@ class BazaarDetailsStep extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         PreBazaarFormField(
-          label: 'Event name',
+          label: 'Bazaar name',
           child: TextField(
             controller: eventNameController,
             textCapitalization: TextCapitalization.words,
@@ -106,7 +106,7 @@ class BazaarDetailsStep extends StatelessWidget {
               ),
             );
             final dates = PreBazaarFormField(
-              label: 'Event dates',
+              label: 'Bazaar dates',
               child: _DateRangeField(dateRange: dateRange, onTap: onPickDates),
             );
 
@@ -456,7 +456,7 @@ class _CompletionHint extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final missing = <String>[
-      if (!hasName) 'event name',
+      if (!hasName) 'bazaar name',
       if (!hasLocation) 'venue',
       if (!hasDates) 'dates',
       if (!hasPaymentMethods) 'payment methods at this venue',

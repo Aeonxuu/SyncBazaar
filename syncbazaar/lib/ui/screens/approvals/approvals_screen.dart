@@ -272,7 +272,7 @@ class _ApprovalList extends StatelessWidget {
     if (rawName is String && rawName.trim().isNotEmpty) {
       return rawName.trim();
     }
-    return 'Event ID: ${req.eventId}';
+    return 'Bazaar #${req.eventId}';
   }
 
   String? _getEventDateRange(ApprovalRequest req) {
