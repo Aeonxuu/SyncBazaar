@@ -3,7 +3,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/constants/colors.dart';
 import '../../../data/repositories/event_repository.dart';
-import '../../../data/repositories/orders_repository.dart';
 import '../../../data/repositories/product_repository.dart';
 import '../../../data/repositories/sales_repository.dart';
 import '../../../data/repositories/auth_repository.dart';
@@ -13,7 +12,6 @@ import '../../../data/remote/api_client.dart';
 import '../../../services/orders_workbook.dart';
 import '../../../services/report_service.dart';
 import '../../../models/bazaar_event.dart';
-import '../../../models/order.dart';
 import '../../../models/product.dart';
 import '../../../models/user.dart';
 import '../../../models/sale.dart';
@@ -49,7 +47,6 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
 
   Future<_PostBazaarData> _loadData() async {
     final salesRepository = context.read<SalesRepository>();
-    final ordersRepository = context.read<OrdersRepository>();
     final productRepository = context.read<ProductRepository>();
     final eventRepository = context.read<EventRepository>();
     final settingsRepository = context.read<SettingsRepository>();
@@ -58,7 +55,6 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
     final reportService = ReportService(auth: context.read<AuthRepository>());
 
     final sales = await salesRepository.listSales();
-    final orders = await ordersRepository.listOrders();
     final products = await productRepository.listProducts();
     final events = await eventRepository.listAll();
     final allocationsByEventId = <int, Map<String, int>>{};
@@ -121,7 +117,6 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
     };
     return _PostBazaarData(
       sales: sales,
-      orders: orders,
       products: products,
       events: events,
       allocationsByEventId: allocationsByEventId,
@@ -934,18 +929,23 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
     _PostBazaarData data,
     BazaarEvent event,
   ) async {
-    final eventOrders = data.orders
-        .where((order) => order.eventId == event.id)
+    // Counted from sales rather than from the local Order rows this screen
+    // used to read. Orders are only ever written here, at the till, and never
+    // fetched -- so a bazaar whose sales came back from the server had none of
+    // them, and this dialog reported zero beside an export full of rows. Sales
+    // are what the workbook is built from, so the two now cannot disagree.
+    final eventOrders = data.sales
+        .where((sale) => sale.eventId == event.id)
         .toList();
 
-    // Counted from the orders themselves rather than against a hardcoded
+    // Counted from the sales themselves rather than against a hardcoded
     // CASH/COOP/other, which reported every method a venue had configured for
     // itself as an anonymous "Custom methods" tally.
     final countByMethod = <String, int>{};
-    for (final order in eventOrders) {
-      final method = order.paymentMethod.trim().isEmpty
+    for (final sale in eventOrders) {
+      final method = sale.paymentMethod.trim().isEmpty
           ? 'CASH'
-          : order.paymentMethod.trim().toUpperCase();
+          : sale.paymentMethod.trim().toUpperCase();
       countByMethod[method] = (countByMethod[method] ?? 0) + 1;
     }
     final methods = countByMethod.keys.toList()
@@ -956,10 +956,10 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
       });
 
     final completedCount = eventOrders
-        .where((order) => order.orderStatus == OrderStatus.completed)
+        .where((sale) => sale.orderStatus == OrderStatus.completed)
         .length;
     final returnedCount = eventOrders
-        .where((order) => order.orderStatus == OrderStatus.returned)
+        .where((sale) => sale.orderStatus == OrderStatus.returned)
         .length;
 
     final canExport = widget.user.isAdminOrOwner;
@@ -1029,9 +1029,6 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
     final eventSales = data.sales
         .where((sale) => sale.eventId == event.id)
         .toList();
-    final eventOrders = data.orders
-        .where((order) => order.eventId == event.id)
-        .toList();
     final allocations = await context
         .read<EventRepository>()
         .allocationsForEventByAllocationKey(event.id);
@@ -1052,8 +1049,10 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
         Text('Status: ${event.status.name.toUpperCase()}'),
         Text('Allocated stock items: ${allocations.length}'),
         Text('Total allocated quantity: $totalAllocated'),
+        // One line per sale, so a separate "order records" count said the
+        // same thing -- when it was not saying zero, which is what it did for
+        // any bazaar loaded from the server.
         Text('Sales records: ${eventSales.length}'),
-        Text('Order records: ${eventOrders.length}'),
       ],
       footer: Row(
         mainAxisAlignment: MainAxisAlignment.end,
@@ -1337,7 +1336,6 @@ class _InteractiveCardState extends State<_InteractiveCard> {
 class _PostBazaarData {
   const _PostBazaarData({
     required this.sales,
-    required this.orders,
     required this.products,
     required this.events,
     required this.allocationsByEventId,
@@ -1351,7 +1349,6 @@ class _PostBazaarData {
   });
 
   final List<Sale> sales;
-  final List<Order> orders;
   final List<Product> products;
   final List<BazaarEvent> events;
   final Map<int, Map<String, int>> allocationsByEventId;
