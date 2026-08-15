@@ -45,8 +45,14 @@ class SettingsScreen extends StatelessWidget {
               // value once the cubit's first load resolves, instead of
               // staying empty behind an already-built controller.
               _StoreProfileCard(
-                key: ValueKey(state.storeName),
+                key: ValueKey('${state.storeName}|${state.storeNameError}'),
                 storeName: state.storeName,
+                isVendor: state.storeNameIsVendor,
+                // Renaming the vendor changes every receipt and every
+                // statement of account the business issues, so it is the
+                // owner's to do -- not a cashier's, mid-shift.
+                canEdit: user.isAdminOrOwner,
+                error: state.storeNameError,
               ),
               const SizedBox(height: 16),
               Container(
@@ -97,9 +103,23 @@ class SettingsScreen extends StatelessWidget {
 /// A real [StatefulWidget] rather than a controller built inline, so the
 /// controller is disposed — see section 10 of DESIGN_GUIDELINES.md.
 class _StoreProfileCard extends StatefulWidget {
-  const _StoreProfileCard({super.key, required this.storeName});
+  const _StoreProfileCard({
+    super.key,
+    required this.storeName,
+    required this.isVendor,
+    required this.canEdit,
+    this.error,
+  });
 
   final String storeName;
+
+  /// Whether this renames the vendor on the server or only this device.
+  final bool isVendor;
+
+  final bool canEdit;
+
+  /// Why the last attempt did not save, or null.
+  final String? error;
 
   @override
   State<_StoreProfileCard> createState() => _StoreProfileCardState();
@@ -131,6 +151,9 @@ class _StoreProfileCardState extends State<_StoreProfileCard> {
   }
 
   void _save() {
+    if (!widget.canEdit) {
+      return;
+    }
     final value = _controller.text.trim();
     if (value == widget.storeName) {
       return;
@@ -160,43 +183,123 @@ class _StoreProfileCardState extends State<_StoreProfileCard> {
           ),
           const SizedBox(height: 2),
           Text(
-            'Printed at the top of every receipt, above the bazaar venue.',
+            widget.isVendor
+                // Says where it goes, because it is no longer a setting on
+                // this tablet -- it renames the business everywhere.
+                ? 'Your business name. Printed on every receipt and on the '
+                      'statement of account each venue is paid against. '
+                      'Renaming here renames it for everyone.'
+                : 'Printed at the top of every receipt, above the bazaar '
+                      'venue.',
             style: theme.textTheme.bodySmall?.copyWith(
               color: Colors.black45,
               height: 1.4,
             ),
           ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _controller,
-            focusNode: _focusNode,
-            textCapitalization: TextCapitalization.words,
-            textInputAction: TextInputAction.done,
-            onSubmitted: (_) => _save(),
-            style: theme.textTheme.bodyMedium,
-            decoration: InputDecoration(
-              hintText: 'e.g. SV KICKz',
-              hintStyle: const TextStyle(color: Colors.black38),
-              filled: true,
-              fillColor: AppColors.inputFill,
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 14,
-                vertical: 12,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide.none,
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide.none,
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: AppColors.primary),
+          if (!widget.canEdit) ...[
+            const SizedBox(height: 12),
+            _ReadOnlyName(name: widget.storeName),
+          ] else ...[
+            const SizedBox(height: 12),
+            TextField(
+              controller: _controller,
+              focusNode: _focusNode,
+              textCapitalization: TextCapitalization.words,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _save(),
+              style: theme.textTheme.bodyMedium,
+              decoration: InputDecoration(
+                hintText: 'e.g. SV KICKz',
+                hintStyle: const TextStyle(color: Colors.black38),
+                filled: true,
+                fillColor: AppColors.inputFill,
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide.none,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(
+                    color: widget.error == null
+                        ? AppColors.primary
+                        : AppColors.error,
+                  ),
+                ),
               ),
             ),
+            if (widget.error != null) ...[
+              const SizedBox(height: 8),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.error_outline,
+                    size: 15,
+                    color: AppColors.error,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      widget.error!,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: AppColors.error,
+                        height: 1.35,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// The business name as a cashier sees it: legible, but plainly not a field.
+///
+/// Shown rather than a disabled TextField, which reads as broken -- a greyed
+/// box invites tapping and says nothing about why it will not take.
+class _ReadOnlyName extends StatelessWidget {
+  const _ReadOnlyName({required this.name});
+
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.inputFill,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              name,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Icon(
+            Icons.lock_outline,
+            size: 15,
+            color: Colors.black.withValues(alpha: 0.35),
           ),
         ],
       ),

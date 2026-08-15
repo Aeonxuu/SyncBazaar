@@ -274,13 +274,43 @@ class SettingsRepository {
   /// then printed on every receipt, so losing it on restart would silently
   /// start producing unbranded receipts. Follows [AuthRepository]'s use of
   /// `shared_preferences`.
+  /// The signed-in vendor's name, falling back to the device setting.
+  ///
+  /// Signed in, the server is the only source. The name is a fact about the
+  /// business, not a preference of this tablet: it heads every receipt and is
+  /// printed six times on the statement of account, which the *server*
+  /// renders. Reading a local copy here let the two drift, so the screen said
+  /// one name while the document said another — and a second vendor signing
+  /// into this app would have printed the first vendor's name on their
+  /// receipts.
+  ///
+  /// The local value survives only for the no-session build, where there is no
+  /// vendor to ask.
   Future<String> storeName() async {
+    final vendor = _auth?.vendorName?.trim();
+    if (vendor != null && vendor.isNotEmpty) {
+      return vendor;
+    }
     final prefs = await SharedPreferences.getInstance();
     final stored = prefs.getString(_storeNameKey)?.trim();
     return (stored == null || stored.isEmpty) ? _defaultStoreName : stored;
   }
 
+  /// Whether a rename would reach the server rather than staying on this
+  /// device. Lets the UI say which of the two it is doing.
+  bool get storeNameIsVendor => _auth?.vendorId != null;
+
+  /// Renames the vendor where there is a session, and the device otherwise.
+  ///
+  /// Throws [ApiException] when the server refuses or cannot be reached, so a
+  /// name that was not saved is never shown as though it were.
   Future<void> setStoreName(String name) async {
+    final auth = _auth;
+    if (auth != null && auth.vendorId != null) {
+      await auth.renameVendor(name);
+      return;
+    }
+
     final prefs = await SharedPreferences.getInstance();
     final trimmed = name.trim();
     if (trimmed.isEmpty) {

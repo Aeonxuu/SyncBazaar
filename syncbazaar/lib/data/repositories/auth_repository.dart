@@ -400,6 +400,41 @@ class AuthRepository {
     vendorName = null;
   }
 
+  /// Renames the signed-in user's vendor, server-side.
+  ///
+  /// The vendor's name is not a device setting — it heads every receipt this
+  /// business prints and appears six times in the statement of account the
+  /// venue is paid against, and that document is rendered by the server. A
+  /// name kept only on the tablet would put one name on the screen and a
+  /// different one on the paperwork, which is exactly what happened before
+  /// this existed.
+  ///
+  /// Throws [ApiException] if the rename does not reach the server, so the
+  /// caller can say so rather than showing a name that was never saved.
+  Future<void> renameVendor(String name) async {
+    final id = vendorId;
+    final trimmed = name.trim();
+    if (id == null) {
+      throw StateError('Cannot rename a vendor without a session.');
+    }
+    if (trimmed.isEmpty) {
+      throw const ApiException(
+        ApiErrorKind.badRequest,
+        'A store name cannot be empty.',
+      );
+    }
+
+    await _api.patch('/api/core/vendor/$id/', body: {'name': trimmed});
+
+    vendorName = trimmed;
+    final prefs = await SharedPreferences.getInstance();
+    // Only where the session itself is remembered; otherwise this would
+    // outlive the login it belongs to.
+    if (prefs.getBool(_rememberKey) ?? false) {
+      await prefs.setString(_vendorNameKey, trimmed);
+    }
+  }
+
   Future<void> _clearStoredSession(SharedPreferences prefs) async {
     await prefs.remove(_userKey);
     await prefs.remove(_tokenKey);
