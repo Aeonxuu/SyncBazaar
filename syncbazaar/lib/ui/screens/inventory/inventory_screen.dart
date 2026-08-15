@@ -64,6 +64,25 @@ const Color _inputFill = Color(0xFFF0F1F4);
 /// column can reserve exactly the space one occupies and stay aligned.
 const double _rowActionSize = 34;
 
+/// Cap on a variant category's name and on each of its values.
+///
+/// These are read on a till at arm's length and printed on a receipt beside a
+/// price, so a long one is cut off wherever it lands rather than wrapping.
+/// Sixteen fits "Triple White" and "Extra Large" with room over.
+const int _variantNameMaxLength = 16;
+
+/// Hides Flutter's "0/16" counter under a capped field.
+///
+/// The cap is a guard rail, not a target: nobody typing "Color" needs to be
+/// told they have eleven characters left, and the counter adds a line of
+/// height to every row in a list of them.
+Widget? _hiddenCounter(
+  BuildContext context, {
+  required int currentLength,
+  required int? maxLength,
+  required bool isFocused,
+}) => null;
+
 /// Size for the small trailing action icons (rename, delete, close).
 ///
 /// Flutter bundles Material Icons as a *static* font, so `Icon.weight` — the
@@ -1279,6 +1298,13 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
   String? _priceError;
   String? _stockError;
 
+  /// What the form held when it opened.
+  ///
+  /// Compared against the live fields to tell "I opened this by mistake" from
+  /// "I have been filling this in for five minutes". Only the second deserves
+  /// a confirmation; asking on every close trains people to dismiss it.
+  late final String _openedWith;
+
   /// For problems that belong to the step as a whole rather than one field
   /// (e.g. "add at least one variant category").
   String? _stepError;
@@ -1304,6 +1330,55 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
     widget.comboStock.forEach((key, value) {
       _comboControllers[key] = TextEditingController(text: value);
     });
+    _openedWith = _snapshot();
+  }
+
+  /// Everything the user can change, flattened. Crude on purpose: it only has
+  /// to answer "has anything moved", and a string comparison cannot miss a
+  /// field the way a hand-written list of checks can.
+  String _snapshot() => [
+    _nameController.text.trim(),
+    _priceController.text.trim(),
+    _stockController.text.trim(),
+    _status.name,
+    _imagePath ?? '',
+    _imageBytes?.length.toString() ?? '',
+    _hasVariants.toString(),
+    for (final category in _variantCategories) ...[
+      category.nameController.text.trim(),
+      for (final value in category.values) ...[
+        value.valueController.text.trim(),
+        value.extraPriceController.text.trim(),
+      ],
+    ],
+    for (final entry in _comboControllers.entries)
+      '${entry.key}=${entry.value.text.trim()}',
+  ].join('\u0000');
+
+  bool get _isDirty => _snapshot() != _openedWith;
+
+  /// Closes, asking first when there is work to lose.
+  Future<void> _handleClose() async {
+    if (_saving) {
+      return;
+    }
+    if (!_isDirty) {
+      Navigator.pop(context);
+      return;
+    }
+
+    final navigator = Navigator.of(context);
+    final discard = await showConfirmationDialog(
+      context: context,
+      title: 'Discard this product?',
+      message: 'What you have filled in will be lost.',
+      confirmLabel: 'Discard',
+      cancelLabel: 'Keep editing',
+      emphasis: ConfirmationEmphasis.cancel,
+    );
+    if (discard == true) {
+      navigator.pop();
+    }
   }
 
   @override
@@ -1493,7 +1568,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
       }
       setState(() {
         // Seed an empty group so the next step opens with something to fill
-        // in rather than a bare "Add option group" button.
+        // in rather than a bare "Add category" button.
         if (_variantCategories.isEmpty) {
           _variantCategories.add(
             _VariantCategoryInput()..values.add(_VariantValueInput()),
@@ -1618,7 +1693,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                 ),
               ),
               IconButton(
-                onPressed: _saving ? null : () => Navigator.pop(context),
+                onPressed: _saving ? null : _handleClose,
                 splashRadius: 18,
                 tooltip: 'Close',
                 icon: const Icon(
@@ -2030,7 +2105,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                 borderRadius: BorderRadius.circular(8),
               ),
             ),
-            label: const Text('Add option group'),
+            label: const Text('Add category'),
           ),
         ],
         if (_stepError != null) ...[
@@ -2050,14 +2125,14 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
       children: [
         Row(
           children: [
-            _FieldLabel(text: 'Option group ${index + 1}'),
+            _FieldLabel(text: 'Category ${index + 1}'),
             const Spacer(),
             // Sits on the heading line rather than beside the name field, so
             // the field can run the full width and the icon lines up with the
             // per-value remove buttons underneath it.
             _RowActionButton(
               icon: Icons.delete_outline,
-              tooltip: 'Remove this option group',
+              tooltip: 'Remove this category',
               hoverColor: AppColors.error,
               onPressed: () => setState(() {
                 _variantCategories.removeAt(index).dispose();
@@ -2072,23 +2147,38 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
           style: Theme.of(
             context,
           ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
-          onChanged: (_) {
-            if (_stepError != null) setState(() => _stepError = null);
-          },
+          // Rebuilds on every keystroke so the column below is headed with
+          // the name as it is typed, rather than only once the field loses
+          // focus.
+          onChanged: (_) => setState(() => _stepError = null),
+          maxLength: _variantNameMaxLength,
+          buildCounter: _hiddenCounter,
           decoration: _fieldDecoration(
             hint: index == 0 ? 'e.g. Color' : 'e.g. Size',
           ),
         ),
         const SizedBox(height: 16),
-        // Naming the two columns once beats repeating "Value" and a cryptic
-        // "+ 0" as placeholder text in every row.
-        const Row(
+        // Naming the two columns once beats repeating the heading and a
+        // cryptic "+ 0" as placeholder text in every row.
+        //
+        // The left column is headed with whatever the category was called,
+        // so a colour list is headed "Color" rather than "Value". A fixed
+        // "Value" made the form read as two unrelated fields instead of a
+        // name and the things that go under it.
+        Row(
           children: [
-            Expanded(flex: 3, child: _FieldLabel(text: 'Value')),
-            SizedBox(width: 8),
-            Expanded(flex: 2, child: _FieldLabel(text: 'Extra price')),
-            SizedBox(width: 2),
-            SizedBox(width: _rowActionSize),
+            Expanded(
+              flex: 3,
+              child: _FieldLabel(
+                text: category.nameController.text.trim().isEmpty
+                    ? 'Value'
+                    : category.nameController.text.trim(),
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Expanded(flex: 2, child: _FieldLabel(text: 'Extra price')),
+            const SizedBox(width: 2),
+            const SizedBox(width: _rowActionSize),
           ],
         ),
         const SizedBox(height: 6),
@@ -2104,6 +2194,8 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                   onChanged: (_) {
                     if (_stepError != null) setState(() => _stepError = null);
                   },
+                  maxLength: _variantNameMaxLength,
+                  buildCounter: _hiddenCounter,
                   decoration: _fieldDecoration(
                     hint: index == 0 ? 'e.g. Black' : 'e.g. 42',
                   ),
@@ -2124,7 +2216,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
               const SizedBox(width: 2),
               _RowActionButton(
                 icon: Icons.close_rounded,
-                tooltip: 'Remove value',
+                tooltip: 'Remove',
                 hoverColor: AppColors.error,
                 // A group with one value left can't lose it — an option
                 // group with nothing in it isn't a thing.
@@ -2158,7 +2250,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                 fontWeight: FontWeight.w600,
               ),
             ),
-            label: const Text('Add value'),
+            label: const Text('Add'),
           ),
         ),
       ],
