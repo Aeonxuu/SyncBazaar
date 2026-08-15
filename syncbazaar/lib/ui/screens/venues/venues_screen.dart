@@ -215,478 +215,63 @@ class _VenuesScreenState extends State<VenuesScreen> {
     Company? existing,
     List<PaymentMethodMeta> existingMethods = const [],
   }) async {
-    final isCreate = existing == null;
-    final nameController = TextEditingController(text: existing?.name ?? '');
-    final addressController = TextEditingController(
-      text: existing?.address ?? '',
-    );
-    final contactController = TextEditingController(
-      text: existing?.contact ?? '',
-    );
-    final incentiveController = TextEditingController(
-      text: existing == null ? '10' : existing.incentivePercent.toString(),
-    );
-    final bufferController = TextEditingController(
-      text: existing == null ? '10' : existing.bufferPercent.toString(),
-    );
-    var qrImagePath = existing?.qrImagePath;
-
-    final methods = <PaymentMethodMeta>[
-      if (existingMethods.isNotEmpty)
-        ...existingMethods
-      else ...const [PaymentMethodMeta(name: 'CASH')],
-    ];
-
-    final methodNameController = TextEditingController();
-    final methodExtraFieldController = TextEditingController();
-    var isPaymentStep = !isCreate;
-
-    await showDialog<void>(
+    final cubit = context.read<SettingsCubit>();
+    final result = await showDialog<_VenueDraft>(
       context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            Future<void> pickQr() async {
-              final picker = ImagePicker();
-              final file = await picker.pickImage(source: ImageSource.gallery);
-              if (file != null) {
-                setState(() {
-                  qrImagePath = file.path;
-                });
-              }
-            }
-
-            void addMethod() {
-              final name = methodNameController.text.trim();
-              final extraField = methodExtraFieldController.text.trim();
-              if (name.isEmpty) {
-                return;
-              }
-              if (extraField.length > 28) {
-                return;
-              }
-              final exists = methods.any(
-                (method) => method.name.toUpperCase() == name.toUpperCase(),
-              );
-              if (exists) {
-                return;
-              }
-              setState(() {
-                methods.add(
-                  PaymentMethodMeta(
-                    name: name,
-                    extraFieldLabel: extraField.isEmpty ? null : extraField,
-                  ),
-                );
-                methodNameController.clear();
-                methodExtraFieldController.clear();
-              });
-            }
-
-            Future<void> editExtraField(int index) async {
-              final initial = methods[index].extraFieldLabel ?? '';
-              final controller = TextEditingController(text: initial);
-              final saved = await showDialog<bool>(
-                context: context,
-                builder: (context) {
-                  return AlertDialog(
-                    title: Text('Extra field for ${methods[index].name}'),
-                    content: TextField(
-                      controller: controller,
-                      maxLength: 28,
-                      decoration: const InputDecoration(
-                        hintText: 'Optional (e.g. Employee ID)',
-                      ),
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context, false),
-                        child: const Text('Cancel'),
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          controller.clear();
-                          Navigator.pop(context, true);
-                        },
-                        child: const Text('Clear'),
-                      ),
-                      ElevatedButton(
-                        onPressed: () => Navigator.pop(context, true),
-                        child: const Text('Save'),
-                      ),
-                    ],
-                  );
-                },
-              );
-
-              if (saved != true) {
-                return;
-              }
-
-              final nextLabel = controller.text.trim();
-              setState(() {
-                methods[index] = PaymentMethodMeta(
-                  name: methods[index].name,
-                  extraFieldLabel: nextLabel.isEmpty ? null : nextLabel,
-                );
-              });
-            }
-
-            return AlertDialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-              title: Text(isCreate ? 'Add venue' : 'Edit venue'),
-              content: SizedBox(
-                width: 560,
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (!isPaymentStep) ...[
-                        _label(context, 'Venue name'),
-                        const SizedBox(height: 4),
-                        _field(nameController),
-                        const SizedBox(height: 12),
-                        _label(context, 'Address (optional)'),
-                        const SizedBox(height: 4),
-                        _field(addressController),
-                        const SizedBox(height: 12),
-                        _label(context, 'Contact (optional)'),
-                        const SizedBox(height: 4),
-                        _field(contactController),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  _label(context, 'Incentive deduction %'),
-                                  const SizedBox(height: 4),
-                                  _field(
-                                    incentiveController,
-                                    keyboardType:
-                                        const TextInputType.numberWithOptions(
-                                          decimal: true,
-                                        ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  _label(context, 'Buffer deduction %'),
-                                  const SizedBox(height: 4),
-                                  _field(
-                                    bufferController,
-                                    keyboardType:
-                                        const TextInputType.numberWithOptions(
-                                          decimal: true,
-                                        ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ] else ...[
-                        Text(
-                          'Accepted payment methods',
-                          style: Theme.of(context).textTheme.titleSmall
-                              ?.copyWith(fontWeight: FontWeight.w700),
-                        ),
-                        const SizedBox(height: 8),
-                        ...methods.asMap().entries.map((entry) {
-                          final index = entry.key;
-                          final method = entry.value;
-                          final lockDefault =
-                              method.name.toUpperCase() == 'CASH';
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        method.name,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                      if (method.extraFieldLabel != null &&
-                                          method.extraFieldLabel!
-                                              .trim()
-                                              .isNotEmpty)
-                                        Text(
-                                          'Extra field: ${method.extraFieldLabel}',
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodySmall
-                                              ?.copyWith(color: Colors.black54),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                                TextButton.icon(
-                                  onPressed: () => editExtraField(index),
-                                  icon: const Icon(
-                                    Icons.edit_outlined,
-                                    size: 16,
-                                  ),
-                                  label: const Text('Field'),
-                                ),
-                                IconButton(
-                                  onPressed: lockDefault
-                                      ? null
-                                      : () {
-                                          setState(() {
-                                            methods.removeAt(index);
-                                          });
-                                        },
-                                  icon: const Icon(Icons.delete_outline),
-                                ),
-                              ],
-                            ),
-                          );
-                        }),
-                        const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _field(
-                                methodNameController,
-                                hintText: 'Add payment method',
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: _field(
-                                methodExtraFieldController,
-                                hintText: 'Extra field label (optional)',
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            ElevatedButton(
-                              onPressed: addMethod,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.primary,
-                                foregroundColor: Colors.white,
-                              ),
-                              child: const Text('Add'),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Extra field label max: 28 characters.',
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: Colors.black54),
-                        ),
-                        const SizedBox(height: 14),
-                        Row(
-                          children: [
-                            Text(
-                              'QR code',
-                              style: Theme.of(context).textTheme.titleSmall
-                                  ?.copyWith(fontWeight: FontWeight.w700),
-                            ),
-                            const Spacer(),
-                            OutlinedButton.icon(
-                              onPressed: pickQr,
-                              icon: const Icon(Icons.qr_code_2),
-                              label: Text(
-                                qrImagePath == null ? 'Upload QR' : 'Change QR',
-                              ),
-                            ),
-                          ],
-                        ),
-                        if (qrImagePath != null && qrImagePath!.isNotEmpty)
-                          Text(
-                            'QR ready: ${qrImagePath!.split('\\').last}',
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(color: Colors.black54),
-                          ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-              actions: [
-                if (isCreate && isPaymentStep)
-                  TextButton(
-                    onPressed: () {
-                      setState(() {
-                        isPaymentStep = false;
-                      });
-                    },
-                    child: const Text('Back'),
-                  ),
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: () async {
-                    final name = nameController.text.trim();
-                    final incentive = double.tryParse(
-                      incentiveController.text.trim(),
-                    );
-                    final buffer = double.tryParse(
-                      bufferController.text.trim(),
-                    );
-
-                    if (isCreate && !isPaymentStep) {
-                      if (name.isEmpty || incentive == null || buffer == null) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Venue name, incentive, and buffer are required.',
-                            ),
-                          ),
-                        );
-                        return;
-                      }
-                      setState(() {
-                        isPaymentStep = true;
-                      });
-                      return;
-                    }
-
-                    if (name.isEmpty || incentive == null || buffer == null) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Venue name, incentive, and buffer are required.',
-                          ),
-                        ),
-                      );
-                      return;
-                    }
-
-                    if (methods.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'At least one payment method is required.',
-                          ),
-                        ),
-                      );
-                      return;
-                    }
-
-                    if (methods.any(
-                      (method) => (method.extraFieldLabel?.length ?? 0) > 28,
-                    )) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Extra field label must be 28 characters or less.',
-                          ),
-                        ),
-                      );
-                      return;
-                    }
-
-                    final cubit = context.read<SettingsCubit>();
-                    if (isCreate) {
-                      await cubit.createLocation(
-                        name: name,
-                        address: addressController.text.trim(),
-                        contact: contactController.text.trim(),
-                        incentivePercent: incentive,
-                        bufferPercent: buffer,
-                        qrImagePath: qrImagePath,
-                        paymentMethods: methods,
-                      );
-                    } else {
-                      await cubit.saveLocationConfiguration(
-                        company: existing.copyWith(
-                          name: name,
-                          address: addressController.text.trim(),
-                          contact: contactController.text.trim(),
-                          incentivePercent: incentive,
-                          bufferPercent: buffer,
-                          qrImagePath: qrImagePath,
-                        ),
-                        paymentMethods: methods,
-                      );
-                    }
-
-                    if (context.mounted) {
-                      Navigator.pop(context);
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                  ),
-                  child: Text(isCreate && !isPaymentStep ? 'Next' : 'Save'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _label(BuildContext context, String text) {
-    return Text(
-      text,
-      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-        color: Colors.grey,
-        fontWeight: FontWeight.w500,
+      builder: (_) => _VenueEditorDialog(
+        existing: existing,
+        existingMethods: existingMethods,
       ),
     );
-  }
+    if (result == null) {
+      return;
+    }
 
-  Widget _field(
-    TextEditingController controller, {
-    String? hintText,
-    TextInputType? keyboardType,
-  }) {
-    return TextField(
-      controller: controller,
-      keyboardType: keyboardType,
-      decoration: InputDecoration(
-        hintText: hintText,
-        isDense: true,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 11,
+    if (existing == null) {
+      await cubit.createLocation(
+        name: result.name,
+        address: result.address,
+        contact: result.contact,
+        incentivePercent: result.incentivePercent,
+        bufferPercent: result.bufferPercent,
+        qrImagePath: result.qrImagePath,
+        paymentMethods: result.methods,
+      );
+    } else {
+      await cubit.saveLocationConfiguration(
+        company: existing.copyWith(
+          name: result.name,
+          address: result.address,
+          contact: result.contact,
+          incentivePercent: result.incentivePercent,
+          bufferPercent: result.bufferPercent,
+          qrImagePath: result.qrImagePath,
         ),
-        filled: true,
-        fillColor: const Color(0xFFF5F1FB),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(6),
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(6),
-          borderSide: BorderSide.none,
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(6),
-          borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
-        ),
-      ),
-    );
+        paymentMethods: result.methods,
+      );
+    }
   }
+}
+
+/// What the venue editor agreed to.
+class _VenueDraft {
+  const _VenueDraft({
+    required this.name,
+    required this.address,
+    required this.contact,
+    required this.incentivePercent,
+    required this.bufferPercent,
+    required this.qrImagePath,
+    required this.methods,
+  });
+
+  final String name;
+  final String address;
+  final String contact;
+  final double incentivePercent;
+  final double bufferPercent;
+  final String? qrImagePath;
+  final List<PaymentMethodMeta> methods;
 }
 
 InputDecoration _venueFieldDecoration({required String hint}) =>
@@ -886,6 +471,808 @@ class _VenueRowActionState extends State<_VenueRowAction> {
           size: 18,
           color: _hovered ? AppColors.primary : Colors.black38,
         ),
+      ),
+    );
+  }
+}
+
+/// Adding or editing a venue: what it is called, what it costs, and what the
+/// till will accept there.
+///
+/// Two steps, both reachable in either mode. Editing used to open straight
+/// onto payment methods with no way back, so a venue's name, address, contact
+/// and both rates could be *saved* but never seen or changed -- the controllers
+/// held the original values and wrote them back untouched.
+class _VenueEditorDialog extends StatefulWidget {
+  const _VenueEditorDialog({
+    required this.existing,
+    required this.existingMethods,
+  });
+
+  final Company? existing;
+  final List<PaymentMethodMeta> existingMethods;
+
+  @override
+  State<_VenueEditorDialog> createState() => _VenueEditorDialogState();
+}
+
+class _VenueEditorDialogState extends State<_VenueEditorDialog> {
+  late final TextEditingController _name;
+  late final TextEditingController _address;
+  late final TextEditingController _contact;
+  late final TextEditingController _incentive;
+  late final TextEditingController _buffer;
+  final TextEditingController _methodName = TextEditingController();
+  final TextEditingController _methodField = TextEditingController();
+
+  late List<PaymentMethodMeta> _methods;
+  String? _qrImagePath;
+  int _step = 0;
+
+  String? _nameError;
+  String? _ratesError;
+  String? _methodError;
+
+  /// The example the rates are previewed against. A round number, so the
+  /// arithmetic stays legible rather than becoming the thing being read.
+  static const double _previewSales = 10000;
+
+  /// Long enough to say "Reference Number", short enough to fit the field's
+  /// label on a till.
+  static const int _fieldLabelMax = 28;
+
+  bool get _isCreate => widget.existing == null;
+
+  @override
+  void initState() {
+    super.initState();
+    final existing = widget.existing;
+    _name = TextEditingController(text: existing?.name ?? '');
+    _address = TextEditingController(text: existing?.address ?? '');
+    _contact = TextEditingController(text: existing?.contact ?? '');
+    _incentive = TextEditingController(
+      text: existing == null ? '10' : _plain(existing.incentivePercent),
+    );
+    _buffer = TextEditingController(
+      text: existing == null ? '10' : _plain(existing.bufferPercent),
+    );
+    _qrImagePath = existing?.qrImagePath;
+    _methods = [
+      if (widget.existingMethods.isNotEmpty)
+        ...widget.existingMethods
+      else
+        const PaymentMethodMeta(name: 'CASH'),
+    ];
+  }
+
+  static String _plain(double value) =>
+      value == value.roundToDouble() ? value.toStringAsFixed(0) : '$value';
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _address.dispose();
+    _contact.dispose();
+    _incentive.dispose();
+    _buffer.dispose();
+    _methodName.dispose();
+    _methodField.dispose();
+    super.dispose();
+  }
+
+  double? get _incentiveValue => double.tryParse(_incentive.text.trim());
+  double? get _bufferValue => double.tryParse(_buffer.text.trim());
+
+  bool _validateDetails() {
+    final name = _name.text.trim();
+    final incentive = _incentiveValue;
+    final buffer = _bufferValue;
+    setState(() {
+      _nameError = name.isEmpty ? 'A venue needs a name.' : null;
+      _ratesError = (incentive == null || buffer == null)
+          ? 'Both rates must be numbers.'
+          : (incentive < 0 || buffer < 0)
+          ? 'A rate cannot be negative.'
+          : (incentive + buffer > 100)
+          ? 'Together these take more than the whole sale.'
+          : null;
+    });
+    return _nameError == null && _ratesError == null;
+  }
+
+  void _addMethod() {
+    final name = _methodName.text.trim();
+    final field = _methodField.text.trim();
+    if (name.isEmpty) {
+      setState(() => _methodError = 'Give the method a name.');
+      return;
+    }
+    if (_methods.any((m) => m.name.toUpperCase() == name.toUpperCase())) {
+      setState(() => _methodError = '$name is already accepted here.');
+      return;
+    }
+    setState(() {
+      _methods.add(
+        PaymentMethodMeta(
+          name: name,
+          extraFieldLabel: field.isEmpty ? null : field,
+        ),
+      );
+      _methodName.clear();
+      _methodField.clear();
+      _methodError = null;
+    });
+  }
+
+  void _submit() {
+    if (_step == 0) {
+      if (_validateDetails()) {
+        setState(() => _step = 1);
+      }
+      return;
+    }
+    // Details are validated on the way through, but an edit can land on step
+    // two directly, so they are checked again rather than trusted.
+    if (!_validateDetails()) {
+      setState(() => _step = 0);
+      return;
+    }
+    if (_methods.isEmpty) {
+      setState(() => _methodError = 'A venue must accept at least one method.');
+      return;
+    }
+    Navigator.pop(
+      context,
+      _VenueDraft(
+        name: _name.text.trim(),
+        address: _address.text.trim(),
+        contact: _contact.text.trim(),
+        incentivePercent: _incentiveValue!,
+        bufferPercent: _bufferValue!,
+        qrImagePath: _qrImagePath,
+        methods: _methods,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Dialog(
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560, maxHeight: 680),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _isCreate ? 'Add venue' : 'Edit venue',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    tooltip: 'Close',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(
+                      width: 32,
+                      height: 32,
+                    ),
+                    icon: const Icon(Icons.close_rounded, size: 18),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              // A completed step is tappable to revisit; forward movement is
+              // what validation gates.
+              child: Row(
+                children: [
+                  _VenueStep(
+                    index: 1,
+                    label: 'Details',
+                    isCurrent: _step == 0,
+                    isDone: _step > 0,
+                    onTap: () => setState(() => _step = 0),
+                  ),
+                  const Expanded(
+                    child: Divider(color: Color(0xFFEDEDF1), height: 1),
+                  ),
+                  _VenueStep(
+                    index: 2,
+                    label: 'Payment methods',
+                    isCurrent: _step == 1,
+                    isDone: false,
+                    onTap: _step == 1 ? null : () => _submit(),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Divider(height: 1, color: Color(0xFFEDEDF1)),
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+                child: _step == 0 ? _detailsStep(theme) : _methodsStep(theme),
+              ),
+            ),
+            const Divider(height: 1, color: Color(0xFFEDEDF1)),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
+              child: Row(
+                children: [
+                  if (_step == 1)
+                    TextButton.icon(
+                      onPressed: () => setState(() => _step = 0),
+                      icon: const Icon(Icons.arrow_back, size: 16),
+                      label: const Text('Back'),
+                    ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel'),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: _submit,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: Text(_step == 0 ? 'Continue' : 'Save venue'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _detailsStep(ThemeData theme) {
+    final incentive = _incentiveValue ?? 0;
+    final buffer = _bufferValue ?? 0;
+    final venueShare = _previewSales * (incentive + buffer) / 100;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _VenueSectionLabel('Venue'),
+        const SizedBox(height: 8),
+        _VenueField(
+          label: 'Name',
+          controller: _name,
+          hint: 'e.g. SM City Lucena',
+          error: _nameError,
+          onChanged: () => setState(() => _nameError = null),
+        ),
+        const SizedBox(height: 12),
+        _VenueField(label: 'Address', controller: _address, hint: 'Optional'),
+        const SizedBox(height: 12),
+        _VenueField(label: 'Contact', controller: _contact, hint: 'Optional'),
+        const SizedBox(height: 24),
+        const _VenueSectionLabel('Terms'),
+        const SizedBox(height: 4),
+        Text(
+          'Taken off every sale made at this venue.',
+          style: theme.textTheme.bodySmall?.copyWith(color: Colors.black45),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: _VenueField(
+                label: 'Incentive %',
+                controller: _incentive,
+                hint: '10',
+                numeric: true,
+                onChanged: () => setState(() => _ratesError = null),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _VenueField(
+                label: 'Buffer %',
+                controller: _buffer,
+                hint: '5',
+                numeric: true,
+                onChanged: () => setState(() => _ratesError = null),
+              ),
+            ),
+          ],
+        ),
+        if (_ratesError != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            _ratesError!,
+            style: theme.textTheme.bodySmall?.copyWith(color: AppColors.error),
+          ),
+        ],
+        const SizedBox(height: 12),
+        // A percentage is abstract until it is money. This is the same
+        // arithmetic the statement of account runs, on a round number.
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF7F7F9),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text.rich(
+            TextSpan(
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: Colors.black54,
+                height: 1.4,
+              ),
+              children: [
+                TextSpan(text: 'On ${formatPeso(_previewSales)} of sales, '),
+                TextSpan(
+                  text: formatPeso(venueShare),
+                  style: const TextStyle(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const TextSpan(text: ' goes to the venue and '),
+                TextSpan(
+                  text: formatPeso(_previewSales - venueShare),
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const TextSpan(text: ' is retained.'),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _methodsStep(ThemeData theme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _VenueSectionLabel('Accepted at this venue'),
+        const SizedBox(height: 4),
+        Text(
+          'What the till offers here. A method can ask the cashier for one '
+          'extra detail, such as a reference number.',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: Colors.black45,
+            height: 1.4,
+          ),
+        ),
+        const SizedBox(height: 12),
+        for (var i = 0; i < _methods.length; i++)
+          _MethodRow(
+            // Keyed by the method it shows: without this, removing a row
+            // leaves the next one holding the removed row's controller and
+            // therefore its text.
+            key: ValueKey(_methods[i].name),
+            method: _methods[i],
+            // Cash is how a stall takes money when everything else fails, so
+            // it is not removable.
+            locked: _methods[i].name.toUpperCase() == 'CASH',
+            onFieldChanged: (label) => setState(() {
+              _methods[i] = PaymentMethodMeta(
+                name: _methods[i].name,
+                extraFieldLabel: label.trim().isEmpty ? null : label.trim(),
+              );
+            }),
+            onRemove: () => setState(() => _methods.removeAt(i)),
+            maxFieldLength: _fieldLabelMax,
+          ),
+        const SizedBox(height: 12),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 2,
+              child: TextField(
+                controller: _methodName,
+                textCapitalization: TextCapitalization.characters,
+                onChanged: (_) => setState(() => _methodError = null),
+                onSubmitted: (_) => _addMethod(),
+                style: theme.textTheme.bodyMedium,
+                decoration: _venuePlainDecoration(hint: 'e.g. GCASH'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              flex: 3,
+              child: TextField(
+                controller: _methodField,
+                maxLength: _fieldLabelMax,
+                buildCounter: _noCounter,
+                onSubmitted: (_) => _addMethod(),
+                style: theme.textTheme.bodyMedium,
+                decoration: _venuePlainDecoration(hint: 'Asks for… (optional)'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            SizedBox(
+              height: 44,
+              child: OutlinedButton(
+                onPressed: _addMethod,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  side: const BorderSide(color: Color(0xFFDCDCE3)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: const Text('Add'),
+              ),
+            ),
+          ],
+        ),
+        if (_methodError != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            _methodError!,
+            style: theme.textTheme.bodySmall?.copyWith(color: AppColors.error),
+          ),
+        ],
+        const SizedBox(height: 24),
+        const _VenueSectionLabel('Payment QR'),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            OutlinedButton.icon(
+              onPressed: () async {
+                final file = await ImagePicker().pickImage(
+                  source: ImageSource.gallery,
+                );
+                if (file != null && mounted) {
+                  setState(() => _qrImagePath = file.path);
+                }
+              },
+              icon: const Icon(Icons.qr_code_2, size: 16),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Color(0xFFDCDCE3)),
+                foregroundColor: AppColors.text,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              label: Text(_qrImagePath == null ? 'Upload QR' : 'Replace QR'),
+            ),
+            const SizedBox(width: 10),
+            if (_qrImagePath != null)
+              Row(
+                children: [
+                  const Icon(
+                    Icons.check_circle_outline,
+                    size: 15,
+                    color: Color(0xFF2E7D32),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Attached',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: const Color(0xFF2E7D32),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              )
+            else
+              Text(
+                'None yet',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: Colors.black38,
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+Widget? _noCounter(
+  BuildContext context, {
+  required int currentLength,
+  required int? maxLength,
+  required bool isFocused,
+}) => null;
+
+InputDecoration _venuePlainDecoration({required String hint}) =>
+    InputDecoration(
+      hintText: hint,
+      hintStyle: const TextStyle(color: Colors.black38),
+      filled: true,
+      fillColor: AppColors.inputFill,
+      isDense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide.none,
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide.none,
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: AppColors.primary),
+      ),
+    );
+
+class _VenueSectionLabel extends StatelessWidget {
+  const _VenueSectionLabel(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Text(
+    text.toUpperCase(),
+    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+      color: Colors.black38,
+      fontWeight: FontWeight.w700,
+      letterSpacing: 0.8,
+    ),
+  );
+}
+
+/// Label, input, and the field's own error in one block.
+///
+/// Errors sit next to the input that caused them. They used to be SnackBars,
+/// which name the problem at the bottom of the screen and leave the reader to
+/// find which of five fields it belongs to.
+class _VenueField extends StatelessWidget {
+  const _VenueField({
+    required this.label,
+    required this.controller,
+    required this.hint,
+    this.error,
+    this.numeric = false,
+    this.onChanged,
+  });
+
+  final String label;
+  final TextEditingController controller;
+  final String hint;
+  final String? error;
+  final bool numeric;
+  final VoidCallback? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: theme.textTheme.bodySmall?.copyWith(
+            fontWeight: FontWeight.w600,
+            color: Colors.black54,
+          ),
+        ),
+        const SizedBox(height: 4),
+        TextField(
+          controller: controller,
+          onChanged: onChanged == null ? null : (_) => onChanged!(),
+          keyboardType: numeric
+              ? const TextInputType.numberWithOptions(decimal: true)
+              : TextInputType.text,
+          style: theme.textTheme.bodyMedium,
+          decoration: _venuePlainDecoration(hint: hint).copyWith(
+            enabledBorder: error == null
+                ? null
+                : OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: AppColors.error),
+                  ),
+          ),
+        ),
+        if (error != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            error!,
+            style: theme.textTheme.bodySmall?.copyWith(color: AppColors.error),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _VenueStep extends StatelessWidget {
+  const _VenueStep({
+    required this.index,
+    required this.label,
+    required this.isCurrent,
+    required this.isDone,
+    this.onTap,
+  });
+
+  final int index;
+  final String label;
+  final bool isCurrent;
+  final bool isDone;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = isCurrent || isDone;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 22,
+              height: 22,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: active ? AppColors.primary : const Color(0xFFEDEDF1),
+                shape: BoxShape.circle,
+              ),
+              child: isDone
+                  ? const Icon(Icons.check, size: 13, color: Colors.white)
+                  : Text(
+                      '$index',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: active ? Colors.white : Colors.black45,
+                      ),
+                    ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: active ? AppColors.primary : Colors.black38,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One accepted payment method, with its extra field edited in place.
+///
+/// The label used to live behind a "Field" button opening a second dialog on
+/// top of this one, to change one string.
+class _MethodRow extends StatefulWidget {
+  const _MethodRow({
+    super.key,
+    required this.method,
+    required this.locked,
+    required this.onFieldChanged,
+    required this.onRemove,
+    required this.maxFieldLength,
+  });
+
+  final PaymentMethodMeta method;
+  final bool locked;
+  final ValueChanged<String> onFieldChanged;
+  final VoidCallback onRemove;
+  final int maxFieldLength;
+
+  @override
+  State<_MethodRow> createState() => _MethodRowState();
+}
+
+class _MethodRowState extends State<_MethodRow> {
+  /// Owned by the row rather than rebuilt in `build`. A controller created
+  /// there is a new one every frame, so the cursor jumps to the start on each
+  /// keystroke and the field cannot be typed into.
+  late final TextEditingController _field;
+
+  @override
+  void initState() {
+    super.initState();
+    _field = TextEditingController(text: widget.method.extraFieldLabel ?? '');
+  }
+
+  @override
+  void dispose() {
+    _field.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final method = widget.method;
+    final locked = widget.locked;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFEDEDF1)),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 90,
+            child: Text(
+              method.name.toUpperCase(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          Expanded(
+            child: TextField(
+              controller: _field,
+              maxLength: widget.maxFieldLength,
+              buildCounter: _noCounter,
+              onChanged: widget.onFieldChanged,
+              style: theme.textTheme.bodySmall,
+              decoration: InputDecoration(
+                hintText: 'Asks for… (optional)',
+                hintStyle: const TextStyle(color: Colors.black38),
+                isDense: true,
+                filled: true,
+                // White inside a bordered row, so the two depths never read
+                // as the same surface.
+                fillColor: Colors.white,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(6),
+                  borderSide: BorderSide.none,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(6),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+          ),
+          IconButton(
+            onPressed: locked ? null : widget.onRemove,
+            tooltip: locked ? 'Cash cannot be removed' : 'Remove',
+            splashRadius: 16,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+            icon: Icon(
+              Icons.close_rounded,
+              size: 16,
+              color: locked ? Colors.black12 : Colors.black38,
+            ),
+          ),
+        ],
       ),
     );
   }

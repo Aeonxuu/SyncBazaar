@@ -82,22 +82,28 @@ class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         isDense: true,
         filled: true,
-        fillColor: const Color(0xFFF5F1FB),
+        // Neutral, not purple. This was corrected in AppColors on 2026-08-02
+        // but never here, so every field that did not override its decoration
+        // kept inheriting the purple-tinted fill -- and purple is the app's
+        // signal for brand and selection, which a plain text box is neither.
+        fillColor: AppColors.inputFill,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 12,
           vertical: 11,
         ),
+        // 8 is the default control radius; 6 is for things the size of a
+        // word, which an input is not.
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(6),
-          borderSide: BorderSide.none,
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: AppColors.primary),
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
