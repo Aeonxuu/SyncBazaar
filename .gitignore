@@ -8,3 +8,8 @@
 # moment that repo moves -- it already lists a package the live backend has
 # removed -- so the clone at ../syncbazaar_backend is the only thing to trust.
 collected_code.md
+
+# macOS Finder metadata. Written into every directory the user opens,
+# so it lands in commits by accident rather than by intent.
+.DS_Store
+**/.DS_Store
