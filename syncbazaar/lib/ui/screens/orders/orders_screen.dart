@@ -4,7 +4,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../bloc/orders/orders_cubit.dart';
 import '../../../bloc/pos/pos_cubit.dart';
 import '../../../core/constants/colors.dart';
-import '../../widgets/selectable_option_button.dart';
+import '../../widgets/bazaar_search_field.dart';
+import '../../widgets/bazaar_status_filter_button.dart';
 import '../../../models/bazaar_event.dart';
 import '../../../models/user.dart';
 import '../../screens/dashboard/widgets/dashboard_section_card.dart';
@@ -26,7 +27,22 @@ class _OrdersScreenState extends State<OrdersScreen> {
   /// bazaars, the other filters the rows inside one. Sharing a controller
   /// would carry a customer's name into the bazaar picker.
   final TextEditingController _bazaarSearch = TextEditingController();
-  String _bazaarStatusFilter = 'ALL';
+
+  /// Null means all. Cycled rather than picked from a list, the same way
+  /// Sales does it — both screens choose a bazaar from the same set, and two
+  /// filters that look different imply they behave differently.
+  BazaarStatus? _bazaarStatusFilter;
+
+  void _cycleBazaarStatusFilter() {
+    setState(() {
+      _bazaarStatusFilter = switch (_bazaarStatusFilter) {
+        null => BazaarStatus.upcoming,
+        BazaarStatus.upcoming => BazaarStatus.ongoing,
+        BazaarStatus.ongoing => BazaarStatus.ended,
+        BazaarStatus.ended => null,
+      };
+    });
+  }
 
   @override
   void initState() {
@@ -343,17 +359,21 @@ class _OrdersScreenState extends State<OrdersScreen> {
       builder: (context, state) {
         final theme = Theme.of(context);
         final query = _bazaarSearch.text.trim().toLowerCase();
-        final visible = state.events
-            .where(
-              (event) =>
-                  _bazaarStatusFilter == 'ALL' ||
-                  event.status.name.toUpperCase() == _bazaarStatusFilter,
-            )
-            .where(
-              (event) =>
-                  query.isEmpty || event.name.toLowerCase().contains(query),
-            )
-            .toList();
+        final visible = state.events.where((event) {
+          if (_bazaarStatusFilter != null &&
+              event.status != _bazaarStatusFilter) {
+            return false;
+          }
+          if (query.isEmpty) {
+            return true;
+          }
+          // Status and date as well as name, because "ended" and "8/17" are
+          // both things somebody types when looking for a bazaar.
+          return event.name.toLowerCase().contains(query) ||
+              event.status.name.toLowerCase().contains(query) ||
+              _shortDate(event.startDate).contains(query) ||
+              _shortDate(event.endDate).contains(query);
+        }).toList();
 
         return Padding(
           padding: const EdgeInsets.all(24),
@@ -370,50 +390,40 @@ class _OrdersScreenState extends State<OrdersScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                state.events.isEmpty
-                    ? 'No bazaars yet.'
-                    : _describeScope(state.events.length, visible.length),
+                // Purpose here, count in the caption under the search. Saying
+                // the number twice is the same information in two places.
+                'Choose a bazaar to see what it sold.',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: Colors.black45,
                 ),
               ),
               const SizedBox(height: 24),
-              Row(
+              // Wrapped so the two sit side by side on a wide window and
+              // drop below each other on a narrow one, rather than
+              // overflowing.
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  SizedBox(
-                    width: 320,
-                    child: TextField(
-                      controller: _bazaarSearch,
-                      onChanged: (_) => setState(() {}),
-                      style: theme.textTheme.bodyMedium,
-                      decoration: _selectorFieldDecoration(
-                        hint: 'Search bazaar',
-                      ),
-                    ),
+                  BazaarSearchField(
+                    controller: _bazaarSearch,
+                    onChanged: () => setState(() {}),
                   ),
-                  const SizedBox(width: 12),
-                  for (final status in const [
-                    'ALL',
-                    'ONGOING',
-                    'UPCOMING',
-                    'ENDED',
-                  ])
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: SelectableOptionButton(
-                        label: status,
-                        isSelected: _bazaarStatusFilter == status,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        onTap: () =>
-                            setState(() => _bazaarStatusFilter = status),
-                      ),
-                    ),
+                  BazaarStatusFilterButton(
+                    status: _bazaarStatusFilter,
+                    onTap: _cycleBazaarStatusFilter,
+                  ),
                 ],
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 10),
+              Text(
+                '${visible.length} bazaar${visible.length == 1 ? '' : 's'} found',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: Colors.black38,
+                ),
+              ),
+              const SizedBox(height: 16),
               Expanded(
                 child: visible.isEmpty
                     ? Center(
@@ -520,39 +530,9 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
   }
 
-  String _describeScope(int total, int shown) {
-    if (total == shown) {
-      return '$total ${total == 1 ? 'bazaar' : 'bazaars'}';
-    }
-    return '$shown of $total shown';
-  }
-
   static String _shortDate(DateTime value) =>
       '${value.month}/${value.day}/${value.year}';
 }
-
-InputDecoration _selectorFieldDecoration({required String hint}) =>
-    InputDecoration(
-      hintText: hint,
-      hintStyle: const TextStyle(color: Colors.black38),
-      prefixIcon: const Icon(Icons.search, size: 18, color: Colors.black38),
-      filled: true,
-      fillColor: AppColors.inputFill,
-      isDense: true,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: BorderSide.none,
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: BorderSide.none,
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: AppColors.primary),
-      ),
-    );
 
 class _AnimatedEntrance extends StatefulWidget {
   const _AnimatedEntrance({required this.child, required this.delayMs});

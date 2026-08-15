@@ -24,17 +24,30 @@ void main() {
     event('Midweek Office Bazaar', BazaarStatus.ended, 10),
   ];
 
-  List<BazaarEvent> visible({String status = 'ALL', String search = ''}) {
+  String shortDate(DateTime value) =>
+      '${value.month}/${value.day}/${value.year}';
+
+  /// The screen's own matching: the status cycle plus a query tested against
+  /// the name, the status word, and either date.
+  List<BazaarEvent> visible({BazaarStatus? status, String search = ''}) {
     final query = search.trim().toLowerCase();
-    return events
-        .where((e) => status == 'ALL' || e.status.name.toUpperCase() == status)
-        .where((e) => query.isEmpty || e.name.toLowerCase().contains(query))
-        .toList();
+    return events.where((e) {
+      if (status != null && e.status != status) return false;
+      if (query.isEmpty) return true;
+      return e.name.toLowerCase().contains(query) ||
+          e.status.name.toLowerCase().contains(query) ||
+          shortDate(e.startDate).contains(query) ||
+          shortDate(e.endDate).contains(query);
+    }).toList();
   }
 
-  String describeScope(int total, int shown) => total == shown
-      ? '$total ${total == 1 ? 'bazaar' : 'bazaars'}'
-      : '$shown of $total shown';
+  /// All -> Upcoming -> Ongoing -> Ended -> All.
+  BazaarStatus? next(BazaarStatus? current) => switch (current) {
+    null => BazaarStatus.upcoming,
+    BazaarStatus.upcoming => BazaarStatus.ongoing,
+    BazaarStatus.ongoing => BazaarStatus.ended,
+    BazaarStatus.ended => null,
+  };
 
   test('everything is listed by default', () {
     // Including ended ones — this screen reads history, so hiding them would
@@ -43,11 +56,13 @@ void main() {
   });
 
   test('the status filter narrows to one kind', () {
-    expect(visible(status: 'ENDED').map((e) => e.name), [
+    expect(visible(status: BazaarStatus.ended).map((e) => e.name), [
       'August Fair',
       'Midweek Office Bazaar',
     ]);
-    expect(visible(status: 'ONGOING').map((e) => e.name), ['TechVibe Expo']);
+    expect(visible(status: BazaarStatus.ongoing).map((e) => e.name), [
+      'TechVibe Expo',
+    ]);
   });
 
   test('search matches part of a name', () {
@@ -61,12 +76,23 @@ void main() {
 
   test('search and filter both apply', () {
     // August Fair has ended, so filtering to ongoing should find nothing.
-    expect(visible(status: 'ONGOING', search: 'august'), isEmpty);
+    expect(visible(status: BazaarStatus.ongoing, search: 'august'), isEmpty);
   });
 
-  test('the scope line admits when it is showing a subset', () {
-    expect(describeScope(4, 4), '4 bazaars');
-    expect(describeScope(4, 2), '2 of 4 shown');
-    expect(describeScope(1, 1), '1 bazaar');
+  test('searching a status word finds those bazaars', () {
+    // "ended" is a thing somebody types when they mean the finished ones.
+    expect(visible(search: 'ended'), hasLength(2));
+  });
+
+  test('searching a date finds the bazaar running then', () {
+    expect(visible(search: '8/3/2026').map((e) => e.name), ['August Fair']);
+  });
+
+  test('the filter cycles back round to all', () {
+    expect(next(null), BazaarStatus.upcoming);
+    expect(next(BazaarStatus.upcoming), BazaarStatus.ongoing);
+    expect(next(BazaarStatus.ongoing), BazaarStatus.ended);
+    // Four taps return to where it started, so the filter is never stuck.
+    expect(next(BazaarStatus.ended), isNull);
   });
 }

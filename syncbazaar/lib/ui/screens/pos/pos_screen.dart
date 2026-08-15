@@ -24,6 +24,8 @@ import '../../../data/repositories/event_repository.dart';
 import '../../../data/repositories/settings_repository.dart';
 import '../../../services/staff_scheduling.dart';
 import '../../widgets/app_dropdown.dart';
+import '../../widgets/bazaar_search_field.dart';
+import '../../widgets/bazaar_status_filter_button.dart';
 import '../../widgets/quantity_stepper.dart';
 import '../../widgets/product_thumbnail.dart';
 import '../../widgets/selectable_option_button.dart';
@@ -172,52 +174,11 @@ class _PosScreenState extends State<PosScreen> {
             runSpacing: 10,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 360),
-                child: TextField(
-                  controller: _bazaarSearchController,
-                  onChanged: (_) => setState(() {}),
-                  style: Theme.of(context).textTheme.bodyMedium,
-                  decoration: InputDecoration(
-                    hintText: 'Search bazaars by name, status, or date',
-                    hintStyle: const TextStyle(color: Colors.black38),
-                    prefixIcon: const Icon(
-                      Icons.search_rounded,
-                      color: Colors.black45,
-                    ),
-                    suffixIcon: _bazaarSearchController.text.isEmpty
-                        ? null
-                        : IconButton(
-                            splashRadius: 18,
-                            onPressed: () {
-                              _bazaarSearchController.clear();
-                              setState(() {});
-                            },
-                            icon: const Icon(Icons.close_rounded, size: 18),
-                          ),
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                    filled: true,
-                    fillColor: AppColors.surface,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Color(0xFFEAEAEF)),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Color(0xFFEAEAEF)),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(
-                        color: AppColors.primary,
-                        width: 1.5,
-                      ),
-                    ),
-                  ),
-                ),
+              BazaarSearchField(
+                controller: _bazaarSearchController,
+                onChanged: () => setState(() {}),
               ),
-              _StatusFilterCycleButton(
+              BazaarStatusFilterButton(
                 status: _bazaarStatusFilter,
                 onTap: _cycleBazaarStatusFilter,
               ),
@@ -1635,81 +1596,6 @@ class _PaymentMethodOptionState extends State<_PaymentMethodOption> {
 /// Reuses the exact status colors already shown on `_BazaarCard`'s badge
 /// (green/amber/red) so the filter reads as "the same status," not a new
 /// color language layered on top.
-class _StatusFilterCycleButton extends StatefulWidget {
-  const _StatusFilterCycleButton({required this.status, required this.onTap});
-
-  /// null means "All" (no filter applied).
-  final BazaarStatus? status;
-  final VoidCallback onTap;
-
-  @override
-  State<_StatusFilterCycleButton> createState() =>
-      _StatusFilterCycleButtonState();
-}
-
-class _StatusFilterCycleButtonState extends State<_StatusFilterCycleButton> {
-  bool _pressed = false;
-
-  static const Map<BazaarStatus, Color> _statusColors = {
-    BazaarStatus.ongoing: Color(0xFF2E7D32),
-    BazaarStatus.upcoming: Color(0xFFB45309),
-    BazaarStatus.ended: AppColors.error,
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    final status = widget.status;
-    final color = status == null
-        ? Colors.black54
-        : (_statusColors[status] ?? AppColors.error);
-    final label = switch (status) {
-      null => 'All',
-      BazaarStatus.upcoming => 'Upcoming',
-      BazaarStatus.ongoing => 'Ongoing',
-      BazaarStatus.ended => 'Ended',
-    };
-
-    return AnimatedScale(
-      scale: _pressed ? 0.97 : 1,
-      duration: AppMotion.feedback,
-      curve: AppMotion.easeOut,
-      child: InkWell(
-        onTap: widget.onTap,
-        onHighlightChanged: (value) => setState(() => _pressed = value),
-        borderRadius: BorderRadius.circular(8),
-        child: AnimatedContainer(
-          duration: AppMotion.small,
-          curve: AppMotion.easeOut,
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: status == null
-                ? Colors.black.withValues(alpha: 0.06)
-                : color.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.filter_alt_rounded, size: 13, color: color),
-              const SizedBox(width: 4),
-              AnimatedDefaultTextStyle(
-                duration: AppMotion.small,
-                curve: AppMotion.easeOut,
-                style: TextStyle(
-                  color: color,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 12,
-                ),
-                child: Text(label),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _BazaarCard extends StatefulWidget {
   const _BazaarCard({
     required this.event,
