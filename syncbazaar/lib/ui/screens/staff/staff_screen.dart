@@ -7,7 +7,7 @@ import '../../../data/repositories/event_repository.dart';
 import '../../../models/bazaar_event.dart';
 import '../../../models/user.dart';
 import '../../widgets/confirmation_dialog.dart';
-import '../dashboard/widgets/dashboard_section_card.dart';
+import '../../widgets/selectable_option_button.dart';
 
 class StaffScreen extends StatefulWidget {
   const StaffScreen({super.key, required this.currentUser});
@@ -26,6 +26,14 @@ class _StaffScreenState extends State<StaffScreen> {
   /// assignments resolve to and nothing else -- an id is not an answer to
   /// "which bazaars is Via on?".
   Map<int, BazaarEvent> _eventsById = const {};
+
+  final TextEditingController _search = TextEditingController();
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -70,149 +78,275 @@ class _StaffScreenState extends State<StaffScreen> {
     if (widget.currentUser.role == UserRole.employee) {
       return const Center(child: Text('Access denied'));
     }
+    final theme = Theme.of(context);
 
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return BlocBuilder<StaffCubit, List<AppUser>>(
+      builder: (context, users) {
+        // An owner manages employees only, so the role filter would be a
+        // control with one possible answer. It is shown to admins alone.
+        final base = widget.currentUser.role == UserRole.owner
+            ? users.where((u) => u.role == UserRole.employee).toList()
+            : users;
+        final query = _search.text.trim().toLowerCase();
+        final visible = base
+            .where(
+              (user) =>
+                  _selectedRole == 'ALL' ||
+                  user.role.name.toUpperCase() == _selectedRole,
+            )
+            .where(
+              (user) =>
+                  query.isEmpty ||
+                  user.name.toLowerCase().contains(query) ||
+                  user.email.toLowerCase().contains(query),
+            )
+            .toList();
+
+        return Padding(
+          // 24 all round: this is a top-level screen, and the gutter is the
+          // same in both axes.
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Staff List',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              if (_isAdmin)
-                ElevatedButton.icon(
-                  onPressed: () => _showUserDialog(context),
-                  icon: const Icon(Icons.person_add_alt_1),
-                  label: const Text('Add user'),
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Expanded(
-            child: BlocBuilder<StaffCubit, List<AppUser>>(
-              builder: (context, users) {
-                final base = widget.currentUser.role == UserRole.owner
-                    ? users.where((u) => u.role == UserRole.employee).toList()
-                    : users;
-                final visible = _selectedRole == 'ALL'
-                    ? base
-                    : base
-                          .where(
-                            (user) =>
-                                user.role.name.toUpperCase() == _selectedRole,
-                          )
-                          .toList();
-
-                return DashboardSectionCard(
-                  title: 'Staff Directory',
-                  trailing: SizedBox(
-                    width: 160,
-                    child: DropdownButtonFormField<String>(
-                      initialValue: _selectedRole,
-                      icon: const Icon(Icons.keyboard_arrow_down_rounded),
-                      isExpanded: true,
-                      decoration: InputDecoration(
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 10,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Staff',
+                          style: theme.textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
-                        filled: true,
-                        fillColor: AppColors.surface,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide.none,
-                        ),
-                      ),
-                      items: const [
-                        DropdownMenuItem(value: 'ALL', child: Text('ALL')),
-                        DropdownMenuItem(value: 'ADMIN', child: Text('ADMIN')),
-                        DropdownMenuItem(value: 'OWNER', child: Text('OWNER')),
-                        DropdownMenuItem(
-                          value: 'EMPLOYEE',
-                          child: Text('EMPLOYEE'),
+                        const SizedBox(height: 4),
+                        Text(
+                          // Says the scope, so the list below never has to be
+                          // counted to know whether it is all of them.
+                          _describeScope(base.length, visible.length),
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: Colors.black45,
+                          ),
                         ),
                       ],
-                      onChanged: (value) {
-                        if (value == null) {
-                          return;
-                        }
-                        setState(() {
-                          _selectedRole = value;
-                        });
-                      },
                     ),
                   ),
-                  child: Column(
-                    children: [
-                      _headerRow(context),
-                      const SizedBox(height: 8),
-                      const Divider(height: 1),
-                      SizedBox(
-                        height: 420,
-                        child: ListView.builder(
-                          itemCount: visible.length,
-                          itemBuilder: (context, index) {
-                            final user = visible[index];
-                            return _staffRow(context, user);
-                          },
+                  if (_isAdmin)
+                    ElevatedButton.icon(
+                      onPressed: () => _showUserDialog(context),
+                      icon: const Icon(Icons.person_add_alt_1, size: 18),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
                         ),
                       ),
-                    ],
+                      label: const Text('Add user'),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  ConstrainedBox(
+                    // Capped rather than stretched: a search field the width
+                    // of a desk is harder to aim at, not easier.
+                    constraints: const BoxConstraints(maxWidth: 320),
+                    child: SizedBox(
+                      width: 320,
+                      child: TextField(
+                        controller: _search,
+                        onChanged: (_) => setState(() {}),
+                        style: theme.textTheme.bodyMedium,
+                        decoration: _staffFieldDecoration(
+                          hint: 'Search name or email',
+                        ),
+                      ),
+                    ),
                   ),
-                );
-              },
-            ),
+                  if (_isAdmin) ...[
+                    const SizedBox(width: 12),
+                    // Four options, always visible: recognition beats recall,
+                    // and a dropdown hides three of them behind a tap.
+                    for (final role in const [
+                      'ALL',
+                      'ADMIN',
+                      'OWNER',
+                      'EMPLOYEE',
+                    ])
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: SelectableOptionButton(
+                          label: role,
+                          isSelected: _selectedRole == role,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          onTap: () => setState(() => _selectedRole = role),
+                        ),
+                      ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 24),
+              Expanded(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFEDEDF1)),
+                  ),
+                  child: visible.isEmpty
+                      ? _emptyState(context, base.isEmpty)
+                      : Column(
+                          children: [
+                            _headerRow(context),
+                            const Divider(height: 1, color: Color(0xFFEDEDF1)),
+                            Expanded(
+                              child: ListView.separated(
+                                padding: EdgeInsets.zero,
+                                itemCount: visible.length,
+                                separatorBuilder: (_, __) => const Divider(
+                                  height: 1,
+                                  color: Color(0xFFF3F3F6),
+                                ),
+                                itemBuilder: (context, index) =>
+                                    _staffRow(context, visible[index]),
+                              ),
+                            ),
+                          ],
+                        ),
+                ),
+              ),
+            ],
           ),
-        ],
+        );
+      },
+    );
+  }
+
+  String _describeScope(int total, int shown) {
+    if (total == shown) {
+      return '$total ${total == 1 ? 'person' : 'people'}';
+    }
+    return '$shown of $total shown';
+  }
+
+  Widget _emptyState(BuildContext context, bool noStaffAtAll) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              noStaffAtAll ? Icons.group_outlined : Icons.search_off_outlined,
+              size: 28,
+              color: Colors.black26,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              noStaffAtAll
+                  ? 'No staff yet. Add someone to get started.'
+                  : 'Nobody matches that search.',
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: Colors.black45),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _headerRow(BuildContext context) {
-    final style = Theme.of(context).textTheme.bodySmall?.copyWith(
-      color: Colors.black54,
+    final style = Theme.of(context).textTheme.labelSmall?.copyWith(
+      color: Colors.black38,
       fontWeight: FontWeight.w700,
+      letterSpacing: 0.8,
     );
-    return Row(
-      children: [
-        Expanded(flex: 3, child: Text('Name', style: style)),
-        Expanded(flex: 4, child: Text('Email', style: style)),
-        Expanded(flex: 2, child: Text('Role', style: style)),
-        Expanded(flex: 2, child: Text('Bazaars', style: style)),
-        Expanded(flex: 3, child: Text('Actions', style: style)),
-      ],
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+      child: Row(
+        children: [
+          Expanded(flex: 5, child: Text('NAME', style: style)),
+          Expanded(flex: 2, child: Text('ROLE', style: style)),
+          Expanded(flex: 2, child: Text('BAZAARS', style: style)),
+          if (_isAdmin) const SizedBox(width: 80) else const SizedBox.shrink(),
+        ],
+      ),
     );
   }
 
   Widget _staffRow(BuildContext context, AppUser user) {
-    final textStyle = Theme.of(context).textTheme.bodyMedium;
+    final theme = Theme.of(context);
     final assignedCount = user.role == UserRole.employee
         ? user.assignedEventIdsEffective.length
         : 0;
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: Color(0xFFEDEDED))),
-      ),
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
-          Expanded(flex: 3, child: Text(user.name, style: textStyle)),
-          Expanded(flex: 4, child: Text(user.email, style: textStyle)),
           Expanded(
-            flex: 2,
-            child: Text(user.role.name.toUpperCase(), style: textStyle),
+            flex: 5,
+            // Name over email in one column rather than two. They identify
+            // the same person, so splitting them spends a column heading on
+            // saying so.
+            child: Row(
+              children: [
+                _StaffAvatar(name: user.name),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        user.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        user.email,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: Colors.black45,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
+          Expanded(flex: 2, child: _RoleBadge(role: user.role)),
           Expanded(
             flex: 2,
             // The count is the way in to the names. A bare number answers
             // "how many" and leaves "which" unanswered, and the ids behind it
             // were already loaded.
             child: assignedCount == 0
-                ? Text('-', style: textStyle)
+                ? Text(
+                    user.role == UserRole.employee ? 'None' : '—',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: Colors.black38,
+                    ),
+                  )
                 : Align(
                     alignment: Alignment.centerLeft,
                     child: InkWell(
@@ -228,12 +362,12 @@ class _StaffScreenState extends State<StaffScreen> {
                           children: [
                             Text(
                               '$assignedCount',
-                              style: textStyle?.copyWith(
+                              style: theme.textTheme.bodyMedium?.copyWith(
                                 color: AppColors.primary,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
-                            const SizedBox(width: 4),
+                            const SizedBox(width: 2),
                             const Icon(
                               Icons.chevron_right_rounded,
                               size: 16,
@@ -245,24 +379,27 @@ class _StaffScreenState extends State<StaffScreen> {
                     ),
                   ),
           ),
-          Expanded(
-            flex: 3,
-            child: Wrap(
-              spacing: 4,
-              children: [
-                if (_isAdmin)
-                  IconButton(
+          if (_isAdmin)
+            SizedBox(
+              width: 80,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  _StaffRowAction(
+                    icon: Icons.edit_outlined,
+                    tooltip: 'Edit',
+                    hoverColor: AppColors.primary,
                     onPressed: () => _showUserDialog(context, user: user),
-                    icon: const Icon(Icons.edit_outlined),
                   ),
-                if (_isAdmin)
-                  IconButton(
+                  _StaffRowAction(
+                    icon: Icons.delete_outline_rounded,
+                    tooltip: 'Delete',
+                    hoverColor: AppColors.error,
                     onPressed: () => _deleteUser(context, user),
-                    icon: const Icon(Icons.delete_outline_rounded),
                   ),
-              ],
+                ],
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -811,6 +948,153 @@ class _BazaarLine extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+InputDecoration _staffFieldDecoration({required String hint}) =>
+    InputDecoration(
+      hintText: hint,
+      hintStyle: const TextStyle(color: Colors.black38),
+      prefixIcon: const Icon(Icons.search, size: 18, color: Colors.black38),
+      filled: true,
+      fillColor: AppColors.inputFill,
+      isDense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide.none,
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide.none,
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: AppColors.primary),
+      ),
+    );
+
+/// A person's initials, as a stand-in for a photo the app does not have.
+///
+/// Not decoration: a column of identically-weighted names is hard to scan, and
+/// an anchor at a fixed x gives the eye somewhere to land per row.
+class _StaffAvatar extends StatelessWidget {
+  const _StaffAvatar({required this.name});
+
+  final String name;
+
+  String get _initials {
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty || parts.first.isEmpty) {
+      return '?';
+    }
+    if (parts.length == 1) {
+      return parts.first.substring(0, 1).toUpperCase();
+    }
+    return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
+        .toUpperCase();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 34,
+      height: 34,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        _initials,
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: AppColors.primary,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+/// The role as a badge rather than as a word in the same weight as everything
+/// else. It labels rather than states, so it reads as a tag.
+class _RoleBadge extends StatelessWidget {
+  const _RoleBadge({required this.role});
+
+  final UserRole role;
+
+  static const Map<UserRole, Color> _colors = {
+    UserRole.admin: Color(0xFF6B21A8),
+    UserRole.owner: Color(0xFF1D4ED8),
+    UserRole.employee: Color(0xFF475569),
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _colors[role] ?? const Color(0xFF475569);
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(
+          role.name.toUpperCase(),
+          style: TextStyle(
+            color: color,
+            fontWeight: FontWeight.w700,
+            fontSize: 11,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Rests at black38, animates to its semantic colour on hover.
+///
+/// Keeps a list of rows from looking hazardous while still warning at the
+/// moment of intent — the same treatment the category rows use.
+class _StaffRowAction extends StatefulWidget {
+  const _StaffRowAction({
+    required this.icon,
+    required this.tooltip,
+    required this.hoverColor,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final Color hoverColor;
+  final VoidCallback onPressed;
+
+  @override
+  State<_StaffRowAction> createState() => _StaffRowActionState();
+}
+
+class _StaffRowActionState extends State<_StaffRowAction> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: IconButton(
+        onPressed: widget.onPressed,
+        tooltip: widget.tooltip,
+        splashRadius: 18,
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints.tightFor(width: 34, height: 34),
+        icon: Icon(
+          widget.icon,
+          size: 18,
+          color: _hovered ? widget.hoverColor : Colors.black38,
+        ),
       ),
     );
   }
