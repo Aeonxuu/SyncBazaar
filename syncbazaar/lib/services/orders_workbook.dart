@@ -112,12 +112,9 @@ class OrdersWorkbook {
         ..._trailingColumns,
       ];
       final sheet = excel[sheetName];
-      sheet.appendRow([
-        for (final header in headers) TextCellValue(header),
-      ]);
+      sheet.appendRow([for (final header in headers) TextCellValue(header)]);
 
-      final rows = byMethod[method]!
-        ..sort((a, b) => a.date.compareTo(b.date));
+      final rows = byMethod[method]!..sort((a, b) => a.date.compareTo(b.date));
       for (final line in rows) {
         sheet.appendRow([
           TextCellValue(_formatDate(line.date)),
@@ -156,10 +153,11 @@ class OrdersWorkbook {
     final header = CellStyle(bold: true);
     for (var column = 0; column < columnCount; column++) {
       sheet
-          .cell(
-            CellIndex.indexByColumnRow(columnIndex: column, rowIndex: 0),
-          )
-          .cellStyle = header;
+              .cell(
+                CellIndex.indexByColumnRow(columnIndex: column, rowIndex: 0),
+              )
+              .cellStyle =
+          header;
     }
     sheet.setColumnWidth(0, 18); // Date
     sheet.setColumnWidth(1, 22); // Customer Name

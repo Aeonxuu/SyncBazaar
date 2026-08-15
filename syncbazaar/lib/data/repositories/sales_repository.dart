@@ -82,15 +82,13 @@ class SalesRepository {
       // apart. Worth knowing as the history grows -- a vendor with a season of
       // bazaars behind them pays for all of it on every load, and this is
       // where a date filter or a single vendor-wide endpoint would go.
-      final sales = await auth.api.get(
-        '/api/bazaar/event/${event.id}/sale/',
-      ) as List;
+      final sales =
+          await auth.api.get('/api/bazaar/event/${event.id}/sale/') as List;
       if (sales.isEmpty) {
         continue;
       }
-      final payments = await auth.api.get(
-        '/api/bazaar/event/${event.id}/payment/',
-      ) as List;
+      final payments =
+          await auth.api.get('/api/bazaar/event/${event.id}/payment/') as List;
 
       fetched.addAll(
         mapSalesResponse(
@@ -122,8 +120,8 @@ class SalesRepository {
       return {
         for (final entry in payload.cast<Map<String, dynamic>>())
           if ((entry['id'] as num?) != null)
-            (entry['id'] as num).toInt():
-                (entry['name'] as String? ?? 'CASH').toUpperCase(),
+            (entry['id'] as num).toInt(): (entry['name'] as String? ?? 'CASH')
+                .toUpperCase(),
       };
     } on ApiException {
       // A sale with an unknown method name still belongs in the history.

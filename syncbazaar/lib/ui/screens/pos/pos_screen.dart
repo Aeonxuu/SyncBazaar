@@ -44,12 +44,10 @@ class _PosScreenState extends State<PosScreen> {
   // controller a TextField owns its own text: finishing a sale reset the state
   // but left the previous customer's name and cash amount sitting in the boxes,
   // ready to be committed against the next sale.
-  final TextEditingController _customerNameController =
-      TextEditingController();
+  final TextEditingController _customerNameController = TextEditingController();
   final TextEditingController _paymentExtraFieldController =
       TextEditingController();
-  final TextEditingController _cashTenderedController =
-      TextEditingController();
+  final TextEditingController _cashTenderedController = TextEditingController();
   // null = no filter ("All"). A single control cycling through every state
   // beats 3 separate toggle buttons for a filter this small and secondary.
   BazaarStatus? _bazaarStatusFilter;

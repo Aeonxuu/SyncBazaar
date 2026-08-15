@@ -80,8 +80,7 @@ class OrdersCubit extends Cubit<OrdersState> {
     this._ordersRepository,
     this._salesRepository,
     this._productRepository,
-  )
-    : super(const OrdersState());
+  ) : super(const OrdersState());
 
   final OrdersRepository _ordersRepository;
   final SalesRepository _salesRepository;
@@ -138,8 +137,9 @@ class OrdersCubit extends Cubit<OrdersState> {
     final names = {for (final product in products) product.id: product.name};
     final options = <int, String>{};
     for (final product in products) {
-      for (final option in await _productRepository
-          .allVariantOptionsForProduct(product.id)) {
+      for (final option in await _productRepository.allVariantOptionsForProduct(
+        product.id,
+      )) {
         options[option.id] = option.value;
       }
     }
@@ -169,11 +169,7 @@ class _ProductLabels {
   ///
   /// Falls back to the product alone when an option is unknown -- an archived
   /// variant, say -- rather than printing a bare id at a cashier.
-  String labelFor({
-    required int productId,
-    int? optionIdA,
-    int? optionIdB,
-  }) {
+  String labelFor({required int productId, int? optionIdA, int? optionIdB}) {
     final name = names[productId] ?? 'Unknown product';
     final parts = [
       for (final id in [optionIdA, optionIdB])

@@ -110,7 +110,11 @@ class ReceiptDocument extends StatelessWidget {
 
           // ---- Transaction metadata -----------------------------------
           _MetaRow(label: 'Receipt', value: data.receiptNo, style: base),
-          _MetaRow(label: 'Date', value: _timestamp(data.timestamp), style: base),
+          _MetaRow(
+            label: 'Date',
+            value: _timestamp(data.timestamp),
+            style: base,
+          ),
           if (data.eventName.trim().isNotEmpty)
             _MetaRow(label: 'Bazaar', value: data.eventName, style: base),
           _MetaRow(label: 'Cashier', value: data.cashierName, style: base),

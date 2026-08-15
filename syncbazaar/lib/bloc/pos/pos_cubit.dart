@@ -339,6 +339,7 @@ class PosCubit extends Cubit<PosState> {
       emit(state.copyWith(paymentExtraFieldValue: value));
   void updateCashTendered(String value) =>
       emit(state.copyWith(cashTendered: value));
+
   /// What the selected bazaar has left of one combination.
   ///
   /// Answered from the event's allocation, not the master inventory. Those are

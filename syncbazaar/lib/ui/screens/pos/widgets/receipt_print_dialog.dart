@@ -150,8 +150,9 @@ class _ReceiptPrintDialogState extends State<_ReceiptPrintDialog> {
                               _PrintPhase.printing =>
                                 'Receipt ${widget.data.receiptNo}',
                               _PrintPhase.done => _destination,
-                              _PrintPhase.failed => 'The sale was still '
-                                  'recorded.',
+                              _PrintPhase.failed =>
+                                'The sale was still '
+                                    'recorded.',
                             },
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: Colors.black45,
@@ -222,10 +223,7 @@ class _ReceiptPrintDialogState extends State<_ReceiptPrintDialog> {
             onPressed: () => Navigator.pop(context),
             style: TextButton.styleFrom(
               foregroundColor: Colors.black54,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 14,
-                vertical: 10,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             ),
             child: const Text('Close'),
           ),
