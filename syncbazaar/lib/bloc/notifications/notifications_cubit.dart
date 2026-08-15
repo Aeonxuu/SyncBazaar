@@ -31,6 +31,17 @@ class NotificationsCubit extends Cubit<NotificationsState> {
     );
   }
 
+  /// Notes something the user did, so it is still there when they look.
+  ///
+  /// Local to this device: the notification service keeps a plain list, and
+  /// the server has a Notification model but no endpoint to reach it. So an
+  /// owner reconciling a bazaar sees the record and the employee who ran that
+  /// bazaar does not, which is half of what a notification is for.
+  Future<void> record({required String type, required String message}) async {
+    await _service.add(type: type, message: message);
+    await load();
+  }
+
   Future<void> markAllRead() async {
     await _service.markAllRead();
     await load();

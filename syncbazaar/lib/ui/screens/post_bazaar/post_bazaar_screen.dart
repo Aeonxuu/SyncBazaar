@@ -6,6 +6,7 @@ import '../../../data/repositories/event_repository.dart';
 import '../../../data/repositories/product_repository.dart';
 import '../../../data/repositories/sales_repository.dart';
 import '../../../data/repositories/auth_repository.dart';
+import '../../../bloc/notifications/notifications_cubit.dart';
 import '../../../bloc/settings/settings_cubit.dart';
 import '../../../data/repositories/settings_repository.dart';
 import '../../../data/remote/api_client.dart';
@@ -346,139 +347,181 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
   }
 
   Widget _reconciliation(BuildContext context, _PostBazaarData data) {
-    if (data.events.isEmpty) {
-      return _emptyState('No bazaar events found.');
+    // Only bazaars that have finished. Reconciling is the act of counting what
+    // came back from a stall, so a bazaar still selling has nothing to count --
+    // its stock is on a table somewhere, not returned. Listing every bazaar
+    // here invited someone to return stock out from under a live till.
+    final ended = data.events
+        .where((event) => event.status == BazaarStatus.ended)
+        .toList();
+
+    if (ended.isEmpty) {
+      return _emptyState(
+        data.events.isEmpty
+            ? 'No bazaar events found.'
+            : 'No bazaars have ended yet. A bazaar appears here once its last '
+                  'day has passed, ready for its stock to be counted back in.',
+      );
     }
 
-    final selectedId = _selectedReconciliationEventId ?? data.events.first.id;
-    final selectedEvent = data.events.firstWhere(
-      (event) => event.id == selectedId,
-      orElse: () => data.events.first,
+    return _eventGrid(
+      events: ended,
+      locationNameByEventId: data.locationNameByEventId,
+      compactCardLayout: true,
+      onOpenDetails: (event) => _openReturnStock(context, data, event),
     );
-    final allocations = data.allocationsByEventId[selectedEvent.id] ?? const {};
-    final report = data.reconciliationByEventId[selectedEvent.id];
+  }
 
-    // The server's figures where available. The local ones cannot answer this
-    // screen's actual question: allocations here are what is *left*, having
-    // been decremented by every sale, so counting them reports a bazaar as
-    // having been given whatever survived the day rather than what it opened
-    // with. Falling back to them is better than a blank card, but they read as
-    // "remaining", which is why they are labelled that way.
-    final allocatedLines = report?.allocatedStockItems ?? allocations.length;
-    final allocatedQty =
-        report?.totalAllocatedQuantity ??
-        allocations.values.fold<int>(0, (sum, qty) => sum + qty);
-    final soldQty = report?.totalSoldQuantity;
-    final remainingQty =
-        report?.totalRemainingQuantity ??
-        allocations.values.fold<int>(0, (sum, qty) => sum + qty);
-    final salesCount =
-        report?.completedSalesRecords ??
-        data.sales.where((sale) => sale.eventId == selectedEvent.id).length;
+  /// What a bazaar still has on its table, by product.
+  ///
+  /// The allocations this screen holds are already what is *left*: they are
+  /// decremented as each sale is rung up. So this is a naming exercise rather
+  /// than a calculation -- the numbers are the ones the stall should be
+  /// physically holding.
+  List<_LeftoverLine> _leftovers(_PostBazaarData data, BazaarEvent event) {
+    final productNameById = {
+      for (final product in data.products) product.id: product.name,
+    };
+    final allocations = data.allocationsByEventId[event.id] ?? const {};
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(_kCardRadius),
-            boxShadow: _kCardShadow,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Choose Bazaar',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Colors.black54,
-                  fontWeight: FontWeight.w700,
-                ),
+    final lines = <_LeftoverLine>[];
+    allocations.forEach((key, quantity) {
+      if (quantity <= 0) {
+        return;
+      }
+      final parts = key.split(':');
+      final productId = int.tryParse(parts.first) ?? 0;
+      final optionIds = parts
+          .skip(1)
+          .map(int.tryParse)
+          .where((id) => id != null && id != 0)
+          .cast<int>();
+      final variant = [
+        for (final id in optionIds)
+          if (data.optionLabelById[id] != null) data.optionLabelById[id]!,
+      ].join(', ');
+
+      lines.add(
+        _LeftoverLine(
+          product: productNameById[productId] ?? 'Unknown product',
+          variant: variant,
+          quantity: quantity,
+        ),
+      );
+    });
+
+    lines.sort((a, b) {
+      final byProduct = a.product.compareTo(b.product);
+      return byProduct != 0 ? byProduct : a.variant.compareTo(b.variant);
+    });
+    return lines;
+  }
+
+  Future<void> _openReturnStock(
+    BuildContext context,
+    _PostBazaarData data,
+    BazaarEvent event,
+  ) async {
+    final lines = _leftovers(data, event);
+    final totalUnits = lines.fold<int>(0, (sum, line) => sum + line.quantity);
+    final canReturn = widget.user.isAdminOrOwner;
+
+    await _showDetailsDialog(
+      context: context,
+      title: event.name,
+      subtitle: data.locationNameByEventId[event.id] ?? 'Unknown venue',
+      content: [
+        if (lines.isEmpty)
+          Text(
+            'Everything allocated to this bazaar was sold. There is nothing '
+            'to bring back.',
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: Colors.black54, height: 1.4),
+          )
+        else ...[
+          _sectionLabel(context, 'Still at the stall'),
+          const SizedBox(height: 8),
+          ConstrainedBox(
+            // Tall enough to read a normal bazaar's leftovers at a glance,
+            // capped so a big one scrolls rather than pushing the button off
+            // the bottom of the dialog.
+            constraints: const BoxConstraints(maxHeight: 240),
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  for (final line in lines)
+                    _receiptRow(
+                      context,
+                      label: line.variant.isEmpty
+                          ? line.product
+                          : '${line.product} (${line.variant})',
+                      value: '${line.quantity}',
+                    ),
+                ],
               ),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<int>(
-                initialValue: selectedEvent.id,
-                items: data.events
-                    .map(
-                      (event) => DropdownMenuItem<int>(
-                        value: event.id,
-                        child: Text(event.name),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (value) {
-                  if (value == null) return;
-                  setState(() {
-                    _selectedReconciliationEventId = value;
-                  });
-                },
-                decoration: InputDecoration(
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 11,
-                  ),
-                  filled: true,
-                  fillColor: const Color(0xFFF5F1FB),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
-                    borderSide: BorderSide.none,
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
-                    borderSide: BorderSide.none,
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
-                    borderSide: const BorderSide(
-                      color: AppColors.primary,
-                      width: 1.5,
+            ),
+          ),
+          const Divider(height: 18),
+          _receiptRow(
+            context,
+            label: 'Units to return',
+            value: '$totalUnits',
+            emphasize: true,
+          ),
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFF8E1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  Icons.inventory_2_outlined,
+                  size: 16,
+                  color: Color(0xFF8D6E00),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Count these back into the store first. Confirming adds '
+                    'them to master inventory, and the app has no way to '
+                    'check whether the shoes actually made it back.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: const Color(0xFF6D5500),
+                      height: 1.4,
                     ),
                   ),
                 ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        Center(
-          child: SizedBox(
-            width: 300,
-            child: _eventCard(
-              event: selectedEvent,
-              locationName:
-                  data.locationNameByEventId[selectedEvent.id] ??
-                  'Unknown venue',
-              quickMeta: [
-                if (report != null) ...[
-                  'Allocated: $allocatedQty across $allocatedLines lines',
-                  'Sold: $soldQty  •  Remaining: $remainingQty',
-                  'Completed sales: $salesCount',
-                  if (!report.balances)
-                    'Unaccounted for: ${report.discrepancy}',
-                ] else ...[
-                  'Remaining: $remainingQty across $allocatedLines lines',
-                  'Completed sales: $salesCount',
-                  'Opening figures need the server',
-                ],
               ],
-              onTap: () =>
-                  _openReconciliationDetails(context, data, selectedEvent),
             ),
           ),
-        ),
-        if (allocations.isEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 10),
-            child: Text(
-              'This bazaar has no allocated stock yet. Open details to review and finalize when ready.',
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: Colors.black54),
-            ),
-          ),
+        ],
       ],
+      footer: (lines.isEmpty || !canReturn)
+          ? null
+          : Align(
+              alignment: Alignment.centerRight,
+              child: _ReturnStockButton(
+                onReturn: () async {
+                  final eventRepository = context.read<EventRepository>();
+                  final notifications = context.read<NotificationsCubit>();
+                  await eventRepository.finalizeEvent(event.id);
+                  await notifications.record(
+                    type: 'reconciliation',
+                    message:
+                        '$totalUnits unit${totalUnits == 1 ? '' : 's'} '
+                        'returned to master inventory from ${event.name}.',
+                  );
+                  return '$totalUnits unit${totalUnits == 1 ? '' : 's'} '
+                      'returned to master inventory.';
+                },
+                onDone: _refresh,
+              ),
+            ),
     );
   }
 
@@ -607,146 +650,6 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
           ),
         );
       },
-    );
-  }
-
-  Widget _eventCard({
-    required BazaarEvent event,
-    required String locationName,
-    List<String> quickMeta = const [],
-    required VoidCallback onTap,
-  }) {
-    final titleStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
-      color: Colors.black54,
-      fontWeight: FontWeight.w600,
-    );
-    final valueStyle = Theme.of(context).textTheme.headlineSmall?.copyWith(
-      color: AppColors.text,
-      fontWeight: FontWeight.w700,
-      height: 1,
-    );
-    final metaStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
-      color: Colors.black54,
-      fontWeight: FontWeight.w600,
-    );
-
-    return _InteractiveCard(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(_kCardRadius),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(_kCardRadius),
-          boxShadow: _kCardShadow,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    locationName,
-                    style: titleStyle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                Container(
-                  width: 30,
-                  height: 30,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF2ECFC),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(
-                    Icons.storefront_outlined,
-                    color: AppColors.primary,
-                    size: 18,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Text(
-              event.name,
-              style: valueStyle,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _statusBackground(event.status),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    event.status.name.toUpperCase(),
-                    style: metaStyle?.copyWith(
-                      color: _statusForeground(event.status),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _formatDateRange(event.startDate, event.endDate),
-              style: metaStyle,
-            ),
-            if (quickMeta.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              ...quickMeta.map(
-                (line) => Padding(
-                  padding: const EdgeInsets.only(bottom: 2),
-                  child: Text(line, style: metaStyle),
-                ),
-              ),
-            ],
-            const Spacer(),
-            Align(
-              alignment: Alignment.bottomRight,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 220),
-                curve: Curves.easeOut,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF2ECFC),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'View details',
-                      style: metaStyle?.copyWith(
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    const Icon(
-                      Icons.arrow_forward_rounded,
-                      color: AppColors.primary,
-                      size: 16,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -1018,99 +921,6 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
                     ),
               ),
             ),
-    );
-  }
-
-  Future<void> _openReconciliationDetails(
-    BuildContext context,
-    _PostBazaarData data,
-    BazaarEvent event,
-  ) async {
-    final eventSales = data.sales
-        .where((sale) => sale.eventId == event.id)
-        .toList();
-    final allocations = await context
-        .read<EventRepository>()
-        .allocationsForEventByAllocationKey(event.id);
-    if (!context.mounted) {
-      return;
-    }
-    final totalAllocated = allocations.values.fold<int>(
-      0,
-      (sum, qty) => sum + qty,
-    );
-    final canFinalize = event.status != BazaarStatus.ended;
-
-    await _showDetailsDialog(
-      context: context,
-      title: event.name,
-      subtitle: data.locationNameByEventId[event.id] ?? 'Unknown venue',
-      content: [
-        Text('Status: ${event.status.name.toUpperCase()}'),
-        Text('Allocated stock items: ${allocations.length}'),
-        Text('Total allocated quantity: $totalAllocated'),
-        // One line per sale, so a separate "order records" count said the
-        // same thing -- when it was not saying zero, which is what it did for
-        // any bazaar loaded from the server.
-        Text('Sales records: ${eventSales.length}'),
-      ],
-      footer: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          IconButton(
-            onPressed: !canFinalize
-                ? null
-                : () async {
-                    final confirmed = await showConfirmationDialog(
-                      context: context,
-                      title: 'Finalize Bazaar',
-                      message:
-                          'Finalize ${event.name}? Allocated stock will be returned to master inventory and the bazaar will be marked ended.',
-                    );
-                    if (!confirmed || !context.mounted) {
-                      return;
-                    }
-
-                    final productRepository = context.read<ProductRepository>();
-                    final eventRepository = context.read<EventRepository>();
-                    final released = await productRepository
-                        .adjustStocksByAllocationKey(allocations);
-                    if (!released) {
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Unable to return allocated stock.'),
-                          ),
-                        );
-                      }
-                      return;
-                    }
-
-                    await eventRepository.clearAllocationsForEvent(event.id);
-                    await eventRepository.finalizeEvent(event.id);
-
-                    if (!context.mounted) {
-                      return;
-                    }
-
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          '${event.name} finalized and stock returned to master inventory.',
-                        ),
-                      ),
-                    );
-                    await _refresh();
-                  },
-            icon: const Icon(Icons.flag_circle_outlined),
-            color: const Color(0xFF2E7D32),
-            tooltip: canFinalize
-                ? 'Finalize Bazaar'
-                : 'Bazaar already finalized',
-          ),
-        ],
-      ),
     );
   }
 
@@ -1437,6 +1247,106 @@ class _ExportButtonState extends State<_ExportButton> {
         foregroundColor: Colors.white,
       ),
       label: Text(_busy ? 'Preparing…' : widget.label),
+    );
+  }
+}
+
+/// One product still sitting on a bazaar's table.
+class _LeftoverLine {
+  const _LeftoverLine({
+    required this.product,
+    required this.variant,
+    required this.quantity,
+  });
+
+  final String product;
+
+  /// "Color Black, Size 42", or empty for a product with no categories.
+  final String variant;
+
+  final int quantity;
+}
+
+/// Confirms, then returns a bazaar's leftover stock to master inventory.
+///
+/// Its own widget for the same reason exports have one, and one more: the
+/// server cannot yet refuse a second return. Its guard tests an `is_finalized`
+/// field that does not exist on the model, so `hasattr` is always false and
+/// finalizing twice adds the leftovers to the warehouse twice. Until that
+/// lands, this being un-pressable while it runs -- and gone once it has -- is
+/// the only thing standing between a slow connection and inflated stock.
+class _ReturnStockButton extends StatefulWidget {
+  const _ReturnStockButton({required this.onReturn, required this.onDone});
+
+  /// Returns the phrase to show once the stock is back.
+  final Future<String> Function() onReturn;
+
+  final Future<void> Function() onDone;
+
+  @override
+  State<_ReturnStockButton> createState() => _ReturnStockButtonState();
+}
+
+class _ReturnStockButtonState extends State<_ReturnStockButton> {
+  bool _busy = false;
+  bool _done = false;
+
+  Future<void> _run() async {
+    final confirmed = await showConfirmationDialog(
+      context: context,
+      title: 'Return stock to inventory',
+      message:
+          'Have these items been physically counted back into the store? '
+          'This cannot be undone from the app.',
+      confirmLabel: 'Yes, return them',
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    setState(() => _busy = true);
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    try {
+      final where = await widget.onReturn();
+      // Latched rather than reset: a second press would return the same
+      // stock again, and nothing server-side would stop it.
+      if (mounted) setState(() => _done = true);
+      navigator.pop();
+      messenger.showSnackBar(SnackBar(content: Text(where)));
+      await widget.onDone();
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            error.isOffline
+                ? 'Cannot reach the server, so nothing was returned. '
+                      'Try again when you have a connection.'
+                : 'The stock could not be returned. ${error.message}',
+          ),
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ElevatedButton.icon(
+      onPressed: (_busy || _done) ? null : _run,
+      icon: _busy
+          ? const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.inventory_2_outlined),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
+      ),
+      label: Text(_busy ? 'Returning…' : 'Return stock'),
     );
   }
 }
