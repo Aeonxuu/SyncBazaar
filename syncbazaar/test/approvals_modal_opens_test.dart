@@ -86,6 +86,75 @@ void main() {
     expect(find.text('Approve'), findsOneWidget);
   });
 
+  testWidgets('the whole card is tappable, not only its text', (tester) async {
+    await pumpWith(
+      tester,
+      detailsWith([
+        {
+          'name': 'Nike Air Max SC',
+          'variant': 'Triple White, 36',
+          'price': 1900.0,
+          'qty': 4,
+        },
+      ]),
+    );
+
+    // The card's own InkWell, not the tab bar's -- `.first` finds a tab.
+    final card = find.ancestor(
+      of: find.text('STOCK REQUEST for Tech Quest'),
+      matching: find.byType(InkWell),
+    );
+    final box = tester.getRect(card);
+    // Empty space on the right of the row, well away from any text: the part
+    // someone actually aims at when they mean "open this".
+    final blank = Offset(box.right - 90, box.center.dy);
+
+    await tester.tapAt(blank);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Approval Details'), findsOneWidget);
+  });
+
+  testWidgets('no dead zone anywhere on the card', (tester) async {
+    await pumpWith(
+      tester,
+      detailsWith([
+        {
+          'name': 'Nike Air Max SC',
+          'variant': 'Triple White, 36',
+          'price': 1900.0,
+          'qty': 4,
+        },
+      ]),
+    );
+
+    final card = find.ancestor(
+      of: find.text('STOCK REQUEST for Tech Quest'),
+      matching: find.byType(InkWell),
+    );
+    final box = tester.getRect(card);
+
+    // Nine points across the card: corners, edges, middle. Somebody aiming at
+    // a row aims at the row, not at the one word inside it that happens to
+    // carry the gesture.
+    final dead = <String>[];
+    for (final fx in [0.02, 0.5, 0.98]) {
+      for (final fy in [0.15, 0.5, 0.85]) {
+        final at = Offset(box.left + box.width * fx, box.top + box.height * fy);
+        await tester.tapAt(at);
+        await tester.pumpAndSettle();
+        if (find.text('Approval Details').evaluate().isEmpty) {
+          dead.add('(${fx.toStringAsFixed(2)}, ${fy.toStringAsFixed(2)})');
+        } else {
+          await tester.tapAt(const Offset(5, 5)); // dismiss the barrier
+          await tester.pumpAndSettle();
+        }
+      }
+    }
+
+    expect(dead, isEmpty, reason: 'these points did not open the request');
+  });
+
   testWidgets('an unreadable item does not take the whole modal down', (
     tester,
   ) async {
