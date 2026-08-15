@@ -940,6 +940,8 @@ class _PosScreenState extends State<PosScreen> {
     final dashboardCubit = context.read<DashboardCubit>();
     final inventoryCubit = context.read<InventoryCubit>();
     final nameController = TextEditingController(text: event.name);
+    // Everything about a finished bazaar is a record rather than a plan.
+    final isEnded = event.status == BazaarStatus.ended;
     DateTimeRange selectedRange = DateTimeRange(
       start: event.startDate,
       end: event.endDate,
@@ -984,7 +986,7 @@ class _PosScreenState extends State<PosScreen> {
                         // inside it, so the statement of account, the order
                         // list and the dashboard would all report a different
                         // week than the one the money came from.
-                        onPressed: event.status == BazaarStatus.ended
+                        onPressed: isEnded
                             ? null
                             : () async {
                                 final now = DateTime.now();
@@ -1014,7 +1016,7 @@ class _PosScreenState extends State<PosScreen> {
                                 }
                               },
                         icon: Icon(
-                          event.status == BazaarStatus.ended
+                          isEnded
                               ? Icons.lock_outline
                               : Icons.date_range_outlined,
                         ),
@@ -1022,20 +1024,22 @@ class _PosScreenState extends State<PosScreen> {
                           '${_formatDate(selectedRange.start)} - ${_formatDate(selectedRange.end)}',
                         ),
                       ),
-                      if (event.status == BazaarStatus.ended)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: Text(
-                            'Dates are fixed once a bazaar has ended.',
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(color: Colors.black45),
-                          ),
-                        ),
                       const SizedBox(height: 12),
                       Text(
                         'Allocated Stocks',
                         style: Theme.of(context).textTheme.titleSmall,
                       ),
+                      if (isEnded)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4, bottom: 4),
+                          child: Text(
+                            'This bazaar has ended. Its dates and stock are '
+                            'fixed — send stock back through Inventory '
+                            'Reconciliation instead.',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: Colors.black45, height: 1.35),
+                          ),
+                        ),
                       const SizedBox(height: 8),
                       ...allocationItems.map((item) {
                         final allocated = allocations[item.allocationKey] ?? 0;
@@ -1052,8 +1056,14 @@ class _PosScreenState extends State<PosScreen> {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
+                              // An ended bazaar takes no more stock. Sending
+                              // shoes to a stall that has packed up moves them
+                              // out of the warehouse to nowhere, and each
+                              // round of allocate-then-reconcile is another
+                              // pass through a return the server cannot yet
+                              // refuse to repeat.
                               IconButton(
-                                onPressed: allocated <= 0
+                                onPressed: (isEnded || allocated <= 0)
                                     ? null
                                     : () => setState(
                                         () => allocations[item.allocationKey] =
@@ -1063,7 +1073,7 @@ class _PosScreenState extends State<PosScreen> {
                               ),
                               Text('$allocated'),
                               IconButton(
-                                onPressed: allocated >= maxQty
+                                onPressed: (isEnded || allocated >= maxQty)
                                     ? null
                                     : () => setState(
                                         () => allocations[item.allocationKey] =

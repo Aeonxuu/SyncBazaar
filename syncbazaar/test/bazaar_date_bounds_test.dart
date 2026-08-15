@@ -67,6 +67,18 @@ void main() {
     expect(editable(BazaarStatus.ended), isFalse);
   });
 
+  test('an ended bazaar takes no more stock', () {
+    // Allocating to a stall that has packed up moves shoes out of the
+    // warehouse to nowhere. Worse, each round of allocate-then-reconcile is
+    // another pass through a stock return the server cannot yet refuse to
+    // repeat, so it doubles as a way to inflate inventory by hand.
+    bool allocatable(BazaarStatus status) => status != BazaarStatus.ended;
+
+    expect(allocatable(BazaarStatus.upcoming), isTrue);
+    expect(allocatable(BazaarStatus.ongoing), isTrue);
+    expect(allocatable(BazaarStatus.ended), isFalse);
+  });
+
   test('the sales week covers all seven days', () {
     // A weekday-only chart hid Saturday and Sunday, which is when a pop-up
     // bazaar is most likely to be running.
