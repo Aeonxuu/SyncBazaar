@@ -91,9 +91,15 @@ class ApprovalsCubit extends Cubit<List<ApprovalRequest>> {
       allocationsByAllocationKey: proposal.allocationsByAllocationKey,
     );
 
+    // The requester plus whoever they rostered. Assigning only the requester
+    // threw away the staffing they had already worked out, and left the
+    // bazaar looking unstaffed to everyone but them.
     await _authRepository.assignEmployeesToBazaar(
       eventId: createdEvent.id,
-      employeeIds: [request.requesterId],
+      employeeIds: {
+        request.requesterId,
+        ...proposal.assignedEmployeeIds,
+      }.toList(),
     );
 
     return true;

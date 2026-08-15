@@ -29,6 +29,7 @@ class BazaarDetailsStep extends StatelessWidget {
     required this.onAssignEmployee,
     required this.onRemoveAssignedEmployee,
     required this.showEmployeeAssignment,
+    this.schedulingConflicts = const {},
   });
 
   final TextEditingController eventNameController;
@@ -44,6 +45,10 @@ class BazaarDetailsStep extends StatelessWidget {
   final ValueChanged<int> onRemoveAssignedEmployee;
   final bool showEmployeeAssignment;
 
+  /// Employee id to the bazaar they are already working over these dates.
+  /// Empty until the dates are chosen — there is nothing to clash with yet.
+  final Map<int, String> schedulingConflicts;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -56,6 +61,14 @@ class BazaarDetailsStep extends StatelessWidget {
     final assignedIds = assignedEmployees.map((e) => e.key).toSet();
     final assignable = employees
         .where((employee) => !assignedIds.contains(employee.id))
+        .where((employee) => !schedulingConflicts.containsKey(employee.id))
+        .toList();
+    // Shown rather than silently dropped: "where did Missy go?" is a worse
+    // question than "why can't I pick Missy?", and the answer to the second
+    // is a bazaar name.
+    final unavailable = employees
+        .where((employee) => !assignedIds.contains(employee.id))
+        .where((employee) => schedulingConflicts.containsKey(employee.id))
         .toList();
 
     return Column(
@@ -137,7 +150,12 @@ class BazaarDetailsStep extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Optional — assign who will run the booth.',
+                      hasDates
+                          ? 'Optional — assign who will run the booth. '
+                                'Anyone already working these dates is '
+                                'listed as unavailable.'
+                          : 'Pick the bazaar dates first. Until then there '
+                                'is no way to tell who is free.',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: Colors.black45,
                         fontSize: 11.5,
@@ -152,18 +170,52 @@ class BazaarDetailsStep extends StatelessWidget {
           ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 340),
             child: AppDropdown<AppUser>(
-              options: assignable,
+              // Dates decide who is free, so there is nothing sound to offer
+              // before they are set. Assigning first and checking afterwards
+              // is how somebody ends up rostered at two stalls at once.
+              options: hasDates ? assignable : const [],
               selected: null,
               labelOf: (employee) => employee.name,
-              hint: employees.isEmpty
+              hint: !hasDates
+                  ? 'Choose the dates first'
+                  : employees.isEmpty
                   ? 'No employees available'
                   : assignable.isEmpty
-                  ? 'Everyone is already assigned'
+                  ? (unavailable.isEmpty
+                        ? 'Everyone is already assigned'
+                        : 'Nobody is free on these dates')
                   : 'Add an employee',
               leadingIcon: Icons.person_add_alt,
               onSelected: (employee) => onAssignEmployee(employee.id),
             ),
           ),
+          if (hasDates && unavailable.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            for (final employee in unavailable)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.event_busy_outlined,
+                      size: 14,
+                      color: Colors.black38,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        '${employee.name} — already at '
+                        '${schedulingConflicts[employee.id]}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: Colors.black45,
+                          fontSize: 11.5,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
           const SizedBox(height: 12),
           if (assignedEmployees.isEmpty)
             Text(

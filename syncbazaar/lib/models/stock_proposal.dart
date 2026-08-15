@@ -22,6 +22,7 @@ class StockProposal {
     required this.acceptedPaymentMethods,
     required this.customOtherMethods,
     required this.allocationsByAllocationKey,
+    required this.assignedEmployeeIds,
   });
 
   final String eventName;
@@ -31,6 +32,10 @@ class StockProposal {
   final List<String> acceptedPaymentMethods;
   final List<BazaarPaymentMethod> customOtherMethods;
   final Map<String, int> allocationsByAllocationKey;
+
+  /// Who the requester picked to run the booth. Carried through approval, so
+  /// a bazaar an employee planned does not arrive with nobody on it.
+  final List<int> assignedEmployeeIds;
 
   static StockProposal parse(String detailsJson) {
     final decoded = _safeDecode(detailsJson);
@@ -57,7 +62,21 @@ class StockProposal {
       allocationsByAllocationKey: _allocations(
         decoded?['allocationsByAllocationKey'],
       ),
+      assignedEmployeeIds: _ids(decoded?['assignedEmployeeIds']),
     );
+  }
+
+  static List<int> _ids(Object? raw) {
+    if (raw is! List) {
+      return const [];
+    }
+    return [
+      for (final value in raw)
+        if (value is int)
+          value
+        else if (int.tryParse(value.toString()) != null)
+          int.parse(value.toString()),
+    ];
   }
 
   static DateTime? _date(Object? raw) =>

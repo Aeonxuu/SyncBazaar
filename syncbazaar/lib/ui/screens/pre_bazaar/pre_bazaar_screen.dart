@@ -13,6 +13,7 @@ import '../../../bloc/pos/pos_cubit.dart';
 import '../../../bloc/pre_bazaar/pre_bazaar_cubit.dart';
 import '../../../bloc/staff/staff_cubit.dart';
 import '../../../data/repositories/event_repository.dart';
+import '../../../services/staff_scheduling.dart';
 import '../../../data/repositories/product_repository.dart';
 import '../../../data/repositories/settings_repository.dart';
 import '../../../models/bazaar_event.dart';
@@ -64,6 +65,7 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
     Future.microtask(() async {
       await _syncLocationsFromRepository();
       await _syncStocksFromRepository();
+      await _loadEventsForScheduling();
     });
   }
 
@@ -287,6 +289,7 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
               )
               .toList(),
           'allocationsByAllocationKey': allocationsByAllocationKey,
+          'assignedEmployeeIds': _assignedEmployeeIds.toList(),
           'items': allocationItems,
         });
 
@@ -433,6 +436,19 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
     }
   }
 
+  /// Bazaars by id, so an employee's clash can be named rather than merely
+  /// reported. Loaded once; the roster is checked against dates, and dates do
+  /// not change while this form is open.
+  Map<int, BazaarEvent> _eventsById = const {};
+
+  Future<void> _loadEventsForScheduling() async {
+    final events = await context.read<EventRepository>().listAll();
+    if (!mounted) return;
+    setState(() {
+      _eventsById = {for (final event in events) event.id: event};
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final isAdminOrOwner = widget.user.isAdminOrOwner;
@@ -446,6 +462,14 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
     final assignedEmployees = _assignedEmployeeIds
         .map((id) => MapEntry(id, employeeNameById[id] ?? 'Employee #$id'))
         .toList();
+    final range = _dateRange;
+    final schedulingConflicts = range == null
+        ? const <int, String>{}
+        : StaffScheduling.conflicts(
+            range: range,
+            employees: employees,
+            eventsById: _eventsById,
+          );
 
     return ColoredBox(
       color: AppColors.background,
@@ -504,7 +528,11 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
                           onRemoveAssignedEmployee: (id) => setState(() {
                             _assignedEmployeeIds.remove(id);
                           }),
-                          showEmployeeAssignment: isAdminOrOwner,
+                          // Employees staff their own bazaars. Hiding this
+                          // from them meant a bazaar an employee proposed
+                          // arrived with nobody on it.
+                          showEmployeeAssignment: true,
+                          schedulingConflicts: schedulingConflicts,
                         ),
                       )
                     : StockAllocationStep(

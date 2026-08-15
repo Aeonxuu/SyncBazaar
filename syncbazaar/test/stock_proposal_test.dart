@@ -115,6 +115,33 @@ void main() {
     expect(proposal.acceptedPaymentMethods, ['CASH']);
   });
 
+  test('the roster the requester chose survives approval', () {
+    // Assigning only the requester threw away the staffing they had already
+    // worked out, and left the bazaar looking unstaffed to everyone but them.
+    final proposal = StockProposal.parse(
+      encode({
+        'eventName': 'Weekend Test',
+        'assignedEmployeeIds': [3, 5],
+      }),
+    );
+
+    expect(proposal.assignedEmployeeIds, [3, 5]);
+  });
+
+  test('employee ids written as text are still ids', () {
+    final proposal = StockProposal.parse(
+      encode({
+        'assignedEmployeeIds': ['3', 5, 'nonsense'],
+      }),
+    );
+
+    expect(proposal.assignedEmployeeIds, [3, 5]);
+  });
+
+  test('a proposal with nobody rostered assigns nobody', () {
+    expect(StockProposal.parse(encode({})).assignedEmployeeIds, isEmpty);
+  });
+
   test('a proposal with no allocations commits no stock', () {
     expect(
       StockProposal.parse(
