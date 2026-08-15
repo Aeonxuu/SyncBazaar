@@ -172,6 +172,55 @@ class AuthRepository {
     return byUser;
   }
 
+  /// Who is rostered on one bazaar, as user id to assignment row id.
+  ///
+  /// The row id is what removing an assignment needs -- the API deletes by
+  /// assignment, not by the pair -- and it is thrown away by the walk above,
+  /// which only wants counts.
+  Future<Map<int, int>> assignmentsForEvent(int eventId) async {
+    if (vendorId == null) {
+      return const {};
+    }
+    try {
+      final rows =
+          await _api.get('/api/bazaar/event/$eventId/assignment/') as List;
+      return {
+        for (final row in rows.cast<Map<String, dynamic>>())
+          if ((row['user'] as num?) != null)
+            (row['user'] as num).toInt(): (row['id'] as num).toInt(),
+      };
+    } on ApiException {
+      return const {};
+    }
+  }
+
+  /// Takes someone off a bazaar.
+  ///
+  /// Needed because a roster is not append-only: people call in sick, and a
+  /// bazaar that can only ever gain staff cannot be corrected.
+  Future<void> unassignEmployeeFromBazaar({
+    required int eventId,
+    required int assignmentId,
+    required int employeeId,
+  }) async {
+    if (vendorId != null) {
+      await _api.delete(
+        '/api/bazaar/event/$eventId/assignment/$assignmentId/',
+      );
+    }
+
+    final index = _users.indexWhere((user) => user.id == employeeId);
+    if (index == -1) {
+      return;
+    }
+    final user = _users[index];
+    _users[index] = user.copyWith(
+      assignedEventIds: user.assignedEventIdsEffective
+          .where((id) => id != eventId)
+          .toList(),
+    );
+  }
+
   Future<AppUser> addUser({
     required String name,
     required String email,

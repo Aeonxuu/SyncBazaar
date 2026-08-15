@@ -158,6 +158,18 @@ void main() {
       expect(clashes, hasLength(1));
     });
 
+    test('a roster change writes only the difference', () {
+      // Re-posting the whole roster would lean on the server rejecting
+      // duplicates, and removals would never happen at all -- a roster that
+      // can only grow cannot be corrected when somebody calls in sick.
+      final before = {3, 5};
+      final after = {5, 7};
+
+      expect(before.difference(after), {3}); // to unassign
+      expect(after.difference(before), {7}); // to assign
+      expect(before.intersection(after), {5}); // untouched
+    });
+
     test('a single-day bazaar still blocks a range around it', () {
       final clashes = StaffScheduling.conflicts(
         range: range(14, 18),

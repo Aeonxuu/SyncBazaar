@@ -18,6 +18,10 @@ import '../../widgets/confirmation_dialog.dart';
 import 'widgets/discard_sale_guard.dart';
 import '../../widgets/date_range_picker_dialog.dart';
 import '../../widgets/custom_card.dart';
+import '../../../bloc/staff/staff_cubit.dart';
+import '../../../data/repositories/auth_repository.dart';
+import '../../../data/repositories/event_repository.dart';
+import '../../../services/staff_scheduling.dart';
 import '../../widgets/product_thumbnail.dart';
 import '../../widgets/selectable_option_button.dart';
 import 'widgets/pos_product_card.dart';
@@ -946,6 +950,24 @@ class _PosScreenState extends State<PosScreen> {
       start: event.startDate,
       end: event.endDate,
     );
+    // Staffing, and everything needed to tell who is free. Loaded here with
+    // the rest so the dialog opens complete rather than filling in under the
+    // user's hands.
+    final authRepository = context.read<AuthRepository>();
+    final staffCubit = context.read<StaffCubit>();
+    final eventRepository = context.read<EventRepository>();
+    final allEmployees = staffCubit.state
+        .where((user) => user.role == UserRole.employee)
+        .toList();
+    final assignmentIdByUserId = await authRepository.assignmentsForEvent(
+      event.id,
+    );
+    final rostered = assignmentIdByUserId.keys.toSet();
+    final originalRoster = Set<int>.from(rostered);
+    final eventsById = {
+      for (final other in await eventRepository.listAll()) other.id: other,
+    };
+
     final existingAllocations = await cubit.eventAllocations(event.id);
     final allocationItems = await productRepository.allocationItems();
     final allocations = <String, int>{};
@@ -1023,6 +1045,104 @@ class _PosScreenState extends State<PosScreen> {
                         label: Text(
                           '${_formatDate(selectedRange.start)} - ${_formatDate(selectedRange.end)}',
                         ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Staffing',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 6),
+                      Builder(
+                        builder: (context) {
+                          final conflicts = StaffScheduling.conflicts(
+                            range: selectedRange,
+                            employees: allEmployees,
+                            eventsById: eventsById,
+                            // Its own roster is not a clash with itself.
+                            excludingEventId: event.id,
+                          );
+                          final free = allEmployees
+                              .where((e) => !rostered.contains(e.id))
+                              .where((e) => !conflicts.containsKey(e.id))
+                              .toList();
+                          final busy = allEmployees
+                              .where((e) => !rostered.contains(e.id))
+                              .where((e) => conflicts.containsKey(e.id))
+                              .toList();
+
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (rostered.isEmpty)
+                                Text(
+                                  'Nobody is assigned to this bazaar.',
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(color: AppColors.error),
+                                )
+                              else
+                                Wrap(
+                                  spacing: 6,
+                                  runSpacing: 6,
+                                  children: [
+                                    for (final id in rostered)
+                                      Chip(
+                                        label: Text(
+                                          allEmployees
+                                                  .where((e) => e.id == id)
+                                                  .map((e) => e.name)
+                                                  .firstOrNull ??
+                                              'Employee #$id',
+                                        ),
+                                        onDeleted: isEnded
+                                            ? null
+                                            : () => setState(
+                                                () => rostered.remove(id),
+                                              ),
+                                      ),
+                                  ],
+                                ),
+                              if (!isEnded) ...[
+                                const SizedBox(height: 8),
+                                DropdownButton<int>(
+                                  isExpanded: true,
+                                  value: null,
+                                  hint: Text(
+                                    free.isEmpty
+                                        ? (busy.isEmpty
+                                              ? 'Everyone is assigned'
+                                              : 'Nobody is free on these '
+                                                    'dates')
+                                        : 'Add an employee',
+                                  ),
+                                  items: [
+                                    for (final employee in free)
+                                      DropdownMenuItem(
+                                        value: employee.id,
+                                        child: Text(employee.name),
+                                      ),
+                                  ],
+                                  onChanged: (id) {
+                                    if (id != null) {
+                                      setState(() => rostered.add(id));
+                                    }
+                                  },
+                                ),
+                                for (final employee in busy)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 2),
+                                    child: Text(
+                                      '${employee.name} — already at '
+                                      '${conflicts[employee.id]}',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(color: Colors.black45),
+                                    ),
+                                  ),
+                              ],
+                            ],
+                          );
+                        },
                       ),
                       const SizedBox(height: 12),
                       Text(
@@ -1119,6 +1239,28 @@ class _PosScreenState extends State<PosScreen> {
       endDate: selectedRange.end,
       newAllocations: allocations,
     );
+
+    // Only the difference is written. Re-posting the whole roster would rely
+    // on the server rejecting duplicates, and removals would never happen at
+    // all -- a roster that can only grow cannot be corrected.
+    for (final id in originalRoster.difference(rostered)) {
+      final assignmentId = assignmentIdByUserId[id];
+      if (assignmentId != null) {
+        await authRepository.unassignEmployeeFromBazaar(
+          eventId: event.id,
+          assignmentId: assignmentId,
+          employeeId: id,
+        );
+      }
+    }
+    final added = rostered.difference(originalRoster).toList();
+    if (added.isNotEmpty) {
+      await authRepository.assignEmployeesToBazaar(
+        eventId: event.id,
+        employeeIds: added,
+      );
+    }
+    await staffCubit.load();
 
     if (!ok) {
       messenger.showSnackBar(
