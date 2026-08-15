@@ -21,6 +21,7 @@ import '../../widgets/custom_card.dart';
 import '../../../bloc/staff/staff_cubit.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../data/repositories/event_repository.dart';
+import '../../../data/repositories/settings_repository.dart';
 import '../../../services/staff_scheduling.dart';
 import '../../widgets/product_thumbnail.dart';
 import '../../widgets/selectable_option_button.dart';
@@ -269,40 +270,9 @@ class _PosScreenState extends State<PosScreen> {
                             context.read<PosCubit>().selectEvent(event),
                         onEdit: () =>
                             _showEditEventDialog(context, state, event),
-                        onDelete: () async {
-                          // Everything is resolved off `context` up front:
-                          // deleting the bazaar removes this very card from
-                          // the list, so by the time the awaits below finish,
-                          // looking anything up through this context would be
-                          // resolving against a dead element — which is why
-                          // the success message could silently go missing.
-                          final messenger = ScaffoldMessenger.of(context);
-                          final posCubit = context.read<PosCubit>();
-                          final dashboardCubit = context.read<DashboardCubit>();
-                          final inventoryCubit = context.read<InventoryCubit>();
-                          final confirmed = await showConfirmationDialog(
-                            context: context,
-                            title: 'Delete Bazaar',
-                            message:
-                                'Are you sure you want to delete "${event.name}"?',
-                            confirmLabel: 'Delete',
-                            tone: ConfirmationTone.destructive,
-                          );
-                          if (confirmed != true) {
-                            return;
-                          }
-                          await posCubit.deleteEventFromPos(
-                            user: widget.user,
-                            event: event,
-                          );
-                          await dashboardCubit.load(widget.user);
-                          await inventoryCubit.load();
-                          messenger.showSnackBar(
-                            const SnackBar(
-                              content: Text('Bazaar deleted successfully.'),
-                            ),
-                          );
-                        },
+                        onShowInfo: () =>
+                            _showEventInfoDialog(context, state, event),
+                        onDelete: () => _deleteEvent(context, event),
                       );
                     },
                   ),
@@ -929,6 +899,93 @@ class _PosScreenState extends State<PosScreen> {
       return Icons.account_balance_wallet_outlined;
     }
     return Icons.payment_outlined;
+  }
+
+  /// Confirms, deletes, and refreshes what the deletion changed.
+  ///
+  /// Everything is resolved off `context` up front: deleting the bazaar
+  /// removes the very card this was called from, so by the time the awaits
+  /// finish, looking anything up through that context would be resolving
+  /// against a dead element -- which is why the success message could
+  /// silently go missing.
+  Future<void> _deleteEvent(BuildContext context, BazaarEvent event) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final posCubit = context.read<PosCubit>();
+    final dashboardCubit = context.read<DashboardCubit>();
+    final inventoryCubit = context.read<InventoryCubit>();
+
+    final confirmed = await showConfirmationDialog(
+      context: context,
+      title: 'Delete Bazaar',
+      message: 'Are you sure you want to delete "${event.name}"?',
+      confirmLabel: 'Delete',
+      tone: ConfirmationTone.destructive,
+    );
+    if (confirmed != true) {
+      return;
+    }
+
+    await posCubit.deleteEventFromPos(user: widget.user, event: event);
+    await dashboardCubit.load(widget.user);
+    await inventoryCubit.load();
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Bazaar deleted successfully.')),
+    );
+  }
+
+  /// Everything known about a bazaar, and the two things you can do to it.
+  ///
+  /// Replaces a kebab menu, which promised a menu and said nothing about what
+  /// was in it. Edit and Delete now sit beside the facts they act on -- the
+  /// dates being changed, the staff being kept, the stock at risk -- rather
+  /// than in a floating list of two words.
+  Future<void> _showEventInfoDialog(
+    BuildContext context,
+    PosState state,
+    BazaarEvent event,
+  ) async {
+    final authRepository = context.read<AuthRepository>();
+    final staffCubit = context.read<StaffCubit>();
+    final settingsRepository = context.read<SettingsRepository>();
+    final cubit = context.read<PosCubit>();
+
+    final companies = await settingsRepository.listCompanies();
+    final venue = companies
+        .where((company) => company.id == event.companyId)
+        .map((company) => company.name)
+        .firstOrNull;
+    final rostered = await authRepository.assignmentsForEvent(event.id);
+    final nameById = {for (final user in staffCubit.state) user.id: user.name};
+    final allocations = await cubit.eventAllocations(event.id);
+    final remaining = allocations.values.fold<int>(0, (sum, q) => sum + q);
+
+    if (!context.mounted) {
+      return;
+    }
+
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => BazaarInfoDialog(
+        event: event,
+        venue: venue ?? 'Unknown venue',
+        staff: [
+          for (final id in rostered.keys) nameById[id] ?? 'Employee #$id',
+        ],
+        remainingUnits: remaining,
+        formatDate: _formatDate,
+      ),
+    );
+
+    if (!context.mounted || choice == null) {
+      return;
+    }
+    // The modal is already closed by the time either runs, so neither opens
+    // on top of the other.
+    if (choice == 'edit') {
+      await _showEditEventDialog(context, state, event);
+    } else if (choice == 'delete') {
+      await _deleteEvent(context, event);
+    }
   }
 
   Future<void> _showEditEventDialog(
@@ -1889,6 +1946,7 @@ class _BazaarCard extends StatefulWidget {
     required this.onOpen,
     required this.onEdit,
     required this.onDelete,
+    required this.onShowInfo,
   });
 
   final BazaarEvent event;
@@ -1896,6 +1954,9 @@ class _BazaarCard extends StatefulWidget {
   final String Function(DateTime) formatDate;
   final VoidCallback onOpen;
   final VoidCallback onEdit;
+
+  /// Opens the details modal, from which edit and delete are reached.
+  final VoidCallback onShowInfo;
   final VoidCallback onDelete;
 
   @override
@@ -1956,34 +2017,23 @@ class _BazaarCardState extends State<_BazaarCard> {
                     ),
                   ),
                   if (widget.canManage)
+                    // An "i" rather than a kebab. A kebab promises a menu and
+                    // says nothing about what is in it; this says there is
+                    // something to read, and the two actions live inside
+                    // where they can be shown against the bazaar they act on.
                     SizedBox(
                       width: 28,
                       height: 28,
-                      child: PopupMenuButton<String>(
+                      child: IconButton(
                         padding: EdgeInsets.zero,
                         splashRadius: 16,
+                        tooltip: 'Bazaar details',
+                        onPressed: widget.onShowInfo,
                         icon: const Icon(
-                          Icons.more_vert,
+                          Icons.info_outline,
                           size: 18,
                           color: Colors.black45,
                         ),
-                        onSelected: (value) {
-                          if (value == 'edit') {
-                            widget.onEdit();
-                          } else {
-                            widget.onDelete();
-                          }
-                        },
-                        itemBuilder: (context) => const [
-                          PopupMenuItem<String>(
-                            value: 'edit',
-                            child: Text('Edit'),
-                          ),
-                          PopupMenuItem<String>(
-                            value: 'delete',
-                            child: Text('Delete'),
-                          ),
-                        ],
                       ),
                     ),
                 ],
@@ -2231,6 +2281,266 @@ class _NumericCrossfade extends StatelessWidget {
         key: ValueKey(text),
         style: style,
         textAlign: textAlign,
+      ),
+    );
+  }
+}
+
+/// A bazaar's facts, and the two things that can be done to it.
+///
+/// Public so the dialog can be exercised on its own; nothing else builds it.
+///
+/// Deliberately quiet. It is read far more often than it is acted on, so the
+/// facts carry the weight and the actions sit at the bottom in the secondary
+/// tier -- full-width buttons here would make a reference card look like a
+/// decision. Delete rests as an outline and only turns red on hover, the same
+/// way a destructive row action does elsewhere: a panel of facts should not
+/// look hazardous while you are reading it.
+class BazaarInfoDialog extends StatelessWidget {
+  const BazaarInfoDialog({
+    super.key,
+    required this.event,
+    required this.venue,
+    required this.staff,
+    required this.remainingUnits,
+    required this.formatDate,
+  });
+
+  final BazaarEvent event;
+  final String venue;
+  final List<String> staff;
+  final int remainingUnits;
+  final String Function(DateTime) formatDate;
+
+  static const Map<BazaarStatus, Color> _statusColors = {
+    BazaarStatus.ongoing: Color(0xFF2E7D32),
+    BazaarStatus.upcoming: Color(0xFFB45309),
+    BazaarStatus.ended: AppColors.error,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final statusColor = _statusColors[event.status] ?? AppColors.error;
+    final isEnded = event.status == BazaarStatus.ended;
+
+    return Dialog(
+      backgroundColor: Colors.white,
+      // 14 — a modal floats above the page and earns a step more shape than
+      // the cards behind it.
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          event.name,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          venue,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: Colors.black45,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    tooltip: 'Close',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(
+                      width: 32,
+                      height: 32,
+                    ),
+                    icon: const Icon(Icons.close_rounded, size: 18),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              // The one isolated element. Status is what changes what you can
+              // do here, so it is the only thing wearing colour.
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  event.status.name.toUpperCase(),
+                  style: TextStyle(
+                    color: statusColor,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              _InfoRow(
+                label: 'Dates',
+                value:
+                    '${formatDate(event.startDate)} – '
+                    '${formatDate(event.endDate)}',
+              ),
+              const SizedBox(height: 12),
+              _InfoRow(
+                label: 'Staff',
+                value: staff.isEmpty ? 'Nobody assigned' : staff.join(', '),
+                // An unstaffed bazaar is a problem, not a blank. Said in the
+                // error colour so it is noticed here rather than on the
+                // morning it opens.
+                valueColor: staff.isEmpty ? AppColors.error : null,
+              ),
+              const SizedBox(height: 12),
+              _InfoRow(
+                label: 'Payment',
+                value: event.acceptedPaymentMethods.isEmpty
+                    ? 'CASH'
+                    : event.acceptedPaymentMethods.join(' · '),
+              ),
+              const SizedBox(height: 12),
+              _InfoRow(
+                label: isEnded ? 'Unreturned stock' : 'Stock left',
+                value: '${formatCount(remainingUnits)} units',
+              ),
+              const SizedBox(height: 24),
+              const Divider(height: 1, color: Color(0xFFEDEDF1)),
+              const SizedBox(height: 16),
+              // Auto-width and right-aligned: two occasional actions, not a
+              // pair of calls to action.
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  _QuietDeleteButton(
+                    onPressed: () => Navigator.pop(context, 'delete'),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed: () => Navigator.pop(context, 'edit'),
+                    icon: const Icon(Icons.edit_outlined, size: 16),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    label: const Text('Edit'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Label above, value below, both left-aligned at the same x.
+///
+/// Stacked rather than set in a sentence: every value lands at one x and one
+/// weight, so the eye scans a column instead of reading four lines to find
+/// the one it wants.
+class _InfoRow extends StatelessWidget {
+  const _InfoRow({required this.label, required this.value, this.valueColor});
+
+  final String label;
+  final String value;
+  final Color? valueColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: Colors.black38,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.8,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+            color: valueColor,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Rests neutral, turns red on hover.
+///
+/// A delete that is red at rest makes a panel you are only reading look
+/// hazardous; one that never turns red gives no warning at the moment of
+/// intent. This does both, matching the row actions elsewhere in the app.
+class _QuietDeleteButton extends StatefulWidget {
+  const _QuietDeleteButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  State<_QuietDeleteButton> createState() => _QuietDeleteButtonState();
+}
+
+class _QuietDeleteButtonState extends State<_QuietDeleteButton> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _hovered ? AppColors.error : Colors.black45;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: AnimatedContainer(
+        duration: AppMotion.feedback,
+        curve: AppMotion.easeOut,
+        child: OutlinedButton.icon(
+          onPressed: widget.onPressed,
+          icon: Icon(Icons.delete_outline, size: 16, color: color),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: color,
+            side: BorderSide(
+              color: _hovered ? AppColors.error : const Color(0xFFDCDCE3),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+          label: Text('Delete', style: TextStyle(color: color)),
+        ),
       ),
     );
   }
