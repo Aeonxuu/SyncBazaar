@@ -63,6 +63,10 @@ class ApiClient {
   final http.Client _http;
   final String _baseUrl;
 
+  /// Which server this client talks to. Read by `AuthRepository` so a session
+  /// can be tied to the backend that issued it.
+  String get baseUrl => _baseUrl;
+
   /// When the server last answered anything at all.
   ///
   /// Any reply counts, including a 401: the question this tracks is whether

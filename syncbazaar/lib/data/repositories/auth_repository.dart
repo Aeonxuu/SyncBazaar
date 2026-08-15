@@ -11,8 +11,7 @@ import '../remote/api_client.dart';
 /// tests, where there is no session to read from. With one, it is replaced by
 /// the vendor's real staff on the first read.
 class AuthRepository {
-  AuthRepository({ApiClient? apiClient})
-    : _api = apiClient ?? ApiClient();
+  AuthRepository({ApiClient? apiClient}) : _api = apiClient ?? ApiClient();
 
   final ApiClient _api;
 
@@ -25,6 +24,17 @@ class AuthRepository {
   static const _tokenKey = 'auth_token';
   static const _vendorKey = 'vendor_id';
   static const _vendorNameKey = 'vendor_name';
+
+  /// Which backend issued the stored session.
+  ///
+  /// A token, a user id and a vendor id mean nothing outside the database that
+  /// minted them, and this app is pointed at different ones by a launch flag —
+  /// a laptop for testing API changes, the hosted server otherwise. Restoring
+  /// a session across that boundary sends a token the other server has never
+  /// seen and asks for a vendor id belonging to somebody else, which surfaces
+  /// as "invalid token" and an empty app rather than as "you are signed in to
+  /// the wrong server".
+  static const _serverKey = 'session_server';
   static const _defaultPassword = '123456';
 
   /// Which vendor the signed-in user belongs to, from the login response.
@@ -122,7 +132,8 @@ class AuthRepository {
           name: entry['name'] as String? ?? '',
           email: entry['email'] as String? ?? '',
           role: userRoleFromApiCode(entry['role'] as String?),
-          assignedEventIds: assignments[(entry['id'] as num).toInt()] ?? const [],
+          assignedEventIds:
+              assignments[(entry['id'] as num).toInt()] ?? const [],
         ),
     ];
 
@@ -188,8 +199,7 @@ class AuthRepository {
       final refreshed = await _loadUsersFromApi() ?? const <AppUser>[];
       return refreshed.firstWhere(
         (user) => user.email.toLowerCase() == email.trim().toLowerCase(),
-        orElse: () =>
-            AppUser(id: 0, name: name, email: email, role: role),
+        orElse: () => AppUser(id: 0, name: name, email: email, role: role),
       );
     }
 
@@ -215,12 +225,15 @@ class AuthRepository {
       // Only the fields the screen edits. A full replace would demand the
       // password back, and this form does not ask for one unless it is being
       // changed.
-      await _api.patch('/api/user/$id/', body: {
-        'name': name.trim(),
-        'email': email.trim().toLowerCase(),
-        'role': role.apiCode,
-        if (password != null && password.isNotEmpty) 'password': password,
-      });
+      await _api.patch(
+        '/api/user/$id/',
+        body: {
+          'name': name.trim(),
+          'email': email.trim().toLowerCase(),
+          'role': role.apiCode,
+          if (password != null && password.isNotEmpty) 'password': password,
+        },
+      );
     }
 
     final index = _users.indexWhere((user) => user.id == id);
@@ -350,6 +363,7 @@ class AuthRepository {
       if (vendorName != null) {
         await prefs.setString(_vendorNameKey, vendorName!);
       }
+      await prefs.setString(_serverKey, _api.baseUrl);
     } else {
       await _clearStoredSession(prefs);
     }
@@ -369,6 +383,15 @@ class AuthRepository {
     }
     final userJson = prefs.getString(_userKey);
     if (userJson == null) {
+      return null;
+    }
+
+    // Sessions do not travel between backends. Dropping it here costs one
+    // login; keeping it costs an app that looks signed in, shows nothing, and
+    // blames the token.
+    final issuedBy = prefs.getString(_serverKey);
+    if (issuedBy != null && issuedBy != _api.baseUrl) {
+      await _clearStoredSession(prefs);
       return null;
     }
 
@@ -440,6 +463,7 @@ class AuthRepository {
     await prefs.remove(_tokenKey);
     await prefs.remove(_vendorKey);
     await prefs.remove(_vendorNameKey);
+    await prefs.remove(_serverKey);
   }
 
   Future<void> _syncRememberedUserIfAffected(AppUser updatedUser) async {
