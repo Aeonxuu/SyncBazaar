@@ -117,8 +117,9 @@ void main() {
 
   test('a proposal with no allocations commits no stock', () {
     expect(
-      StockProposal.parse(encode({'eventName': 'Empty'}))
-          .allocationsByAllocationKey,
+      StockProposal.parse(
+        encode({'eventName': 'Empty'}),
+      ).allocationsByAllocationKey,
       isEmpty,
     );
   });

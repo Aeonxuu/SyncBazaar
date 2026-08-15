@@ -30,21 +30,21 @@ void main() {
     required List<OrderLine> lines,
     Map<String, String?> labels = const {},
   }) => Excel.decodeBytes(
-    const OrdersWorkbook().build(
-      lines: lines,
-      extraFieldLabelByMethod: labels,
-    ),
+    const OrdersWorkbook().build(lines: lines, extraFieldLabelByMethod: labels),
   );
 
-  List<String> headersOf(Excel book, String sheet) => book.tables[sheet]!.rows
+  List<String> headersOf(Excel book, String sheet) => book
+      .tables[sheet]!
+      .rows
       .first
       .map((cell) => cell?.value?.toString() ?? '')
       .toList();
 
-  List<String> rowOf(Excel book, String sheet, int index) =>
-      book.tables[sheet]!.rows[index]
-          .map((cell) => cell?.value?.toString() ?? '')
-          .toList();
+  List<String> rowOf(Excel book, String sheet, int index) => book
+      .tables[sheet]!
+      .rows[index]
+      .map((cell) => cell?.value?.toString() ?? '')
+      .toList();
 
   test('one sheet per payment method used', () {
     final book = build(
@@ -140,7 +140,10 @@ void main() {
 
   test('a returned sale is listed and marked, not dropped', () {
     final book = build(
-      lines: [line(customer: 'Ana'), line(customer: 'Ben', returned: true)],
+      lines: [
+        line(customer: 'Ana'),
+        line(customer: 'Ben', returned: true),
+      ],
     );
 
     final statuses = book.tables['CASH']!.rows

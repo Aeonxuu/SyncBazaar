@@ -9,7 +9,8 @@ void main() {
     jsonDecode('''
     [{"id": 1, "name": "Cash", "required_information_name": null},
      {"id": 2, "name": "GCash", "required_information_name": "Reference Number"}]
-    ''') as List,
+    ''')
+        as List,
   );
 
   test('indexes payment methods by id, upper-casing the names', () {
@@ -29,7 +30,8 @@ void main() {
         "contact": "0917-100-2000", "incentive_percent": 10,
         "buffer_percent": 5, "active": true,
         "accepted_payment_methods": [1, 2]}]
-      ''') as List,
+      ''')
+          as List,
       methodsById: methodsById,
     );
 
@@ -39,10 +41,10 @@ void main() {
     expect(venue.address, 'Lucena City, Quezon');
     expect(venue.incentivePercent, 10);
     expect(venue.bufferPercent, 5);
-    expect(
-      bundle.paymentMethodsByCompanyId[3]!.map((m) => m.name),
-      ['CASH', 'GCASH'],
-    );
+    expect(bundle.paymentMethodsByCompanyId[3]!.map((m) => m.name), [
+      'CASH',
+      'GCASH',
+    ]);
   });
 
   test('a venue accepting nothing still offers cash', () {
@@ -53,7 +55,8 @@ void main() {
       [{"id": 9, "name": "Bare Venue", "address": "", "contact": "",
         "incentive_percent": 0, "buffer_percent": 0,
         "accepted_payment_methods": []}]
-      ''') as List,
+      ''')
+          as List,
       methodsById: methodsById,
     );
 
@@ -66,7 +69,8 @@ void main() {
       [{"id": 9, "name": "Venue", "address": "", "contact": "",
         "incentive_percent": 0, "buffer_percent": 0,
         "accepted_payment_methods": [1, 999]}]
-      ''') as List,
+      ''')
+          as List,
       methodsById: methodsById,
     );
 

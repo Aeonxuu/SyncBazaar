@@ -21,11 +21,11 @@ void main() {
   /// two dimensions.
   ({int width, int height}) pngSize(Uint8List bytes) {
     final data = ByteData.sublistView(bytes);
-    expect(
-      bytes.sublist(1, 4),
-      [0x50, 0x4E, 0x47],
-      reason: 'expected a PNG signature',
-    );
+    expect(bytes.sublist(1, 4), [
+      0x50,
+      0x4E,
+      0x47,
+    ], reason: 'expected a PNG signature');
     return (width: data.getUint32(16), height: data.getUint32(20));
   }
 
@@ -82,9 +82,7 @@ void main() {
       ),
     );
 
-    await tester.runAsync(
-      () => service.printReceipt(data, context: context),
-    );
+    await tester.runAsync(() => service.printReceipt(data, context: context));
 
     expect(captured, isNotNull, reason: 'the capture never reached the saver');
     return captured!;
@@ -103,7 +101,9 @@ void main() {
         size.height / (size.width / ReceiptDocument.width);
 
     final small = logicalHeight(pngSize(await capture(tester, receiptWith(2))));
-    final large = logicalHeight(pngSize(await capture(tester, receiptWith(20))));
+    final large = logicalHeight(
+      pngSize(await capture(tester, receiptWith(20))),
+    );
 
     expect(
       large,

@@ -11,9 +11,7 @@ void main() {
   final today = DateTime.now();
   DateTime days(int n) => DateTime(today.year, today.month, today.day + n);
 
-  Future<EventRepository> withEvents(
-    List<(String, int, int)> specs,
-  ) async {
+  Future<EventRepository> withEvents(List<(String, int, int)> specs) async {
     final repository = EventRepository();
     for (final (name, startOffset, endOffset) in specs) {
       await repository.createEvent(

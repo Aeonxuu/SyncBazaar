@@ -46,17 +46,14 @@ void main() {
   });
 
   test('gives a server-side sale a stable identity of its own', () {
-    final sales = map(
-      '''
+    final sales = map('''
       [{"id": 2302, "event_stock": 1393, "client_uuid": null,
         "customer_name": "A", "quantity": 1, "total": "1.00",
         "timestamp": "2026-08-03T00:00:00Z", "order_status": "CM"},
        {"id": 2303, "event_stock": 1393, "client_uuid": null,
         "customer_name": "B", "quantity": 1, "total": "1.00",
         "timestamp": "2026-08-03T00:00:00Z", "order_status": "CM"}]
-      ''',
-      '[]',
-    );
+      ''', '[]');
 
     // Seeded sales carry no client uuid. Two records sharing an empty string
     // would read as the same sale everywhere identity is used.
@@ -65,14 +62,11 @@ void main() {
   });
 
   test('keeps the uuid of a sale this app rang up', () {
-    final sales = map(
-      '''
+    final sales = map('''
       [{"id": 9, "event_stock": 1393, "client_uuid": "abc-123",
         "customer_name": "A", "quantity": 1, "total": "1.00",
         "timestamp": "2026-08-03T00:00:00Z", "order_status": "CM"}]
-      ''',
-      '[]',
-    );
+      ''', '[]');
 
     // Matching on this is what stops a sale being counted twice once it has
     // been uploaded and read back.
@@ -80,14 +74,11 @@ void main() {
   });
 
   test('skips a sale whose stock row cannot be resolved', () {
-    final sales = map(
-      '''
+    final sales = map('''
       [{"id": 1, "event_stock": 9999, "client_uuid": null,
         "customer_name": "A", "quantity": 1, "total": "1.00",
         "timestamp": "2026-08-03T00:00:00Z", "order_status": "CM"}]
-      ''',
-      '[]',
-    );
+      ''', '[]');
 
     // An archived variant or a delisted product. Showing it against the wrong
     // shoe is worse than leaving it out of the history.
@@ -95,27 +86,21 @@ void main() {
   });
 
   test('reads a returned sale as returned', () {
-    final sales = map(
-      '''
+    final sales = map('''
       [{"id": 1, "event_stock": 1393, "client_uuid": null,
         "customer_name": "A", "quantity": 1, "total": "1.00",
         "timestamp": "2026-08-03T00:00:00Z", "order_status": "RT"}]
-      ''',
-      '[]',
-    );
+      ''', '[]');
 
     expect(sales.single.orderStatus, OrderStatus.returned);
   });
 
   test('falls back to cash when a sale has no payment row', () {
-    final sales = map(
-      '''
+    final sales = map('''
       [{"id": 1, "event_stock": 1393, "client_uuid": null,
         "customer_name": "", "quantity": 1, "total": "1.00",
         "timestamp": "2026-08-03T00:00:00Z", "order_status": "CM"}]
-      ''',
-      '[]',
-    );
+      ''', '[]');
 
     expect(sales.single.paymentMethod, 'CASH');
     // An unnamed customer reads as Walk-in, the same as one rung up here.

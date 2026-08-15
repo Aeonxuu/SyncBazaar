@@ -80,26 +80,23 @@ void main() {
       expect(section.requiresTendered, isFalse);
     });
 
-    test(
-      'prints a configured reference with no per-method code',
-      () {
-        // The whole point of the fallback: a wallet added in settings with an
-        // extraFieldLabel prints its reference row without being registered.
-        final details = section.details(
-          const ReceiptPaymentContext(
-            total: 1450,
-            paymentMethod: 'GCASH',
-            extraFieldLabel: 'GCash Ref No.',
-            extraFieldValue: '0057123456',
-          ),
-        );
+    test('prints a configured reference with no per-method code', () {
+      // The whole point of the fallback: a wallet added in settings with an
+      // extraFieldLabel prints its reference row without being registered.
+      final details = section.details(
+        const ReceiptPaymentContext(
+          total: 1450,
+          paymentMethod: 'GCASH',
+          extraFieldLabel: 'GCash Ref No.',
+          extraFieldValue: '0057123456',
+        ),
+      );
 
-        expect(details, hasLength(1));
-        expect(details.single.label, 'GCash Ref No.');
-        expect(details.single.value, '0057123456');
-        expect(details.single.emphasize, isFalse);
-      },
-    );
+      expect(details, hasLength(1));
+      expect(details.single.label, 'GCash Ref No.');
+      expect(details.single.value, '0057123456');
+      expect(details.single.emphasize, isFalse);
+    });
 
     test('prints nothing when the method has no reference configured', () {
       final details = section.details(

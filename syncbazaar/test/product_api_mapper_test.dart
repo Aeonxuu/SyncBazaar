@@ -92,7 +92,10 @@ void main() {
     // collide on it if the group id were the attribute id.
     final bundle = mapProductsResponse([
       ...jsonDecode(_payload) as List,
-      {...(jsonDecode(_payload) as List).first as Map<String, dynamic>, 'id': 17},
+      {
+        ...(jsonDecode(_payload) as List).first as Map<String, dynamic>,
+        'id': 17,
+      },
     ]);
 
     final a = bundle.groupsByProductId[16]!.map((g) => g.id).toSet();

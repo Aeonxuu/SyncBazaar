@@ -43,24 +43,27 @@ void main() {
     'vendor_name': 'FashionHub',
   };
 
-  test('maps a successful login into an AppUser and keeps the vendor', () async {
-    final repository = repositoryReturning(loginResponse);
+  test(
+    'maps a successful login into an AppUser and keeps the vendor',
+    () async {
+      final repository = repositoryReturning(loginResponse);
 
-    final user = await repository.login(
-      email: 'owner@fashionhub.com',
-      password: 'ownerpass',
-      rememberMe: true,
-    );
+      final user = await repository.login(
+        email: 'owner@fashionhub.com',
+        password: 'ownerpass',
+        rememberMe: true,
+      );
 
-    expect(user, isNotNull);
-    expect(user!.id, 7);
-    expect(user.name, 'Marika Mendoza');
-    expect(user.email, 'owner@fashionhub.com');
-    expect(user.role, UserRole.owner);
-    expect(repository.vendorId, 1);
-    expect(repository.vendorName, 'FashionHub');
-    expect(repository.api.token, 'abc123');
-  });
+      expect(user, isNotNull);
+      expect(user!.id, 7);
+      expect(user.name, 'Marika Mendoza');
+      expect(user.email, 'owner@fashionhub.com');
+      expect(user.role, UserRole.owner);
+      expect(repository.vendorId, 1);
+      expect(repository.vendorName, 'FashionHub');
+      expect(repository.api.token, 'abc123');
+    },
+  );
 
   test('sends the credentials as JSON to the login endpoint', () async {
     late http.Request captured;
@@ -88,10 +91,9 @@ void main() {
   });
 
   test('returns null for rejected credentials rather than throwing', () async {
-    final repository = repositoryReturning(
-      {'error': 'Invalid login credentials'},
-      status: 401,
-    );
+    final repository = repositoryReturning({
+      'error': 'Invalid login credentials',
+    }, status: 401);
 
     final user = await repository.login(
       email: 'owner@fashionhub.com',
@@ -160,28 +162,31 @@ void main() {
     expect(revived.api.token, isNull);
   });
 
-  test('carries the employee event assignments off the login response', () async {
-    final repository = repositoryReturning({
-      'token': 'abc123',
-      'user_id': 4,
-      'role': 'EM',
-      'name': 'Missy',
-      'vendor_id': 1,
-      'vendor_name': 'SV KICKz',
-      'assigned_event_ids': [1, 3, 7, 11],
-    });
+  test(
+    'carries the employee event assignments off the login response',
+    () async {
+      final repository = repositoryReturning({
+        'token': 'abc123',
+        'user_id': 4,
+        'role': 'EM',
+        'name': 'Missy',
+        'vendor_id': 1,
+        'vendor_name': 'SV KICKz',
+        'assigned_event_ids': [1, 3, 7, 11],
+      });
 
-    final user = await repository.login(
-      email: 'missy@syncbazaar.com',
-      password: 'missy123',
-      rememberMe: false,
-    );
+      final user = await repository.login(
+        email: 'missy@syncbazaar.com',
+        password: 'missy123',
+        rememberMe: false,
+      );
 
-    // The event list is scoped server-side *and* filtered again on the client
-    // against these ids. Dropping them turned a correct list of four bazaars
-    // into none, and an employee signed in to an app with nothing to sell.
-    expect(user!.assignedEventIdsEffective, [1, 3, 7, 11]);
-  });
+      // The event list is scoped server-side *and* filtered again on the client
+      // against these ids. Dropping them turned a correct list of four bazaars
+      // into none, and an employee signed in to an app with nothing to sell.
+      expect(user!.assignedEventIdsEffective, [1, 3, 7, 11]);
+    },
+  );
 
   test('an owner with no assignments is not scoped to nothing', () async {
     final repository = repositoryReturning({

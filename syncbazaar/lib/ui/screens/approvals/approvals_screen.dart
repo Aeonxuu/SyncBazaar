@@ -6,11 +6,18 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../bloc/approvals/approvals_cubit.dart';
 import '../../../core/constants/colors.dart';
 import '../../../models/approval_request.dart';
+import '../../../models/user.dart';
 import '../../widgets/confirmation_dialog.dart';
 import '../../../core/utils/formatters.dart';
 
 class ApprovalsScreen extends StatelessWidget {
-  const ApprovalsScreen({super.key});
+  const ApprovalsScreen({super.key, required this.user});
+
+  /// Who is looking. An employee reaches this screen straight after raising a
+  /// request -- the nav item is hidden from them, but the pre-bazaar form used
+  /// to walk them here -- and the screen had no idea, so the Approve button
+  /// worked. An employee could approve their own bazaar.
+  final AppUser user;
 
   static const _kCardShadow = [
     BoxShadow(color: Color(0x11000000), blurRadius: 20, offset: Offset(0, 4)),
@@ -59,8 +66,14 @@ class ApprovalsScreen extends StatelessWidget {
                     .toList();
                 return TabBarView(
                   children: [
-                    _ApprovalList(requests: stock),
-                    _ApprovalList(requests: soa),
+                    _ApprovalList(
+                      requests: stock,
+                      canDecide: user.isAdminOrOwner,
+                    ),
+                    _ApprovalList(
+                      requests: soa,
+                      canDecide: user.isAdminOrOwner,
+                    ),
                   ],
                 );
               },
@@ -73,9 +86,14 @@ class ApprovalsScreen extends StatelessWidget {
 }
 
 class _ApprovalList extends StatelessWidget {
-  const _ApprovalList({required this.requests});
+  const _ApprovalList({required this.requests, required this.canDecide});
 
   final List<ApprovalRequest> requests;
+
+  /// Whether the viewer may answer a request, as opposed to watching one they
+  /// raised. Only owners and admins decide; an employee sees the same detail
+  /// with no buttons on it.
+  final bool canDecide;
 
   static const _kCardShadow = [
     BoxShadow(color: Color(0x11000000), blurRadius: 20, offset: Offset(0, 4)),
@@ -356,96 +374,112 @@ class _ApprovalList extends StatelessWidget {
                       const SizedBox(height: 18),
                       Row(
                         children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: () async {
-                                await context.read<ApprovalsCubit>().reject(
-                                  req,
-                                );
-                                if (!context.mounted) {
-                                  return;
-                                }
-                                Navigator.pop(context);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Request rejected.'),
-                                  ),
-                                );
-                              },
-                              icon: const Icon(Icons.close_rounded, size: 18),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: const Color(0xFFC62828),
-                                side: const BorderSide(
-                                  color: Color(0xFFC62828),
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 11,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
+                          if (!canDecide)
+                            Expanded(
+                              child: Text(
+                                'Waiting for an owner to review this request.',
+                                textAlign: TextAlign.center,
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
+                                      color: Colors.black54,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                               ),
-                              label: const Text('Reject'),
+                            )
+                          else ...[
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () async {
+                                  await context.read<ApprovalsCubit>().reject(
+                                    req,
+                                  );
+                                  if (!context.mounted) {
+                                    return;
+                                  }
+                                  Navigator.pop(context);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Request rejected.'),
+                                    ),
+                                  );
+                                },
+                                icon: const Icon(Icons.close_rounded, size: 18),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: const Color(0xFFC62828),
+                                  side: const BorderSide(
+                                    color: Color(0xFFC62828),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 11,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                ),
+                                label: const Text('Reject'),
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: () async {
-                                // Taken before the confirmation dialog: this
-                                // sheet is popped on success, so the messenger
-                                // must not be looked up through a context
-                                // that is on its way out.
-                                final messenger = ScaffoldMessenger.of(context);
-                                final navigator = Navigator.of(context);
-                                final approvals = context
-                                    .read<ApprovalsCubit>();
-                                final confirmed = await showConfirmationDialog(
-                                  context: context,
-                                  title: 'Confirm Stock Allocation',
-                                  message: req.type == ApprovalType.stock
-                                      ? 'Approve stock allocation request for ${_getEventName(req)}?'
-                                      : 'Approve this request?',
-                                  confirmLabel: 'Approve',
-                                );
-                                if (confirmed != true) {
-                                  return;
-                                }
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () async {
+                                  // Taken before the confirmation dialog: this
+                                  // sheet is popped on success, so the messenger
+                                  // must not be looked up through a context
+                                  // that is on its way out.
+                                  final messenger = ScaffoldMessenger.of(
+                                    context,
+                                  );
+                                  final navigator = Navigator.of(context);
+                                  final approvals = context
+                                      .read<ApprovalsCubit>();
+                                  final confirmed = await showConfirmationDialog(
+                                    context: context,
+                                    title: 'Confirm Stock Allocation',
+                                    message: req.type == ApprovalType.stock
+                                        ? 'Approve stock allocation request for ${_getEventName(req)}?'
+                                        : 'Approve this request?',
+                                    confirmLabel: 'Approve',
+                                  );
+                                  if (confirmed != true) {
+                                    return;
+                                  }
 
-                                final approved = await approvals.approve(req);
-                                if (!approved) {
+                                  final approved = await approvals.approve(req);
+                                  if (!approved) {
+                                    messenger.showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Unable to approve. Please review requested allocations.',
+                                        ),
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                  navigator.pop();
                                   messenger.showSnackBar(
                                     const SnackBar(
                                       content: Text(
-                                        'Unable to approve. Please review requested allocations.',
+                                        'Request approved and synced to POS.',
                                       ),
                                     ),
                                   );
-                                  return;
-                                }
-                                navigator.pop();
-                                messenger.showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Request approved and synced to POS.',
-                                    ),
+                                },
+                                icon: const Icon(Icons.check_rounded, size: 18),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF2E7D32),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 11,
                                   ),
-                                );
-                              },
-                              icon: const Icon(Icons.check_rounded, size: 18),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF2E7D32),
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 11,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
                                 ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
+                                label: const Text('Approve'),
                               ),
-                              label: const Text('Approve'),
                             ),
-                          ),
+                          ],
                         ],
                       ),
                     ],

@@ -502,7 +502,7 @@ class _MainShellState extends State<MainShell> {
       case AppSection.orders:
         return OrdersScreen(user: widget.user);
       case AppSection.approvals:
-        return const ApprovalsScreen();
+        return ApprovalsScreen(user: widget.user);
       case AppSection.inventory:
         return InventoryScreen(user: widget.user);
       case AppSection.staff:

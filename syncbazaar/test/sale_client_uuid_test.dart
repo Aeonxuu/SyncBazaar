@@ -37,9 +37,9 @@ void main() {
   });
 
   test('copyWith keeps the same uuid when the status changes', () {
-    final returned = saleWith('abc-123').copyWith(
-      orderStatus: OrderStatus.returned,
-    );
+    final returned = saleWith(
+      'abc-123',
+    ).copyWith(orderStatus: OrderStatus.returned);
 
     expect(returned.orderStatus, OrderStatus.returned);
     expect(returned.clientUuid, 'abc-123');

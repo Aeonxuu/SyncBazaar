@@ -9,6 +9,7 @@ import 'package:syncbazaar/data/repositories/auth_repository.dart';
 import 'package:syncbazaar/data/repositories/event_repository.dart';
 import 'package:syncbazaar/data/repositories/product_repository.dart';
 import 'package:syncbazaar/models/approval_request.dart';
+import 'package:syncbazaar/models/user.dart';
 import 'package:syncbazaar/ui/screens/approvals/approvals_screen.dart';
 
 /// Opening a stock request.
@@ -32,7 +33,24 @@ void main() {
     'items': items,
   });
 
-  Future<void> pumpWith(WidgetTester tester, String detailsJson) async {
+  const owner = AppUser(
+    id: 2,
+    name: 'Lalaine',
+    email: 'owner@syncbazaar.com',
+    role: UserRole.owner,
+  );
+  const employee = AppUser(
+    id: 3,
+    name: 'Via',
+    email: 'employee@syncbazaar.com',
+    role: UserRole.employee,
+  );
+
+  Future<void> pumpWith(
+    WidgetTester tester,
+    String detailsJson, {
+    AppUser as = owner,
+  }) async {
     final auth = AuthRepository();
     final products = ProductRepository();
     final events = EventRepository(auth: auth, products: products);
@@ -57,7 +75,7 @@ void main() {
       MaterialApp(
         home: BlocProvider.value(
           value: cubit,
-          child: const Scaffold(body: ApprovalsScreen()),
+          child: Scaffold(body: ApprovalsScreen(user: as)),
         ),
       ),
     );
@@ -153,6 +171,57 @@ void main() {
     }
 
     expect(dead, isEmpty, reason: 'these points did not open the request');
+  });
+
+  testWidgets('an employee cannot decide a request', (tester) async {
+    // The nav item is hidden from employees, but the pre-bazaar form used to
+    // walk the requester straight here after submitting -- and the screen had
+    // no idea who was looking, so Approve worked. An employee could approve
+    // their own bazaar into existence, stock and all.
+    await pumpWith(
+      tester,
+      detailsWith([
+        {
+          'name': 'Nike Air Max SC',
+          'variant': 'Triple White, 36',
+          'price': 1900.0,
+          'qty': 4,
+        },
+      ]),
+      as: employee,
+    );
+
+    await tester.tap(find.text('STOCK REQUEST for Tech Quest'));
+    await tester.pumpAndSettle();
+
+    // They may read it -- it is their own request.
+    expect(find.text('Approval Details'), findsOneWidget);
+    expect(find.text('Approve'), findsNothing);
+    expect(find.text('Reject'), findsNothing);
+    expect(
+      find.text('Waiting for an owner to review this request.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('an owner still can', (tester) async {
+    await pumpWith(
+      tester,
+      detailsWith([
+        {
+          'name': 'Nike Air Max SC',
+          'variant': 'Triple White, 36',
+          'price': 1900.0,
+          'qty': 4,
+        },
+      ]),
+    );
+
+    await tester.tap(find.text('STOCK REQUEST for Tech Quest'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Approve'), findsOneWidget);
+    expect(find.text('Reject'), findsOneWidget);
   });
 
   testWidgets('an unreadable item does not take the whole modal down', (

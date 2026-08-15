@@ -71,10 +71,7 @@ void main() {
         'details_json': body['details_json'],
       });
 
-      expect(
-        jsonDecode(readBack.detailsJson),
-        jsonDecode(written),
-      );
+      expect(jsonDecode(readBack.detailsJson), jsonDecode(written));
     });
 
     test('a missing details column reads as empty, not as a crash', () {
@@ -94,10 +91,7 @@ void main() {
       // A string here would store {"eventName":"Crop Fest"} *as text* in a
       // JSON column, and nothing server-side could read into it.
       expect(body['details_json'], isA<Map<String, dynamic>>());
-      expect(
-        (body['details_json'] as Map)['eventName'],
-        'Crop Fest',
-      );
+      expect((body['details_json'] as Map)['eventName'], 'Crop Fest');
     });
 
     test('details that are not JSON are kept rather than dropped', () {
@@ -132,14 +126,12 @@ void main() {
     });
 
     test('a decision sends only the new status', () {
-      expect(
-        ApprovalApiMapper.decisionBody(ApprovalStatus.approved),
-        {'status': 'AP'},
-      );
-      expect(
-        ApprovalApiMapper.decisionBody(ApprovalStatus.rejected),
-        {'status': 'DN'},
-      );
+      expect(ApprovalApiMapper.decisionBody(ApprovalStatus.approved), {
+        'status': 'AP',
+      });
+      expect(ApprovalApiMapper.decisionBody(ApprovalStatus.rejected), {
+        'status': 'DN',
+      });
     });
   });
 }

@@ -128,7 +128,11 @@ void main() {
       receiptWith(
         paymentDetails: const [
           ReceiptDetail(label: 'Cash', value: 'PHP 20,000.00'),
-          ReceiptDetail(label: 'Change', value: 'PHP 13,000.00', emphasize: true),
+          ReceiptDetail(
+            label: 'Change',
+            value: 'PHP 13,000.00',
+            emphasize: true,
+          ),
         ],
       ),
     );

@@ -6,7 +6,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/constants/colors.dart';
 import '../../../core/constants/motion.dart';
 
-import '../../../bloc/approvals/approvals_cubit.dart';
 import '../../../bloc/dashboard/dashboard_cubit.dart';
 import '../../../bloc/inventory/inventory_cubit.dart';
 import '../../../bloc/orders/orders_cubit.dart';
@@ -289,18 +288,33 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
           'items': allocationItems,
         });
 
-        // Both cubits are resolved before the submit, because the form is
-        // reset and the app navigates to Approvals in between.
+        // Resolved before the submit, because the form is reset in between.
         final preBazaarCubit = context.read<PreBazaarCubit>();
-        final approvalsCubit = context.read<ApprovalsCubit>();
+        final messenger = ScaffoldMessenger.of(context);
+        final bazaarName = _eventName.text.trim();
         await preBazaarCubit.submitAllocation(
           user: widget.user,
           detailsJson: details,
         );
 
         await _resetPreBazaarForm();
-        await approvalsCubit.loadPending();
-        widget.onOpenApprovals();
+
+        // Deliberately not sent to Approvals any more. That screen decides
+        // requests, and walking the requester into it handed an employee the
+        // Approve button for their own bazaar -- the nav item is hidden from
+        // them, so this was the only way in, and it worked.
+        if (!mounted) {
+          return;
+        }
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              '$bazaarName has been submitted for approval. '
+              'You will be notified once it has been reviewed.',
+            ),
+            duration: const Duration(seconds: 5),
+          ),
+        );
       }
       return;
     }
