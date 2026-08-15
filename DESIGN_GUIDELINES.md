@@ -73,12 +73,14 @@ Defined in `lib/core/constants/colors.dart`. Add new *semantic* colors here rath
 | `AppColors.text` | `#212529` | Primary text color (used instead of pure black). |
 | `AppColors.error` | `#DC3545` | Errors, destructive actions, "ended" status. |
 
-### Status colors (not yet promoted to `AppColors` — do that the next time you touch one)
-| Status | Hex | Notes |
+### Status colors
+⚠️ **Promoted to `AppColors` on 2026-08-16**, as the previous version of this note asked. Twelve files had each declared their own copy and two had already drifted: upcoming was `#8A6100` in the orders badge against `#B45309` everywhere else, and ended was grey there against the error red everywhere else. Use the tokens; don't re-declare the hex.
+
+| Status | Token | Hex |
 | --- | --- | --- |
-| Ongoing / success | `#2E7D32` | Green. |
-| Upcoming / warning | `#B45309` | Amber. |
-| Ended / error | `AppColors.error` (`#DC3545`) | Reuse the existing error token, don't invent a new red. |
+| Ongoing / success | `AppColors.statusOngoing` | `#2E7D32` green |
+| Upcoming / warning | `AppColors.statusUpcoming` | `#B45309` amber |
+| Ended / error | `AppColors.statusEnded` | `AppColors.error` `#DC3545` — the existing red, not a new one |
 
 Status badges use the status color at **12% opacity** as the fill (`statusColor.withValues(alpha: 0.12)` — `withOpacity` is deprecated) with the full-strength color as the text — never a solid-color badge background, it's too loud for a small label.
 

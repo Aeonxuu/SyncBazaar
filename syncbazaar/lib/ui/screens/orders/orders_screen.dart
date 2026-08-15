@@ -627,9 +627,9 @@ class _StatusBadge extends StatelessWidget {
       // "Ongoing", not "Active bazaar": the filter beside it, the status
       // colours, and the model all say ongoing, and a badge that renames the
       // thing it labels makes the filter look like it does something else.
-      BazaarStatus.ongoing => ('ONGOING', const Color(0xFF2E7D32)),
-      BazaarStatus.upcoming => ('UPCOMING', const Color(0xFF8A6100)),
-      BazaarStatus.ended => ('ENDED', Colors.black54),
+      BazaarStatus.ongoing => ('ONGOING', AppColors.statusOngoing),
+      BazaarStatus.upcoming => ('UPCOMING', AppColors.statusUpcoming),
+      BazaarStatus.ended => ('ENDED', AppColors.statusEnded),
     };
 
     return Container(

@@ -19,6 +19,20 @@ class AppColors {
   static const Color text = Color(0xFF212529);
   static const Color error = Color(0xFFDC3545);
 
+  /// A bazaar's status, as a colour.
+  ///
+  /// Promoted here from twelve files that each declared their own copy, which
+  /// is what the design guidelines asked for the next time anyone touched
+  /// them. They had already drifted by then: upcoming was #B45309 in five
+  /// places and #8A6100 in the orders badge, and ended was the error red
+  /// everywhere except that same badge, where it was grey.
+  ///
+  /// Badges use these at 12% opacity as the fill with the full strength as
+  /// the text -- a solid badge is too loud for a label that size.
+  static const Color statusOngoing = Color(0xFF2E7D32);
+  static const Color statusUpcoming = Color(0xFFB45309);
+  static const Color statusEnded = error;
+
   /// Confirmation and "ongoing" status.
   ///
   /// Was a bare `Color(0xFF2E7D32)` repeated at every success SnackBar and

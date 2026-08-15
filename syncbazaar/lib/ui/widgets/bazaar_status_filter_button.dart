@@ -33,9 +33,9 @@ class _BazaarStatusFilterButtonState extends State<BazaarStatusFilterButton> {
   bool _pressed = false;
 
   static const Map<BazaarStatus, Color> _statusColors = {
-    BazaarStatus.ongoing: Color(0xFF2E7D32),
-    BazaarStatus.upcoming: Color(0xFFB45309),
-    BazaarStatus.ended: AppColors.error,
+    BazaarStatus.ongoing: AppColors.statusOngoing,
+    BazaarStatus.upcoming: AppColors.statusUpcoming,
+    BazaarStatus.ended: AppColors.statusEnded,
   };
 
   @override

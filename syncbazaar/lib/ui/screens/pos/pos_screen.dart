@@ -1625,9 +1625,9 @@ class _BazaarCardState extends State<_BazaarCard> {
   bool _pressed = false;
 
   static const Map<BazaarStatus, Color> _statusColors = {
-    BazaarStatus.ongoing: Color(0xFF2E7D32),
-    BazaarStatus.upcoming: Color(0xFFB45309),
-    BazaarStatus.ended: AppColors.error,
+    BazaarStatus.ongoing: AppColors.statusOngoing,
+    BazaarStatus.upcoming: AppColors.statusUpcoming,
+    BazaarStatus.ended: AppColors.statusEnded,
   };
 
   @override
@@ -1971,9 +1971,9 @@ class BazaarInfoDialog extends StatelessWidget {
   final String Function(DateTime) formatDate;
 
   static const Map<BazaarStatus, Color> _statusColors = {
-    BazaarStatus.ongoing: Color(0xFF2E7D32),
-    BazaarStatus.upcoming: Color(0xFFB45309),
-    BazaarStatus.ended: AppColors.error,
+    BazaarStatus.ongoing: AppColors.statusOngoing,
+    BazaarStatus.upcoming: AppColors.statusUpcoming,
+    BazaarStatus.ended: AppColors.statusEnded,
   };
 
   @override

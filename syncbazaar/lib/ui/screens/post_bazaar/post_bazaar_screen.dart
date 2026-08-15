@@ -672,9 +672,9 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
   Color _statusForeground(BazaarStatus status) {
     switch (status) {
       case BazaarStatus.upcoming:
-        return const Color(0xFFB45309);
+        return AppColors.statusUpcoming;
       case BazaarStatus.ongoing:
-        return const Color(0xFF2E7D32);
+        return AppColors.statusOngoing;
       case BazaarStatus.ended:
         return const Color(0xFF4B5563);
     }

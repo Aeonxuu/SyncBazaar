@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../bloc/dashboard/dashboard_cubit.dart';
+import '../../../../core/constants/colors.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../models/bazaar_event.dart';
 import 'dashboard_section_card.dart';
@@ -88,8 +89,8 @@ class _StatusBadge extends StatelessWidget {
       BazaarStatus.ended => const Color(0x1A6B7280),
     };
     final fg = switch (status) {
-      BazaarStatus.upcoming => const Color(0xFFB45309),
-      BazaarStatus.ongoing => const Color(0xFF2E7D32),
+      BazaarStatus.upcoming => AppColors.statusUpcoming,
+      BazaarStatus.ongoing => AppColors.statusOngoing,
       BazaarStatus.ended => const Color(0xFF4B5563),
     };
 
