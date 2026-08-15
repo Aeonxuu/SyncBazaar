@@ -1,3 +1,4 @@
+import '../../core/config/api_config.dart';
 import '../../models/product.dart';
 import '../../models/product_variant.dart';
 
@@ -84,7 +85,9 @@ ApiProductBundle mapProductsResponse(List<dynamic> payload) {
         if (attributeId == null) {
           continue;
         }
-        valueIdsByAttributeId.putIfAbsent(attributeId, () => <int>{}).add(valueId);
+        valueIdsByAttributeId
+            .putIfAbsent(attributeId, () => <int>{})
+            .add(valueId);
       }
     }
 
@@ -213,12 +216,55 @@ double _basePriceOf(List<Map<String, dynamic>> variants) {
   return lowest ?? 0;
 }
 
+/// A product's picture, taken from whichever variant has one.
+///
+/// Reads `image_url`, which the server resolves for us: an uploaded photo's
+/// URL where one exists, and the bundled asset path otherwise. Reading
+/// `image_link` directly — as this did before photos could be uploaded — means
+/// a product whose photo was replaced still shows the placeholder art it
+/// shipped with.
+///
+/// An uploaded photo wins over a bundled one even if it belongs to a later
+/// variant: a real photograph of the shoe is more use than stock art, whatever
+/// order the variants arrive in.
 String? _imageOf(List<Map<String, dynamic>> variants) {
+  String? fallback;
   for (final variant in variants) {
-    final link = variant['image_link'] as String?;
-    if (link != null && link.trim().isNotEmpty) {
-      return link;
+    final uploaded = _trimmed(variant['image']);
+    final resolved =
+        _trimmed(variant['image_url']) ?? _trimmed(variant['image_link']);
+    if (resolved == null) {
+      continue;
     }
+    if (uploaded != null) {
+      return _absolute(resolved);
+    }
+    fallback ??= resolved;
   }
-  return null;
+  return fallback == null ? null : _absolute(fallback);
+}
+
+String? _trimmed(Object? value) {
+  final text = (value as String?)?.trim();
+  return (text == null || text.isEmpty) ? null : text;
+}
+
+/// Makes a server path renderable.
+///
+/// The API answers with an absolute URL when photos live in the object store,
+/// but with a host-relative one (`/media/products/...`) when they are served
+/// by Django itself. Only this layer knows which server the path came from, so
+/// it resolves it here rather than leaving a path no widget can load: the
+/// thumbnail treats anything that is not `http(s)` as a bundled asset, and
+/// would render the placeholder instead.
+///
+/// Bundled asset paths are left alone — they are not server paths at all.
+String _absolute(String path) {
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    return path;
+  }
+  if (!path.startsWith('/')) {
+    return path;
+  }
+  return '${ApiConfig.baseUrl}$path';
 }
