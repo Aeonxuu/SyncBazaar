@@ -1,6 +1,5 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../data/repositories/orders_repository.dart';
 import '../../data/repositories/product_repository.dart';
 import '../../data/repositories/sales_repository.dart';
 import '../../models/user.dart';
@@ -76,13 +75,9 @@ class OrdersState {
 }
 
 class OrdersCubit extends Cubit<OrdersState> {
-  OrdersCubit(
-    this._ordersRepository,
-    this._salesRepository,
-    this._productRepository,
-  ) : super(const OrdersState());
+  OrdersCubit(this._salesRepository, this._productRepository)
+    : super(const OrdersState());
 
-  final OrdersRepository _ordersRepository;
   final SalesRepository _salesRepository;
   final ProductRepository _productRepository;
 
@@ -94,15 +89,15 @@ class OrdersCubit extends Cubit<OrdersState> {
   /// bazaar with a day of takings behind it reported nothing sold.
   ///
   /// The sale is the record of what happened; an order carried the same facts
-  /// again, plus a label. So the label is the only thing still read from it,
-  /// and only when a matching order happens to be in memory — otherwise it is
-  /// rebuilt from the catalogue.
+  /// again, plus a label.
+  ///
+  /// That label used to be preferred where an order was in memory, which meant
+  /// the same shoe was spelled two ways in one list: "(Color Black, Size 42)"
+  /// for a sale rung up since launch, "(Black, 42)" for one read back from the
+  /// server. Every row is rebuilt from the catalogue now, so the history reads
+  /// the same however old the sale is.
   Future<void> load() async {
     final sales = await _salesRepository.listSales();
-    final orders = await _ordersRepository.listOrders();
-    final labelBySaleId = {
-      for (final order in orders) order.saleId: order.productLabel,
-    };
     final labels = await _productLabels();
 
     final records = <TransactionRecord>[
@@ -111,13 +106,11 @@ class OrdersCubit extends Cubit<OrdersState> {
           orderId: sale.id,
           customerName: sale.customerName,
           timestamp: sale.timestamp,
-          productLabel:
-              labelBySaleId[sale.id] ??
-              labels.labelFor(
-                productId: sale.productId,
-                optionIdA: sale.variantOptionIdA,
-                optionIdB: sale.variantOptionIdB,
-              ),
+          productLabel: labels.labelFor(
+            productId: sale.productId,
+            optionIdA: sale.variantOptionIdA,
+            optionIdB: sale.variantOptionIdB,
+          ),
           unitPrice: sale.qty > 0 ? sale.total / sale.qty : sale.total,
           quantity: sale.qty,
           total: sale.total,
@@ -137,10 +130,19 @@ class OrdersCubit extends Cubit<OrdersState> {
     final names = {for (final product in products) product.id: product.name};
     final options = <int, String>{};
     for (final product in products) {
+      final groups = await _productRepository.variantGroupsForProduct(
+        product.id,
+      );
+      final groupNames = {for (final group in groups) group.id: group.name};
       for (final option in await _productRepository.allVariantOptionsForProduct(
         product.id,
       )) {
-        options[option.id] = option.value;
+        // Named with its category -- "Color Black", not "Black" -- which is
+        // how the cart, the receipt and the exported order list all say it.
+        final groupName = groupNames[option.variantGroupId];
+        options[option.id] = groupName == null
+            ? option.value
+            : '$groupName ${option.value}';
       }
     }
     return _ProductLabels(names: names, optionValues: options);
@@ -165,7 +167,7 @@ class _ProductLabels {
   final Map<int, String> names;
   final Map<int, String> optionValues;
 
-  /// "Nike Air Max SC (42, Triple White)".
+  /// "Nike Air Max SC (Color Black, Size 42)".
   ///
   /// Falls back to the product alone when an option is unknown -- an archived
   /// variant, say -- rather than printing a bare id at a cashier.
