@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../bloc/orders/orders_cubit.dart';
 import '../../../bloc/pos/pos_cubit.dart';
 import '../../../core/constants/colors.dart';
+import '../../../core/constants/motion.dart';
 import '../../widgets/app_dropdown.dart';
 import '../../widgets/bazaar_search_field.dart';
 import '../../widgets/bazaar_status_filter_button.dart';
@@ -100,48 +101,40 @@ class _OrdersScreenState extends State<OrdersScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Above the title rather than opposite it. A back affordance
-              // belongs where reading starts and where the navigation
-              // already is -- across the header from it, the one control
-              // that leaves this screen sat furthest from everything else.
-              if (widget.user.isAdminOrOwner)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
+              // Beside the heading, not above it and not across the header
+              // from it. A square icon reads as "back" on its own, and one
+              // control the size of a word does not need a word beside it --
+              // the heading it sits against already says where you are.
+              Row(
+                children: [
+                  if (widget.user.isAdminOrOwner) ...[
+                    _BackButton(
                       onPressed: () =>
                           context.read<OrdersCubit>().filterByEvent(null),
-                      icon: const Icon(Icons.arrow_back, size: 16),
-                      style: TextButton.styleFrom(
-                        foregroundColor: AppColors.primary,
-                        // Pulled flush with the title below it; a TextButton
-                        // otherwise carries padding the heading does not.
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
+                    ),
+                    const SizedBox(width: 12),
+                  ],
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Orders',
+                          style: Theme.of(context).textTheme.headlineSmall
+                              ?.copyWith(fontWeight: FontWeight.w700),
                         ),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      label: const Text('Change bazaar'),
+                        const SizedBox(height: 2),
+                        Text(
+                          eventName == null
+                              ? 'What this bazaar sold.'
+                              : 'What $eventName sold.',
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: Colors.black45),
+                        ),
+                      ],
                     ),
                   ),
-                ),
-              Text(
-                'Orders',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                eventName == null
-                    ? 'What this bazaar sold.'
-                    : 'What $eventName sold.',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyMedium?.copyWith(color: Colors.black45),
+                ],
               ),
               const SizedBox(height: 24),
               Wrap(
@@ -694,6 +687,59 @@ class _StatusBadge extends StatelessWidget {
         style: Theme.of(context).textTheme.bodySmall?.copyWith(
           color: colour,
           fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+/// A square back control, sized to sit beside a heading.
+///
+/// Square rather than a labelled button: an arrow beside a title is already
+/// unambiguous, and a text button there competed with the heading for the
+/// same line. Its tooltip carries the wording the label used to.
+class _BackButton extends StatefulWidget {
+  const _BackButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  State<_BackButton> createState() => _BackButtonState();
+}
+
+class _BackButtonState extends State<_BackButton> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Change bazaar',
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: InkWell(
+          onTap: widget.onPressed,
+          borderRadius: BorderRadius.circular(8),
+          child: AnimatedContainer(
+            duration: AppMotion.feedback,
+            curve: AppMotion.easeOut,
+            // 1:1, and large enough to hit without aiming -- this is how you
+            // get back off the screen.
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: _hovered ? const Color(0xFFF2ECFC) : Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: _hovered ? AppColors.primary : const Color(0xFFEDEDF1),
+              ),
+            ),
+            child: Icon(
+              Icons.arrow_back_rounded,
+              size: 18,
+              color: _hovered ? AppColors.primary : Colors.black54,
+            ),
+          ),
         ),
       ),
     );
