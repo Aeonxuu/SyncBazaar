@@ -234,6 +234,10 @@ class _OrdersScreenState extends State<OrdersScreen> {
             flex: 2,
             child: Text('UNIT PRICE', style: style, textAlign: TextAlign.right),
           ),
+          // A right-aligned column against a centred one puts the last digit
+          // of the price beside the quantity with nothing between them, so
+          // the two read as one number.
+          const SizedBox(width: 28),
           // Fixed width and centred. A count is one or two characters, so a
           // flex column leaves it stranded against one edge of a gap it does
           // not need -- and the slack it was holding is what makes room for
@@ -331,6 +335,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
               ),
             ),
           ),
+          const SizedBox(width: 28),
           SizedBox(
             width: 92,
             child: Text(
