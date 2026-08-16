@@ -79,9 +79,7 @@ void main() {
     expect(text.style?.color, AppColors.error);
   });
 
-  testWidgets('an ended bazaar calls its leftovers unreturned', (
-    tester,
-  ) async {
+  testWidgets('an ended bazaar calls its leftovers unreturned', (tester) async {
     // "Stock left" is a fact about a live bazaar; on a finished one the same
     // number is a job nobody has done yet.
     await open(tester, staff: const ['Via'], status: BazaarStatus.ended);

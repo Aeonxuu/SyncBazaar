@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../bloc/settings/settings_cubit.dart';
 import '../../../core/constants/colors.dart';
+import '../../../data/remote/api_client.dart';
 import '../../../data/repositories/settings_repository.dart';
 import '../../../models/company.dart';
 import '../../../core/utils/formatters.dart';
@@ -216,6 +217,7 @@ class _VenuesScreenState extends State<VenuesScreen> {
     List<PaymentMethodMeta> existingMethods = const [],
   }) async {
     final cubit = context.read<SettingsCubit>();
+    final messenger = ScaffoldMessenger.of(context);
     final result = await showDialog<_VenueDraft>(
       context: context,
       builder: (_) => _VenueEditorDialog(
@@ -227,27 +229,42 @@ class _VenuesScreenState extends State<VenuesScreen> {
       return;
     }
 
-    if (existing == null) {
-      await cubit.createLocation(
-        name: result.name,
-        address: result.address,
-        contact: result.contact,
-        incentivePercent: result.incentivePercent,
-        bufferPercent: result.bufferPercent,
-        qrImagePath: result.qrImagePath,
-        paymentMethods: result.methods,
-      );
-    } else {
-      await cubit.saveLocationConfiguration(
-        company: existing.copyWith(
+    // Wrapped because it was not: a rejected save threw out of this method
+    // into a button's async callback, where an uncaught error is simply
+    // nothing happening. The venue did not appear and nothing said why.
+    try {
+      if (existing == null) {
+        await cubit.createLocation(
           name: result.name,
           address: result.address,
           contact: result.contact,
           incentivePercent: result.incentivePercent,
           bufferPercent: result.bufferPercent,
           qrImagePath: result.qrImagePath,
+          paymentMethods: result.methods,
+        );
+      } else {
+        await cubit.saveLocationConfiguration(
+          company: existing.copyWith(
+            name: result.name,
+            address: result.address,
+            contact: result.contact,
+            incentivePercent: result.incentivePercent,
+            bufferPercent: result.bufferPercent,
+            qrImagePath: result.qrImagePath,
+          ),
+          paymentMethods: result.methods,
+        );
+      }
+    } on ApiException catch (error) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            error.isOffline
+                ? 'Cannot reach the server, so ${result.name} was not saved.'
+                : '${result.name} could not be saved. ${error.message}',
+          ),
         ),
-        paymentMethods: result.methods,
       );
     }
   }

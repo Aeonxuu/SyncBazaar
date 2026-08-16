@@ -97,8 +97,12 @@ Map<String, dynamic> establishmentBody({
   required List<int> acceptedPaymentMethodIds,
 }) => {
   'name': company.name,
-  'address': company.address,
-  'contact': company.contact,
+  // The server rejects a blank address or contact outright, while the form
+  // offers both as optional -- so a venue saved without them failed with a
+  // 400 nobody saw. A dash records "not given" without claiming an address
+  // that does not exist.
+  'address': company.address.trim().isEmpty ? '-' : company.address,
+  'contact': company.contact.trim().isEmpty ? '-' : company.contact,
   // Whole numbers server-side; a fractional cut would be silently truncated,
   // so it is rounded here where that is visible.
   'incentive_percent': company.incentivePercent.round(),
