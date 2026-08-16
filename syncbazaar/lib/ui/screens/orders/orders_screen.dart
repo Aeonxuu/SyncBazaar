@@ -100,39 +100,48 @@ class _OrdersScreenState extends State<OrdersScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Orders',
-                          style: Theme.of(context).textTheme.headlineSmall
-                              ?.copyWith(fontWeight: FontWeight.w700),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          // Names the bazaar being read. The title alone
-                          // could be any of twelve.
-                          eventName == null
-                              ? 'What this bazaar sold.'
-                              : 'What $eventName sold.',
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(color: Colors.black45),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (widget.user.isAdminOrOwner)
-                    TextButton.icon(
+              // Above the title rather than opposite it. A back affordance
+              // belongs where reading starts and where the navigation
+              // already is -- across the header from it, the one control
+              // that leaves this screen sat furthest from everything else.
+              if (widget.user.isAdminOrOwner)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
                       onPressed: () =>
                           context.read<OrdersCubit>().filterByEvent(null),
                       icon: const Icon(Icons.arrow_back, size: 16),
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.primary,
+                        // Pulled flush with the title below it; a TextButton
+                        // otherwise carries padding the heading does not.
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
                       label: const Text('Change bazaar'),
                     ),
-                ],
+                  ),
+                ),
+              Text(
+                'Orders',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                eventName == null
+                    ? 'What this bazaar sold.'
+                    : 'What $eventName sold.',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: Colors.black45),
               ),
               const SizedBox(height: 24),
               Wrap(
