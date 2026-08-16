@@ -4,11 +4,11 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../bloc/orders/orders_cubit.dart';
 import '../../../bloc/pos/pos_cubit.dart';
 import '../../../core/constants/colors.dart';
+import '../../widgets/app_dropdown.dart';
 import '../../widgets/bazaar_search_field.dart';
 import '../../widgets/bazaar_status_filter_button.dart';
 import '../../../models/bazaar_event.dart';
 import '../../../models/user.dart';
-import '../../screens/dashboard/widgets/dashboard_section_card.dart';
 import '../../../core/utils/formatters.dart';
 
 class OrdersScreen extends StatefulWidget {
@@ -85,107 +85,99 @@ class _OrdersScreenState extends State<OrdersScreen> {
               .toList();
         }
 
+        final eventName = state.selectedEventId == null
+            ? null
+            : context
+                  .read<PosCubit>()
+                  .state
+                  .events
+                  .where((e) => e.id == state.selectedEventId)
+                  .map((e) => e.name)
+                  .firstOrNull;
+
         return Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Orders',
-                    style: Theme.of(context).textTheme.headlineSmall,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Orders',
+                          style: Theme.of(context).textTheme.headlineSmall
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          // Names the bazaar being read. The title alone
+                          // could be any of twelve.
+                          eventName == null
+                              ? 'What this bazaar sold.'
+                              : 'What $eventName sold.',
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: Colors.black45),
+                        ),
+                      ],
+                    ),
                   ),
                   if (widget.user.isAdminOrOwner)
                     TextButton.icon(
                       onPressed: () =>
                           context.read<OrdersCubit>().filterByEvent(null),
-                      icon: const Icon(Icons.arrow_back),
-                      label: const Text('Change Bazaar'),
+                      icon: const Icon(Icons.arrow_back, size: 16),
+                      label: const Text('Change bazaar'),
                     ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 24),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  BazaarSearchField(
+                    controller: _searchController,
+                    onChanged: () => setState(() {}),
+                    hint: 'Search customer or product',
+                    maxWidth: 320,
+                  ),
+                  SizedBox(
+                    width: 190,
+                    child: AppDropdown<String>(
+                      options: paymentFilterOptions,
+                      selected:
+                          paymentFilterOptions.contains(state.paymentMethod)
+                          ? state.paymentMethod
+                          : 'All',
+                      labelOf: (method) =>
+                          method == 'All' ? 'All payments' : method,
+                      hint: 'All payments',
+                      leadingIcon: Icons.payments_outlined,
+                      onSelected: (method) =>
+                          context.read<OrdersCubit>().filterByPayment(method),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                '${records.length} order${records.length == 1 ? '' : 's'} found',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: Colors.black38),
+              ),
+              const SizedBox(height: 16),
               Expanded(
-                child: DashboardSectionCard(
-                  title:
-                      '${records.length} order${records.length == 1 ? '' : 's'}',
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      SizedBox(
-                        width: 220,
-                        child: TextField(
-                          controller: _searchController,
-                          onChanged: (_) => setState(() {}),
-                          decoration: InputDecoration(
-                            hintText: 'Search name or product',
-                            prefixIcon: const Icon(Icons.search, size: 20),
-                            suffixIcon: _searchController.text.isEmpty
-                                ? null
-                                : IconButton(
-                                    icon: const Icon(Icons.close, size: 18),
-                                    onPressed: () {
-                                      _searchController.clear();
-                                      setState(() {});
-                                    },
-                                  ),
-                            isDense: true,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 10,
-                            ),
-                            filled: true,
-                            fillColor: AppColors.surface,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: BorderSide.none,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      SizedBox(
-                        width: 170,
-                        child: DropdownButtonFormField<String>(
-                          initialValue:
-                              paymentFilterOptions.contains(state.paymentMethod)
-                              ? state.paymentMethod
-                              : 'All',
-                          icon: const Icon(Icons.keyboard_arrow_down_rounded),
-                          isExpanded: true,
-                          decoration: InputDecoration(
-                            isDense: true,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 10,
-                            ),
-                            filled: true,
-                            fillColor: AppColors.surface,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: BorderSide.none,
-                            ),
-                          ),
-                          items: paymentFilterOptions
-                              .map(
-                                (method) => DropdownMenuItem(
-                                  value: method,
-                                  child: Text(method.toUpperCase()),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (value) {
-                            if (value != null) {
-                              context.read<OrdersCubit>().filterByPayment(
-                                value,
-                              );
-                            }
-                          },
-                        ),
-                      ),
-                    ],
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFEDEDF1)),
                   ),
                   child: records.isEmpty
                       ? _emptyState(context)
@@ -207,15 +199,18 @@ class _OrdersScreenState extends State<OrdersScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _tableHeader(context),
-        const Divider(height: 1, color: Color(0xFFEDEDED)),
-        SizedBox(
-          height: 460,
-          child: ListView.builder(
+        const Divider(height: 1, color: Color(0xFFEDEDF1)),
+        // Expanded, not a hardcoded height. It was pinned to 460px inside a
+        // card that already fills the window, so on any screen taller than
+        // that the list stopped mid-row and the rest of the card was blank --
+        // which read as the text being cut off and sliding under the white.
+        Expanded(
+          child: ListView.separated(
+            padding: EdgeInsets.zero,
             itemCount: records.length,
-            itemBuilder: (context, index) {
-              final record = records[index];
-              return _tableRow(context, record, index);
-            },
+            separatorBuilder: (_, __) =>
+                const Divider(height: 1, color: Color(0xFFF3F3F6)),
+            itemBuilder: (context, index) => _tableRow(context, records[index]),
           ),
         ),
       ],
@@ -223,89 +218,131 @@ class _OrdersScreenState extends State<OrdersScreen> {
   }
 
   Widget _tableHeader(BuildContext context) {
-    final style = Theme.of(context).textTheme.bodySmall?.copyWith(
-      color: Colors.black54,
+    final style = Theme.of(context).textTheme.labelSmall?.copyWith(
+      color: Colors.black38,
       fontWeight: FontWeight.w700,
+      letterSpacing: 0.8,
     );
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
       child: Row(
         children: [
-          Expanded(flex: 3, child: Text('Name', style: style)),
-          Expanded(flex: 2, child: Text('Date', style: style)),
-          Expanded(flex: 4, child: Text('Product', style: style)),
+          Expanded(flex: 4, child: Text('CUSTOMER', style: style)),
+          Expanded(flex: 5, child: Text('PRODUCT', style: style)),
           Expanded(
             flex: 2,
-            child: Text('Unit Price', style: style, textAlign: TextAlign.right),
+            child: Text('UNIT PRICE', style: style, textAlign: TextAlign.right),
           ),
-          Expanded(
-            flex: 1,
-            child: Text('Qty', style: style, textAlign: TextAlign.right),
+          SizedBox(
+            width: 48,
+            child: Text('QTY', style: style, textAlign: TextAlign.right),
           ),
           Expanded(
             flex: 2,
-            child: Text('Total', style: style, textAlign: TextAlign.right),
+            child: Text('TOTAL', style: style, textAlign: TextAlign.right),
           ),
         ],
       ),
     );
   }
 
-  Widget _tableRow(BuildContext context, TransactionRecord record, int index) {
-    final textStyle = Theme.of(context).textTheme.bodyMedium;
-    final isEven = index % 2 == 0;
+  Widget _tableRow(BuildContext context, TransactionRecord record) {
+    final theme = Theme.of(context);
+    final label = record.productLabel;
+    // "Nike ZoomX Vaporfly (Color Panda, Size 43)" split at the bracket. The
+    // product goes on the first line and the variant beneath it, so a row is
+    // two short lines rather than one wrapping to an uneven height.
+    final bracket = label.indexOf('(');
+    final product = bracket == -1 ? label : label.substring(0, bracket).trim();
+    final variant = bracket == -1
+        ? ''
+        : label.substring(bracket + 1).replaceAll(')', '').trim();
 
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-      color: isEven ? Colors.transparent : const Color(0xFFFAFAFB),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
-            flex: 3,
-            child: Text(
-              record.customerName,
-              style: textStyle?.copyWith(fontWeight: FontWeight.w600),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          Expanded(
-            flex: 2,
-            child: Text(_fmtDate(record.timestamp), style: textStyle),
-          ),
-          Expanded(
             flex: 4,
-            child: Text(
-              record.productLabel,
-              style: textStyle,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  record.customerName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  // Time and payment method, not the date: every row in one
+                  // bazaar shares the date, so repeating it down the column
+                  // says nothing while the payment method -- which this
+                  // screen can filter by -- was not shown at all.
+                  '${_fmtTime(record.timestamp)} · ${record.paymentMethod}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: Colors.black45,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            flex: 5,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  product,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium,
+                ),
+                if (variant.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    variant,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: Colors.black45,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
           Expanded(
             flex: 2,
             child: Text(
-              formatPeso(record.unitPrice),
-              style: textStyle,
+              formatAmount(record.unitPrice),
               textAlign: TextAlign.right,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: Colors.black54,
+              ),
             ),
           ),
-          Expanded(
-            flex: 1,
+          SizedBox(
+            width: 48,
             child: Text(
               '${record.quantity}',
-              style: textStyle,
               textAlign: TextAlign.right,
+              style: theme.textTheme.bodyMedium,
             ),
           ),
           Expanded(
             flex: 2,
             child: Text(
               formatPeso(record.total),
-              style: textStyle?.copyWith(fontWeight: FontWeight.w700),
               textAlign: TextAlign.right,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ],
@@ -313,43 +350,39 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
   }
 
-  String _fmtDate(DateTime dt) {
-    final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
-    final minute = dt.minute.toString().padLeft(2, '0');
-    final suffix = dt.hour >= 12 ? 'PM' : 'AM';
-    return '${dt.month}/${dt.day}/${dt.year} $hour:$minute $suffix';
+  static String _fmtTime(DateTime value) {
+    final hour = value.hour % 12 == 0 ? 12 : value.hour % 12;
+    final minute = value.minute.toString().padLeft(2, '0');
+    return '$hour:$minute ${value.hour < 12 ? 'AM' : 'PM'}';
   }
 
   Widget _emptyState(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 40),
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: const Color(0xFFF2ECFC),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(
-                Icons.receipt_long_outlined,
-                color: AppColors.primary,
-                size: 22,
-              ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              'No orders found.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Colors.black54,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
+    // Two emptinesses, said differently: a bazaar that sold nothing is a fact
+    // about the bazaar, while a search that matched nothing is a fact about
+    // the search, and only one of them is fixed by clearing the filters.
+    final filtered =
+        _searchController.text.trim().isNotEmpty ||
+        context.read<OrdersCubit>().state.paymentMethod != 'All';
+
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            filtered ? Icons.search_off_outlined : Icons.receipt_long_outlined,
+            size: 28,
+            color: Colors.black26,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            filtered
+                ? 'No orders match that search.'
+                : 'This bazaar has not sold anything yet.',
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: Colors.black45),
+          ),
+        ],
       ),
     );
   }
