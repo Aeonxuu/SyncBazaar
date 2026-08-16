@@ -292,6 +292,33 @@ class _VenueDraft {
   final List<PaymentMethodMeta> methods;
 }
 
+/// The hairline shared by every control on the add-a-method row.
+const Color _venueControlBorder = Color(0xFFDCDCE3);
+
+/// The filled style used by the stacked fields on the Details step, where a
+/// field sits alone on its line and has nothing beside it to match.
+InputDecoration _venuePlainDecoration({required String hint}) =>
+    InputDecoration(
+      hintText: hint,
+      hintStyle: const TextStyle(color: Colors.black38),
+      filled: true,
+      fillColor: AppColors.inputFill,
+      isDense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide.none,
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide.none,
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: AppColors.primary),
+      ),
+    );
+
 InputDecoration _venueFieldDecoration({required String hint}) =>
     InputDecoration(
       hintText: hint,
@@ -912,35 +939,24 @@ class _VenueEditorDialogState extends State<_VenueEditorDialog> {
           children: [
             Expanded(
               flex: 2,
-              child: TextField(
+              child: _VenueRowField(
                 controller: _methodName,
-                textCapitalization: TextCapitalization.characters,
-                // Centred in a fixed box rather than sized by its own
-                // padding, so the height is stated once and shared.
-                textAlignVertical: TextAlignVertical.center,
-                onChanged: (_) => setState(() => _methodError = null),
-                onSubmitted: (_) => _addMethod(),
-                style: theme.textTheme.bodyMedium,
-                decoration: _venueOutlinedDecoration(
-                  hint: 'e.g. GCASH',
-                  height: _controlHeight,
-                ),
+                hint: 'e.g. GCASH',
+                height: _controlHeight,
+                capitalize: true,
+                onChanged: () => setState(() => _methodError = null),
+                onSubmitted: _addMethod,
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
               flex: 3,
-              child: TextField(
+              child: _VenueRowField(
                 controller: _methodField,
+                hint: 'Asks for… (optional)',
+                height: _controlHeight,
                 maxLength: _fieldLabelMax,
-                buildCounter: _noCounter,
-                textAlignVertical: TextAlignVertical.center,
-                onSubmitted: (_) => _addMethod(),
-                style: theme.textTheme.bodyMedium,
-                decoration: _venueOutlinedDecoration(
-                  hint: 'Asks for… (optional)',
-                  height: _controlHeight,
-                ),
+                onSubmitted: _addMethod,
               ),
             ),
             const SizedBox(width: 8),
@@ -1026,64 +1042,6 @@ Widget? _noCounter(
   required int? maxLength,
   required bool isFocused,
 }) => null;
-
-/// Outlined rather than filled, matching the Add button on the same row.
-///
-/// A grey fill beside a white bordered button made the three controls read
-/// as two different kinds of thing when they are one row doing one job.
-InputDecoration _venueOutlinedDecoration({
-  required String hint,
-  double height = 44,
-}) => InputDecoration(
-  hintText: hint,
-  hintStyle: const TextStyle(color: Colors.black38),
-  filled: true,
-  fillColor: Colors.white,
-  isDense: true,
-  // The decoration paints its border around the *content*, not around
-  // whatever box the field is given -- so a SizedBox around the field
-  // moved nothing, and the outline stayed short while the layout box
-  // matched. Constraining the decoration is what sizes the border.
-  constraints: BoxConstraints(minHeight: height, maxHeight: height),
-  contentPadding: const EdgeInsets.symmetric(horizontal: 14),
-  border: OutlineInputBorder(
-    borderRadius: BorderRadius.circular(8),
-    borderSide: const BorderSide(color: _venueControlBorder),
-  ),
-  enabledBorder: OutlineInputBorder(
-    borderRadius: BorderRadius.circular(8),
-    borderSide: const BorderSide(color: _venueControlBorder),
-  ),
-  focusedBorder: OutlineInputBorder(
-    borderRadius: BorderRadius.circular(8),
-    borderSide: const BorderSide(color: AppColors.primary),
-  ),
-);
-
-/// The hairline shared by every control on the add-a-method row.
-const Color _venueControlBorder = Color(0xFFDCDCE3);
-
-InputDecoration _venuePlainDecoration({required String hint}) =>
-    InputDecoration(
-      hintText: hint,
-      hintStyle: const TextStyle(color: Colors.black38),
-      filled: true,
-      fillColor: AppColors.inputFill,
-      isDense: true,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: BorderSide.none,
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: BorderSide.none,
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: AppColors.primary),
-      ),
-    );
 
 class _VenueSectionLabel extends StatelessWidget {
   const _VenueSectionLabel(this.text);
@@ -1387,6 +1345,94 @@ class _AddMethodButtonState extends State<_AddMethodButton> {
               fontWeight: FontWeight.w600,
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A text field on the add-a-method row.
+///
+/// The border is painted by a Container here, and the field inside carries no
+/// decoration of its own. An InputDecorator sizes its outline from its content
+/// and padding by rules that do not simply obey a height -- three attempts to
+/// match it to the button beside it measured 44 in a headless test while
+/// rendering visibly shorter on screen. A Container is exactly the height it
+/// is given, which is the property this row needs.
+class _VenueRowField extends StatefulWidget {
+  const _VenueRowField({
+    required this.controller,
+    required this.hint,
+    required this.height,
+    this.maxLength,
+    this.capitalize = false,
+    this.onChanged,
+    this.onSubmitted,
+  });
+
+  final TextEditingController controller;
+  final String hint;
+  final double height;
+  final int? maxLength;
+  final bool capitalize;
+  final VoidCallback? onChanged;
+  final VoidCallback? onSubmitted;
+
+  @override
+  State<_VenueRowField> createState() => _VenueRowFieldState();
+}
+
+class _VenueRowFieldState extends State<_VenueRowField> {
+  late final FocusNode _focus;
+
+  @override
+  void initState() {
+    super.initState();
+    _focus = FocusNode()..addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _focus.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: widget.height,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      alignment: Alignment.centerLeft,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: _focus.hasFocus ? AppColors.primary : _venueControlBorder,
+        ),
+      ),
+      child: TextField(
+        controller: widget.controller,
+        focusNode: _focus,
+        maxLength: widget.maxLength,
+        buildCounter: widget.maxLength == null ? null : _noCounter,
+        textCapitalization: widget.capitalize
+            ? TextCapitalization.characters
+            : TextCapitalization.none,
+        onChanged: widget.onChanged == null ? null : (_) => widget.onChanged!(),
+        onSubmitted: widget.onSubmitted == null
+            ? null
+            : (_) => widget.onSubmitted!(),
+        style: Theme.of(context).textTheme.bodyMedium,
+        // Stripped bare: every visible edge belongs to the Container above.
+        decoration: InputDecoration(
+          hintText: widget.hint,
+          hintStyle: const TextStyle(color: Colors.black38),
+          isDense: true,
+          filled: false,
+          contentPadding: EdgeInsets.zero,
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
         ),
       ),
     );

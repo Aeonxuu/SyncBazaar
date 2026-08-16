@@ -99,23 +99,18 @@ void main() {
     // and passed while the two were visibly different heights: the button's
     // padded tap target lays out larger than the box it is handed, so the
     // rect that mattered was never the one being read.
-    // The InputDecorator rather than the TextField: the outline is painted
-    // around the decoration, so that is the box a reader actually sees.
-    final name = tester.getRect(
-      find
-          .descendant(
-            of: find.widgetWithText(TextField, 'e.g. GCASH'),
-            matching: find.byType(InputDecorator),
-          )
-          .first,
+    // The box that paints the border, which is the Container wrapping each
+    // field -- not the TextField (always the height it is handed) and not
+    // its InputDecorator (sized from the text, and 20px here). Reading
+    // either of those is how three earlier attempts at this test passed
+    // while the row was visibly uneven on screen.
+    Rect boxAround(Finder field) => tester.getRect(
+      find.ancestor(of: field, matching: find.byType(Container)).first,
     );
-    final asks = tester.getRect(
-      find
-          .descendant(
-            of: find.widgetWithText(TextField, 'Asks for… (optional)').last,
-            matching: find.byType(InputDecorator),
-          )
-          .first,
+
+    final name = boxAround(find.widgetWithText(TextField, 'e.g. GCASH'));
+    final asks = boxAround(
+      find.widgetWithText(TextField, 'Asks for… (optional)').last,
     );
     final add = tester.getRect(find.widgetWithText(InkWell, 'Add'));
 
