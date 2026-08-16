@@ -538,6 +538,13 @@ class _VenueEditorDialogState extends State<_VenueEditorDialog> {
   /// label on a till.
   static const int _fieldLabelMax = 28;
 
+  /// One height for every control on the add-a-method row.
+  ///
+  /// The button was pinned to 44 while the two fields took whatever their
+  /// decoration worked out to, so three controls meant to read as one row
+  /// stood at two different heights.
+  static const double _controlHeight = 44;
+
   bool get _isCreate => widget.existing == null;
 
   @override
@@ -901,39 +908,51 @@ class _VenueEditorDialogState extends State<_VenueEditorDialog> {
           ),
         const SizedBox(height: 12),
         Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
               flex: 2,
-              child: TextField(
-                controller: _methodName,
-                textCapitalization: TextCapitalization.characters,
-                onChanged: (_) => setState(() => _methodError = null),
-                onSubmitted: (_) => _addMethod(),
-                style: theme.textTheme.bodyMedium,
-                decoration: _venuePlainDecoration(hint: 'e.g. GCASH'),
+              child: SizedBox(
+                height: _controlHeight,
+                child: TextField(
+                  controller: _methodName,
+                  textCapitalization: TextCapitalization.characters,
+                  // Centred in a fixed box rather than sized by its own
+                  // padding, so the height is stated once and shared.
+                  textAlignVertical: TextAlignVertical.center,
+                  onChanged: (_) => setState(() => _methodError = null),
+                  onSubmitted: (_) => _addMethod(),
+                  style: theme.textTheme.bodyMedium,
+                  decoration: _venuePlainDecoration(hint: 'e.g. GCASH'),
+                ),
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
               flex: 3,
-              child: TextField(
-                controller: _methodField,
-                maxLength: _fieldLabelMax,
-                buildCounter: _noCounter,
-                onSubmitted: (_) => _addMethod(),
-                style: theme.textTheme.bodyMedium,
-                decoration: _venuePlainDecoration(hint: 'Asks for… (optional)'),
+              child: SizedBox(
+                height: _controlHeight,
+                child: TextField(
+                  controller: _methodField,
+                  maxLength: _fieldLabelMax,
+                  buildCounter: _noCounter,
+                  textAlignVertical: TextAlignVertical.center,
+                  onSubmitted: (_) => _addMethod(),
+                  style: theme.textTheme.bodyMedium,
+                  decoration: _venuePlainDecoration(
+                    hint: 'Asks for… (optional)',
+                  ),
+                ),
               ),
             ),
             const SizedBox(width: 8),
             SizedBox(
-              height: 44,
+              height: _controlHeight,
               child: OutlinedButton(
                 onPressed: _addMethod,
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppColors.primary,
                   side: const BorderSide(color: Color(0xFFDCDCE3)),
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),

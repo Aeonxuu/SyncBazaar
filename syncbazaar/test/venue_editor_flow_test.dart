@@ -64,4 +64,37 @@ void main() {
     );
     expect(find.text('Robinsons Lipa'), findsOneWidget);
   });
+
+  testWidgets('the add-a-method controls are all one height', (tester) async {
+    // Three controls meant to read as one row stood at two different
+    // heights: the button was pinned and the fields sized themselves.
+    final cubit = SettingsCubit(SettingsRepository());
+    await cubit.load();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: BlocProvider.value(
+          value: cubit,
+          child: const Scaffold(body: VenuesScreen(user: owner)),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Add venue'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'e.g. SM City Lucena'),
+      'Robinsons Lipa',
+    );
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+
+    final name = tester.getRect(find.widgetWithText(TextField, 'e.g. GCASH'));
+    final add = tester.getRect(find.widgetWithText(OutlinedButton, 'Add'));
+
+    expect(name.height, add.height);
+    // And they sit on the same line, not merely at the same size.
+    expect(name.top, add.top);
+  });
 }
