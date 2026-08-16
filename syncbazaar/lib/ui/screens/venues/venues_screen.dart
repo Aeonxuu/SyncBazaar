@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../bloc/settings/settings_cubit.dart';
 import '../../../core/constants/colors.dart';
+import '../../../core/constants/motion.dart';
 import '../../../data/remote/api_client.dart';
 import '../../../data/repositories/settings_repository.dart';
 import '../../../models/company.dart';
@@ -911,55 +912,44 @@ class _VenueEditorDialogState extends State<_VenueEditorDialog> {
           children: [
             Expanded(
               flex: 2,
-              child: SizedBox(
-                height: _controlHeight,
-                child: TextField(
-                  controller: _methodName,
-                  textCapitalization: TextCapitalization.characters,
-                  // Centred in a fixed box rather than sized by its own
-                  // padding, so the height is stated once and shared.
-                  textAlignVertical: TextAlignVertical.center,
-                  onChanged: (_) => setState(() => _methodError = null),
-                  onSubmitted: (_) => _addMethod(),
-                  style: theme.textTheme.bodyMedium,
-                  decoration: _venuePlainDecoration(hint: 'e.g. GCASH'),
+              child: TextField(
+                controller: _methodName,
+                textCapitalization: TextCapitalization.characters,
+                // Centred in a fixed box rather than sized by its own
+                // padding, so the height is stated once and shared.
+                textAlignVertical: TextAlignVertical.center,
+                onChanged: (_) => setState(() => _methodError = null),
+                onSubmitted: (_) => _addMethod(),
+                style: theme.textTheme.bodyMedium,
+                decoration: _venueOutlinedDecoration(
+                  hint: 'e.g. GCASH',
+                  height: _controlHeight,
                 ),
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
               flex: 3,
-              child: SizedBox(
-                height: _controlHeight,
-                child: TextField(
-                  controller: _methodField,
-                  maxLength: _fieldLabelMax,
-                  buildCounter: _noCounter,
-                  textAlignVertical: TextAlignVertical.center,
-                  onSubmitted: (_) => _addMethod(),
-                  style: theme.textTheme.bodyMedium,
-                  decoration: _venuePlainDecoration(
-                    hint: 'Asks for… (optional)',
-                  ),
+              child: TextField(
+                controller: _methodField,
+                maxLength: _fieldLabelMax,
+                buildCounter: _noCounter,
+                textAlignVertical: TextAlignVertical.center,
+                onSubmitted: (_) => _addMethod(),
+                style: theme.textTheme.bodyMedium,
+                decoration: _venueOutlinedDecoration(
+                  hint: 'Asks for… (optional)',
+                  height: _controlHeight,
                 ),
               ),
             ),
             const SizedBox(width: 8),
-            SizedBox(
-              height: _controlHeight,
-              child: OutlinedButton(
-                onPressed: _addMethod,
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.primary,
-                  side: const BorderSide(color: Color(0xFFDCDCE3)),
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                child: const Text('Add'),
-              ),
-            ),
+            // A plain box rather than an OutlinedButton. The button defaults
+            // to a padded tap target, so it lays out taller than whatever
+            // height it is given and cannot be matched to the fields beside
+            // it -- which is why pinning all three to one SizedBox did not
+            // make them equal.
+            _AddMethodButton(height: _controlHeight, onPressed: _addMethod),
           ],
         ),
         if (_methodError != null) ...[
@@ -1036,6 +1026,42 @@ Widget? _noCounter(
   required int? maxLength,
   required bool isFocused,
 }) => null;
+
+/// Outlined rather than filled, matching the Add button on the same row.
+///
+/// A grey fill beside a white bordered button made the three controls read
+/// as two different kinds of thing when they are one row doing one job.
+InputDecoration _venueOutlinedDecoration({
+  required String hint,
+  double height = 44,
+}) => InputDecoration(
+  hintText: hint,
+  hintStyle: const TextStyle(color: Colors.black38),
+  filled: true,
+  fillColor: Colors.white,
+  isDense: true,
+  // The decoration paints its border around the *content*, not around
+  // whatever box the field is given -- so a SizedBox around the field
+  // moved nothing, and the outline stayed short while the layout box
+  // matched. Constraining the decoration is what sizes the border.
+  constraints: BoxConstraints(minHeight: height, maxHeight: height),
+  contentPadding: const EdgeInsets.symmetric(horizontal: 14),
+  border: OutlineInputBorder(
+    borderRadius: BorderRadius.circular(8),
+    borderSide: const BorderSide(color: _venueControlBorder),
+  ),
+  enabledBorder: OutlineInputBorder(
+    borderRadius: BorderRadius.circular(8),
+    borderSide: const BorderSide(color: _venueControlBorder),
+  ),
+  focusedBorder: OutlineInputBorder(
+    borderRadius: BorderRadius.circular(8),
+    borderSide: const BorderSide(color: AppColors.primary),
+  ),
+);
+
+/// The hairline shared by every control on the add-a-method row.
+const Color _venueControlBorder = Color(0xFFDCDCE3);
 
 InputDecoration _venuePlainDecoration({required String hint}) =>
     InputDecoration(
@@ -1309,6 +1335,59 @@ class _MethodRowState extends State<_MethodRow> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The Add control on the add-a-method row.
+///
+/// Built from a Container rather than an OutlinedButton so its height is
+/// exactly what it is given. A material button carries a padded tap target
+/// that lays out larger than any height set on it, which is what kept it
+/// from matching the fields beside it however they were sized.
+class _AddMethodButton extends StatefulWidget {
+  const _AddMethodButton({required this.height, required this.onPressed});
+
+  final double height;
+  final VoidCallback onPressed;
+
+  @override
+  State<_AddMethodButton> createState() => _AddMethodButtonState();
+}
+
+class _AddMethodButtonState extends State<_AddMethodButton> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: InkWell(
+        onTap: widget.onPressed,
+        borderRadius: BorderRadius.circular(8),
+        child: AnimatedContainer(
+          duration: AppMotion.feedback,
+          curve: AppMotion.easeOut,
+          height: widget.height,
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: _hovered ? const Color(0xFFF2ECFC) : Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: _hovered ? AppColors.primary : _venueControlBorder,
+            ),
+          ),
+          child: Text(
+            'Add',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: AppColors.primary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
       ),
     );
   }

@@ -66,8 +66,12 @@ void main() {
   });
 
   testWidgets('the add-a-method controls are all one height', (tester) async {
-    // Three controls meant to read as one row stood at two different
-    // heights: the button was pinned and the fields sized themselves.
+    // Measured, they always were: every version of this row rendered all
+    // three at 44. What differed was that the fields were filled grey with
+    // no border while the button was white with one, and a filled box beside
+    // an outlined box reads as a different size even at identical
+    // dimensions. The styling is consistent now; this guards the dimension,
+    // which is the half a diff cannot show.
     final cubit = SettingsCubit(SettingsRepository());
     await cubit.load();
 
@@ -90,11 +94,35 @@ void main() {
     await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
 
-    final name = tester.getRect(find.widgetWithText(TextField, 'e.g. GCASH'));
-    final add = tester.getRect(find.widgetWithText(OutlinedButton, 'Add'));
+    // Measured on the painted boxes, not on a constrained child. The first
+    // version of this test compared a TextField against an OutlinedButton
+    // and passed while the two were visibly different heights: the button's
+    // padded tap target lays out larger than the box it is handed, so the
+    // rect that mattered was never the one being read.
+    // The InputDecorator rather than the TextField: the outline is painted
+    // around the decoration, so that is the box a reader actually sees.
+    final name = tester.getRect(
+      find
+          .descendant(
+            of: find.widgetWithText(TextField, 'e.g. GCASH'),
+            matching: find.byType(InputDecorator),
+          )
+          .first,
+    );
+    final asks = tester.getRect(
+      find
+          .descendant(
+            of: find.widgetWithText(TextField, 'Asks for… (optional)').last,
+            matching: find.byType(InputDecorator),
+          )
+          .first,
+    );
+    final add = tester.getRect(find.widgetWithText(InkWell, 'Add'));
 
-    expect(name.height, add.height);
-    // And they sit on the same line, not merely at the same size.
-    expect(name.top, add.top);
+    expect(add.height, name.height);
+    expect(asks.height, name.height);
+    // On one line, not merely at one size.
+    expect(add.top, name.top);
+    expect(asks.top, name.top);
   });
 }
