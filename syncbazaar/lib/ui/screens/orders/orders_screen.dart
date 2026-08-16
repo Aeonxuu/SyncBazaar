@@ -234,13 +234,17 @@ class _OrdersScreenState extends State<OrdersScreen> {
             flex: 2,
             child: Text('UNIT PRICE', style: style, textAlign: TextAlign.right),
           ),
+          // Fixed width and centred. A count is one or two characters, so a
+          // flex column leaves it stranded against one edge of a gap it does
+          // not need -- and the slack it was holding is what makes room for
+          // the full word.
           SizedBox(
-            width: 48,
-            child: Text('QTY', style: style, textAlign: TextAlign.right),
+            width: 92,
+            child: Text('QUANTITY', style: style, textAlign: TextAlign.center),
           ),
           Expanded(
             flex: 2,
-            child: Text('TOTAL', style: style, textAlign: TextAlign.right),
+            child: Text('TOTAL', style: style, textAlign: TextAlign.center),
           ),
         ],
       ),
@@ -328,10 +332,10 @@ class _OrdersScreenState extends State<OrdersScreen> {
             ),
           ),
           SizedBox(
-            width: 48,
+            width: 92,
             child: Text(
               '${record.quantity}',
-              textAlign: TextAlign.right,
+              textAlign: TextAlign.center,
               style: theme.textTheme.bodyMedium,
             ),
           ),
@@ -339,7 +343,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
             flex: 2,
             child: Text(
               formatPeso(record.total),
-              textAlign: TextAlign.right,
+              textAlign: TextAlign.center,
               style: theme.textTheme.bodyMedium?.copyWith(
                 fontWeight: FontWeight.w700,
               ),
