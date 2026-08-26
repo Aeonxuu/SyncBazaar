@@ -206,6 +206,25 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
   }
 
   Future<void> _refresh() async {
+    // The repositories keep a per-vendor cache marker and will not refetch once
+    // loaded, so rebuilding the future alone re-read the same figures behind a
+    // spinner. A pull to refresh has to ask the server, or it is theatre.
+    final salesRepository = context.read<SalesRepository>();
+    final productRepository = context.read<ProductRepository>();
+    final eventRepository = context.read<EventRepository>();
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await productRepository.refresh();
+      await eventRepository.refresh();
+      await salesRepository.refresh();
+    } on ApiException catch (error) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Could not refresh: ${error.message}')),
+      );
+    }
+    if (!mounted) {
+      return;
+    }
     setState(() {
       _futureData = _loadData();
     });

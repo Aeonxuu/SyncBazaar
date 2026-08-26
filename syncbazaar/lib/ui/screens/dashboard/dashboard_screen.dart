@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../data/remote/api_client.dart';
 import '../../../bloc/dashboard/dashboard_cubit.dart';
 import '../../../core/constants/colors.dart';
 import '../../../core/constants/motion.dart';
@@ -53,6 +54,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _showBazaarSummary = false;
   bool _showTransactionHistory = false;
 
+  /// Pull to refresh: actually goes back to the server.
+  ///
+  /// A failure is reported rather than swallowed. The whole point of pulling
+  /// down is to find out what is true now, and silently keeping the old
+  /// figures answers the opposite question.
+  Future<void> _refresh(BuildContext context, DashboardCubit cubit) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await cubit.refreshFromServer(widget.user);
+    } on ApiException catch (error) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Could not refresh: ${error.message}')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final dashboardCubit = context.read<DashboardCubit>();
@@ -62,7 +79,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         return Container(
           color: AppColors.background,
           child: RefreshIndicator(
-            onRefresh: () => dashboardCubit.load(widget.user),
+            onRefresh: () => _refresh(context, dashboardCubit),
             color: AppColors.primary,
             child: LayoutBuilder(
               builder: (context, constraints) {

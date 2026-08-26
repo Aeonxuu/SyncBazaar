@@ -137,6 +137,27 @@ class DashboardCubit extends Cubit<DashboardState> {
   Map<int, String> _productNameById = const {};
   Map<int, String> _variantLabelByOptionId = const {};
 
+  /// Goes back to the server, then rebuilds the dashboard from what it says.
+  ///
+  /// [load] alone re-reads what the repositories already hold, and they keep a
+  /// per-vendor cache marker so they will not refetch once loaded. That is
+  /// right for ordinary navigation and wrong for a pull to refresh, which
+  /// showed a spinner and the same figures: a sale rung up on another device
+  /// never appeared, and the sync looked broken when it was not.
+  ///
+  /// Ordered by dependency. The catalogue first, since an allocation is a
+  /// variant id until the products are known; then bazaars; then sales, which
+  /// are recorded against a bazaar's stock rows.
+  ///
+  /// Throws when the server cannot be reached, so the screen can say so rather
+  /// than presenting stale figures as fresh ones.
+  Future<void> refreshFromServer(AppUser user) async {
+    await _productRepository.refresh();
+    await _eventRepository.refresh();
+    await _salesRepository.refresh();
+    await load(user);
+  }
+
   Future<void> load(AppUser user) async {
     final rawEvents = await _eventRepository.listVisibleForUser(user);
     final events = rawEvents;
