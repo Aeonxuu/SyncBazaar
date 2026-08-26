@@ -190,6 +190,13 @@ class EventRepository {
 
   void rememberProposal(int eventId) => _proposalEventIds.add(eventId);
 
+  /// Whether the server is holding this bazaar as an unapproved proposal.
+  ///
+  /// Synchronous and unloaded on purpose: the caller is the screen that has
+  /// just created the bazaar, and it needs to describe the outcome truthfully
+  /// rather than assume the request was honoured.
+  bool isProposal(int eventId) => _proposalEventIds.contains(eventId);
+
   Future<void> _loadFromApi(
     AuthRepository auth,
     ProductRepository products,
@@ -301,7 +308,7 @@ class EventRepository {
     // assigned. Inventing one locally and reconciling later would mean the
     // allocations, and every sale rung against them, pointing at a bazaar that
     // does not exist anywhere else.
-    final serverId = await _createEventOnServer(
+    final server = await _createEventOnServer(
       name: name,
       companyId: companyId,
       startDate: startDate,
@@ -310,7 +317,10 @@ class EventRepository {
       isApproved: isApproved,
     );
 
-    final id = serverId ?? _nextLocalEventId();
+    final id = server?.id ?? _nextLocalEventId();
+    // The server's verdict where there is one, our own intent only in the
+    // in-memory build where there is no server to ask.
+    final approved = server?.approved ?? isApproved;
     final event = BazaarEvent(
       id: id,
       name: name,
@@ -325,7 +335,7 @@ class EventRepository {
     // to sell against. It exists on the server only so the approval request
     // has an event to hang off, and is deliberately not added here: the till,
     // the sales list and the dashboard all read this collection.
-    if (isApproved) {
+    if (approved) {
       _events.add(event);
       _allocationsByEventId[id] = Map<String, int>.from(
         allocationsByAllocationKey,
@@ -340,7 +350,15 @@ class EventRepository {
       ? 1
       : _events.map((e) => e.id).reduce((a, b) => a > b ? a : b) + 1;
 
-  /// Creates the bazaar and its stock allocations, returning the server's id.
+  /// Creates the bazaar and its stock allocations, returning the server's id
+  /// **and the approval state the server actually recorded**.
+  ///
+  /// The approval state is read back rather than assumed because the two have
+  /// been seen to disagree: the server has hardcoded every new bazaar to
+  /// unapproved regardless of what was sent. Believing the request instead of
+  /// the response put a bazaar in the till that the server considered a
+  /// proposal, so sales were rung against something that vanished on the next
+  /// reload. Whatever comes back wins.
   ///
   /// Null without a session, which is the in-memory build.
   ///
@@ -348,7 +366,7 @@ class EventRepository {
   /// bazaar that exists on one tablet and nowhere else is worse than none at
   /// all, because staff will allocate stock to it and sell against it before
   /// anyone notices. The caller reports the failure and the user tries again.
-  Future<int?> _createEventOnServer({
+  Future<({int id, bool approved})?> _createEventOnServer({
     required String name,
     required int companyId,
     required DateTime startDate,
@@ -386,12 +404,15 @@ class EventRepository {
             as Map<String, dynamic>;
 
     final eventId = (created['id'] as num).toInt();
+    // The server's answer, falling back to what was asked for only when it
+    // declines to say.
+    final approved = (created['is_approved'] as bool?) ?? isApproved;
 
     // Stock is committed when the proposal is approved, not when it is made.
     // Reserving it here would let an employee whose request is never answered
     // hold inventory that nobody can sell.
-    if (!isApproved) {
-      return eventId;
+    if (!approved) {
+      return (id: eventId, approved: false);
     }
 
     final stockIds = <String, int>{};
@@ -420,7 +441,7 @@ class EventRepository {
     }
     _stockIdsByEventId[eventId] = stockIds;
 
-    return eventId;
+    return (id: eventId, approved: approved);
   }
 
   /// The venue's street address, which the server requires on an event.

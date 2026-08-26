@@ -76,6 +76,13 @@ class ApprovalApiMapper {
   static ApprovalType _typeFrom(String? code) => switch (code) {
     'ST' => ApprovalType.stock,
     'SA' => ApprovalType.soa,
+    // The server raises this itself when a bazaar is created. It is the same
+    // thing this app calls a stock request: proposing a bazaar *is* proposing
+    // the allocation that goes with it, which is why there is no separate
+    // type here. Without this line it fell through to the SA default below and
+    // a proposed bazaar appeared under Statement of Account, where an owner
+    // looking for a bazaar would never find it.
+    'EC' => ApprovalType.stock,
     // The server's own default is SA, so an unknown code reads as that
     // rather than throwing a whole approvals screen away.
     _ => ApprovalType.soa,

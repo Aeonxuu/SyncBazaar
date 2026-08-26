@@ -429,8 +429,23 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
       await inventoryCubit.load();
       await ordersCubit.load();
 
+      // Described by what the server actually did, not by what was asked for.
+      // An owner's bazaar is meant to go live immediately, but the server can
+      // still file it as a proposal, and reporting "published" over the top of
+      // that is how a bazaar came to be sold against on one machine while
+      // being invisible everywhere else. Once the server honours the role, an
+      // owner stops seeing the pending wording without anything changing here.
+      final pending = eventRepository.isProposal(createdEvent.id);
       messenger.showSnackBar(
-        const SnackBar(content: Text('Bazaar published successfully.')),
+        SnackBar(
+          content: Text(
+            pending
+                ? 'Bazaar submitted for approval. It will not appear in Sales '
+                      'until it is approved.'
+                : 'Bazaar published successfully.',
+          ),
+          duration: Duration(seconds: pending ? 5 : 4),
+        ),
       );
       await _resetPreBazaarForm();
     }
