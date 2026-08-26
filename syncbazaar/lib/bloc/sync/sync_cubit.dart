@@ -23,7 +23,19 @@ class SyncCubit extends Cubit<SyncState> {
 
   Future<void> syncNow() async {
     emit(state.copyWith(isSyncing: true, lastMessage: 'Syncing...'));
-    await _syncService.syncNow();
-    emit(state.copyWith(isSyncing: false, lastMessage: 'Synced just now'));
+    try {
+      final outcome = await _syncService.syncNow();
+      // The service's own words. "Synced just now" was printed whatever
+      // happened, including when nothing had been sent and the server was
+      // never reached.
+      emit(state.copyWith(isSyncing: false, lastMessage: outcome.message));
+    } catch (_) {
+      emit(
+        state.copyWith(
+          isSyncing: false,
+          lastMessage: 'Sync failed. Tap to try again.',
+        ),
+      );
+    }
   }
 }

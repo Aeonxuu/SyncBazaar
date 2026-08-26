@@ -1,45 +1,131 @@
-import '../data/remote/api_service.dart';
-import '../data/repositories/approvals_repository.dart';
-import '../data/repositories/orders_repository.dart';
+import '../data/repositories/event_repository.dart';
+import '../data/repositories/product_repository.dart';
 import '../data/repositories/sales_repository.dart';
 import 'notification_service.dart';
+import 'sale_upload_service.dart';
 
+/// What the sidebar's sync control does: push up, then pull down.
+///
+/// It used to hand a count of unsynced rows to a stub that waited 600ms and
+/// returned, then announce "Sync completed: 3 sale(s)". Nothing left the
+/// device. A control that reports success for work it never did is worse than
+/// no control, because it is the one thing a cashier would trust after a day
+/// of selling with no signal.
+///
+/// Both halves matter and in this order. Sales rung up offline are the only
+/// records that exist nowhere else, so they go first; refreshing before
+/// uploading would overwrite the local picture while a sale was still waiting.
 class SyncService {
   SyncService({
-    required ApiService apiService,
     required SalesRepository salesRepository,
-    required OrdersRepository ordersRepository,
-    required ApprovalsRepository approvalsRepository,
+    required EventRepository eventRepository,
+    required ProductRepository productRepository,
     required NotificationService notificationService,
-  }) : _apiService = apiService,
-       _salesRepository = salesRepository,
-       _ordersRepository = ordersRepository,
-       _approvalsRepository = approvalsRepository,
-       _notificationService = notificationService;
+    SaleUploadService? saleUploader,
+  }) : _salesRepository = salesRepository,
+       _eventRepository = eventRepository,
+       _productRepository = productRepository,
+       _notificationService = notificationService,
+       _saleUploader = saleUploader;
 
-  final ApiService _apiService;
   final SalesRepository _salesRepository;
-  final OrdersRepository _ordersRepository;
-  final ApprovalsRepository _approvalsRepository;
+  final EventRepository _eventRepository;
+  final ProductRepository _productRepository;
   final NotificationService _notificationService;
 
-  Future<void> syncNow() async {
-    final unsyncedSales = await _salesRepository.listUnsyncedSales();
-    final unsyncedOrders = await _ordersRepository.listUnsyncedOrders();
-    final pendingApprovals = await _approvalsRepository.listPending();
+  /// Absent in the in-memory build, where there is nowhere to upload to.
+  final SaleUploadService? _saleUploader;
 
-    final payload = <Map<String, dynamic>>[
-      {'sales': unsyncedSales.length},
-      {'orders': unsyncedOrders.length},
-      {'approvals': pendingApprovals.length},
-    ];
+  Future<SyncOutcome> syncNow() async {
+    final uploader = _saleUploader;
+    if (uploader == null) {
+      return const SyncOutcome(
+        uploaded: 0,
+        stillWaiting: 0,
+        refreshed: false,
+        message: 'Nothing to sync on this device.',
+      );
+    }
 
-    await _apiService.syncPayload(payload);
+    // Up first: an offline sale exists only here until it lands.
+    final pendingBefore = (await _salesRepository.listUnsyncedSales()).length;
+    final upload = await uploader.uploadPending();
 
-    await _notificationService.add(
-      type: 'sync',
-      message:
-          'Sync completed: ${unsyncedSales.length} sale(s), ${unsyncedOrders.length} order(s).',
+    // Then down. Ordered by dependency, the same as a pull to refresh: the
+    // catalogue, then bazaars, then the sales recorded against their stock.
+    var refreshed = false;
+    try {
+      await _productRepository.refresh();
+      await _eventRepository.refresh();
+      await _salesRepository.refresh();
+      refreshed = true;
+    } catch (_) {
+      // The upload may still have succeeded, and saying so is more useful than
+      // reporting a blanket failure that hides it.
+      refreshed = false;
+    }
+
+    final outcome = SyncOutcome(
+      uploaded: upload.uploaded,
+      stillWaiting: upload.skipped,
+      refreshed: refreshed,
+      message: _describe(
+        uploaded: upload.uploaded,
+        stillWaiting: upload.skipped,
+        refreshed: refreshed,
+        pendingBefore: pendingBefore,
+      ),
     );
+
+    await _notificationService.add(type: 'sync', message: outcome.message);
+    return outcome;
   }
+
+  /// Phrased for a cashier, and never claiming more than happened.
+  static String _describe({
+    required int uploaded,
+    required int stillWaiting,
+    required bool refreshed,
+    required int pendingBefore,
+  }) {
+    if (stillWaiting > 0) {
+      return uploaded > 0
+          ? 'Sent $uploaded sale(s). $stillWaiting still waiting for a '
+                'connection.'
+          : 'Could not reach the server. $stillWaiting sale(s) still waiting.';
+    }
+    if (uploaded > 0) {
+      return refreshed
+          ? 'Sent $uploaded sale(s) and updated from the server.'
+          : 'Sent $uploaded sale(s), but could not refresh.';
+    }
+    if (!refreshed) {
+      return 'Could not reach the server.';
+    }
+    return pendingBefore == 0
+        ? 'Up to date.'
+        : 'Up to date. Everything was already sent.';
+  }
+}
+
+/// What one sync achieved, so the caller can report it rather than guess.
+class SyncOutcome {
+  const SyncOutcome({
+    required this.uploaded,
+    required this.stillWaiting,
+    required this.refreshed,
+    required this.message,
+  });
+
+  final int uploaded;
+
+  /// Sales the server still does not hold, usually for want of a connection.
+  final int stillWaiting;
+
+  final bool refreshed;
+
+  /// Ready to show a person.
+  final String message;
+
+  bool get isComplete => stillWaiting == 0 && refreshed;
 }

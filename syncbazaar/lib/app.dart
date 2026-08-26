@@ -19,7 +19,6 @@ import 'bloc/sync/sync_cubit.dart';
 import 'core/constants/colors.dart';
 import 'core/routing/app_router.dart';
 import 'core/theme/app_theme.dart';
-import 'data/remote/api_service.dart';
 import 'data/repositories/approvals_repository.dart';
 import 'data/repositories/auth_repository.dart';
 import 'data/repositories/event_repository.dart';
@@ -128,11 +127,13 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
     _settingsRepository = SettingsRepository(auth: session);
     _notificationService = NotificationService();
     _syncService = SyncService(
-      apiService: ApiService(),
       salesRepository: _salesRepository,
-      ordersRepository: _ordersRepository,
-      approvalsRepository: _approvalsRepository,
+      eventRepository: _eventRepository,
+      productRepository: _productRepository,
       notificationService: _notificationService,
+      // Null without a session, which is the in-memory build: there is nowhere
+      // to push to, and sync says so rather than pretending.
+      saleUploader: _saleUploader,
     );
     if (widget.seedMockData) {
       _seedMockData();
