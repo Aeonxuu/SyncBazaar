@@ -79,6 +79,9 @@ class SettingsCubit extends Cubit<SettingsState> {
     await _settingsRepository.upsertCompanyConfiguration(
       company: company,
       paymentMethods: paymentMethods,
+      // From the venue editor, which loaded these methods with their QRs
+      // attached, so one arriving without means the seller removed it.
+      clearMissingQr: true,
     );
     await load();
   }
@@ -89,7 +92,6 @@ class SettingsCubit extends Cubit<SettingsState> {
     String contact = '',
     double incentivePercent = 0,
     double bufferPercent = 0,
-    String? qrImagePath,
     List<PaymentMethodMeta>? paymentMethods,
   }) async {
     final created = await _settingsRepository.createCompany(
@@ -98,11 +100,12 @@ class SettingsCubit extends Cubit<SettingsState> {
       contact: contact,
       incentivePercent: incentivePercent,
       bufferPercent: bufferPercent,
-      qrImagePath: qrImagePath,
     );
     await _settingsRepository.upsertCompanyConfiguration(
       company: created,
       paymentMethods: paymentMethods ?? const [PaymentMethodMeta(name: 'CASH')],
+      // From the venue editor, so a method with no QR means one was removed.
+      clearMissingQr: true,
     );
     await load();
   }

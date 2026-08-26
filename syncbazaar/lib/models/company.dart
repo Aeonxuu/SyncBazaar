@@ -6,7 +6,6 @@ class Company {
     required this.contact,
     required this.incentivePercent,
     required this.bufferPercent,
-    this.qrImagePath,
   });
 
   final int id;
@@ -15,7 +14,6 @@ class Company {
   final String contact;
   final double incentivePercent;
   final double bufferPercent;
-  final String? qrImagePath;
 
   Company copyWith({
     int? id,
@@ -24,7 +22,6 @@ class Company {
     String? contact,
     double? incentivePercent,
     double? bufferPercent,
-    String? qrImagePath,
   }) {
     return Company(
       id: id ?? this.id,
@@ -33,7 +30,6 @@ class Company {
       contact: contact ?? this.contact,
       incentivePercent: incentivePercent ?? this.incentivePercent,
       bufferPercent: bufferPercent ?? this.bufferPercent,
-      qrImagePath: qrImagePath ?? this.qrImagePath,
     );
   }
 }

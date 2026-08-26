@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:uuid/uuid.dart';
@@ -138,6 +139,16 @@ class PosState {
 
   bool get requiresCashTendered => paymentSection.requiresTendered;
 
+  /// The selected method's QR, if the seller attached one to it.
+  Uint8List? get selectedPaymentQr => selectedPaymentMethodMeta?.qrImageBytes;
+
+  /// Whether checkout should show the customer a QR to scan before confirming.
+  ///
+  /// Driven purely by whether a QR exists, deliberately not by a registry of
+  /// known method names: attaching a QR to a brand new wallet in Venues & Terms
+  /// makes the till present it, with nothing to change here.
+  bool get requiresQrPresentment => selectedPaymentQr != null;
+
   /// Null when the field is empty or not a number — i.e. not yet valid.
   double? get cashTenderedValue {
     final parsed = double.tryParse(cashTendered.trim());
@@ -226,11 +237,20 @@ class PosCubit extends Cubit<PosState> {
   final SettingsRepository _settingsRepository;
   List<PaymentMethodMeta> _basePaymentMethods = const [];
 
+  /// Payment methods per venue, which is the only place a QR is attached.
+  ///
+  /// Needed separately from [_basePaymentMethods] because that list is the
+  /// union across every venue, matched by name. Taking a QR from it could hand
+  /// the till the GCash code belonging to a different bazaar, so the QR is
+  /// always resolved against the event's own venue.
+  Map<int, List<PaymentMethodMeta>> _methodsByCompanyId = const {};
+
   Future<void> load(AppUser user) async {
     final events = await _eventRepository.listVisibleForUser(user);
     final products = await _productRepository.listProducts();
     final globalMethods = await _settingsRepository.paymentMethods();
     _basePaymentMethods = globalMethods;
+    _methodsByCompanyId = await _settingsRepository.paymentMethodsByCompanyId();
     final methods = _methodsForEvent(null, globalMethods);
     emit(
       state.copyWith(
@@ -757,6 +777,34 @@ class PosCubit extends Cubit<PosState> {
     return parts.join(', ');
   }
 
+  /// Attaches each method's QR, taken from the venue hosting [event].
+  ///
+  /// Name-matched case-insensitively, the same way the rest of the merge works,
+  /// because method names are free text.
+  List<PaymentMethodMeta> _withVenueQr(
+    BazaarEvent event,
+    List<PaymentMethodMeta> methods,
+  ) {
+    final venueMethods = _methodsByCompanyId[event.companyId];
+    if (venueMethods == null || venueMethods.isEmpty) {
+      return methods;
+    }
+    final qrByName = <String, Uint8List>{};
+    for (final method in venueMethods) {
+      final bytes = method.qrImageBytes;
+      if (bytes != null) {
+        qrByName[method.name.trim().toUpperCase()] = bytes;
+      }
+    }
+    if (qrByName.isEmpty) {
+      return methods;
+    }
+    return [
+      for (final method in methods)
+        method.copyWith(qrImageBytes: qrByName[method.name.trim().toUpperCase()]),
+    ];
+  }
+
   List<PaymentMethodMeta> _methodsForEvent(
     BazaarEvent? event,
     List<PaymentMethodMeta> baseMethods,
@@ -800,9 +848,9 @@ class PosCubit extends Cubit<PosState> {
     }
 
     if (result.isEmpty) {
-      return const [PaymentMethodMeta(name: 'CASH')];
+      return _withVenueQr(event, const [PaymentMethodMeta(name: 'CASH')]);
     }
 
-    return result;
+    return _withVenueQr(event, result);
   }
 }

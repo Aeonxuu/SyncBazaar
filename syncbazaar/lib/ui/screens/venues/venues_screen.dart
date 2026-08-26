@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
@@ -10,6 +12,8 @@ import '../../../data/repositories/settings_repository.dart';
 import '../../../models/company.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/user.dart';
+import '../../../services/qr_crop_service.dart';
+import '../../widgets/confirmation_dialog.dart';
 
 /// Venues the bazaars are held at, and the commercial terms agreed with each.
 ///
@@ -241,7 +245,6 @@ class _VenuesScreenState extends State<VenuesScreen> {
           contact: result.contact,
           incentivePercent: result.incentivePercent,
           bufferPercent: result.bufferPercent,
-          qrImagePath: result.qrImagePath,
           paymentMethods: result.methods,
         );
       } else {
@@ -252,7 +255,6 @@ class _VenuesScreenState extends State<VenuesScreen> {
             contact: result.contact,
             incentivePercent: result.incentivePercent,
             bufferPercent: result.bufferPercent,
-            qrImagePath: result.qrImagePath,
           ),
           paymentMethods: result.methods,
         );
@@ -279,7 +281,6 @@ class _VenueDraft {
     required this.contact,
     required this.incentivePercent,
     required this.bufferPercent,
-    required this.qrImagePath,
     required this.methods,
   });
 
@@ -288,7 +289,6 @@ class _VenueDraft {
   final String contact;
   final double incentivePercent;
   final double bufferPercent;
-  final String? qrImagePath;
   final List<PaymentMethodMeta> methods;
 }
 
@@ -551,7 +551,6 @@ class _VenueEditorDialogState extends State<_VenueEditorDialog> {
   final TextEditingController _methodField = TextEditingController();
 
   late List<PaymentMethodMeta> _methods;
-  String? _qrImagePath;
   int _step = 0;
 
   String? _nameError;
@@ -588,7 +587,6 @@ class _VenueEditorDialogState extends State<_VenueEditorDialog> {
     _buffer = TextEditingController(
       text: existing == null ? '10' : _plain(existing.bufferPercent),
     );
-    _qrImagePath = existing?.qrImagePath;
     _methods = [
       if (widget.existingMethods.isNotEmpty)
         ...widget.existingMethods
@@ -630,6 +628,44 @@ class _VenueEditorDialogState extends State<_VenueEditorDialog> {
           : null;
     });
     return _nameError == null && _ratesError == null;
+  }
+
+  /// Asks before dropping a payment method.
+  ///
+  /// Removing one is a bigger deal than it looks: the row sits next to a small
+  /// × and carries the venue's QR for that method, so a mis-tap can throw away
+  /// an uploaded payment code as well as the method itself. The QR is called
+  /// out by name in the message, because that is the part that costs real
+  /// effort to put back.
+  Future<void> _confirmRemoveMethod(int index) async {
+    if (index < 0 || index >= _methods.length) {
+      return;
+    }
+    final method = _methods[index];
+    final hasQr = method.qrImageBytes != null;
+    final confirmed = await showConfirmationDialog(
+      context: context,
+      title: 'Remove ${method.name.toUpperCase()}?',
+      message: hasQr
+          ? 'This venue will stop accepting ${method.name.toUpperCase()}, and '
+                'its uploaded QR code will be deleted. You would need to upload '
+                'the QR again to bring it back.'
+          : 'This venue will stop accepting ${method.name.toUpperCase()} at '
+                'checkout.',
+      confirmLabel: 'Remove',
+      tone: ConfirmationTone.destructive,
+      icon: Icons.delete_outline,
+    );
+    if (!confirmed || !mounted) {
+      return;
+    }
+    // Re-checked after the await: the list can have been edited while the
+    // dialog was open, and removing by a stale index would drop the wrong row.
+    final current = _methods.indexWhere((m) => m.name == method.name);
+    if (current == -1) {
+      return;
+    }
+    setState(() => _methods.removeAt(current));
   }
 
   void _addMethod() {
@@ -681,7 +717,6 @@ class _VenueEditorDialogState extends State<_VenueEditorDialog> {
         contact: _contact.text.trim(),
         incentivePercent: _incentiveValue!,
         bufferPercent: _bufferValue!,
-        qrImagePath: _qrImagePath,
         methods: _methods,
       ),
     );
@@ -926,12 +961,27 @@ class _VenueEditorDialogState extends State<_VenueEditorDialog> {
             // it is not removable.
             locked: _methods[i].name.toUpperCase() == 'CASH',
             onFieldChanged: (label) => setState(() {
-              _methods[i] = PaymentMethodMeta(
-                name: _methods[i].name,
+              // copyWith, not a fresh PaymentMethodMeta: rebuilding it from
+              // name and label alone would drop an uploaded QR the moment
+              // someone edited the label next to it.
+              _methods[i] = _methods[i].copyWith(
                 extraFieldLabel: label.trim().isEmpty ? null : label.trim(),
+                clearQr: false,
+              );
+              if (label.trim().isEmpty) {
+                _methods[i] = PaymentMethodMeta(
+                  name: _methods[i].name,
+                  qrImageBytes: _methods[i].qrImageBytes,
+                );
+              }
+            }),
+            onQrChanged: (bytes) => setState(() {
+              _methods[i] = _methods[i].copyWith(
+                qrImageBytes: bytes,
+                clearQr: bytes == null,
               );
             }),
-            onRemove: () => setState(() => _methods.removeAt(i)),
+            onRemove: () => _confirmRemoveMethod(i),
             maxFieldLength: _fieldLabelMax,
           ),
         const SizedBox(height: 12),
@@ -975,62 +1025,6 @@ class _VenueEditorDialogState extends State<_VenueEditorDialog> {
             style: theme.textTheme.bodySmall?.copyWith(color: AppColors.error),
           ),
         ],
-        const SizedBox(height: 24),
-        const _VenueSectionLabel('Payment QR'),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            OutlinedButton.icon(
-              onPressed: () async {
-                final file = await ImagePicker().pickImage(
-                  source: ImageSource.gallery,
-                );
-                if (file != null && mounted) {
-                  setState(() => _qrImagePath = file.path);
-                }
-              },
-              icon: const Icon(Icons.qr_code_2, size: 16),
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: Color(0xFFDCDCE3)),
-                foregroundColor: AppColors.text,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 10,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              label: Text(_qrImagePath == null ? 'Upload QR' : 'Replace QR'),
-            ),
-            const SizedBox(width: 10),
-            if (_qrImagePath != null)
-              Row(
-                children: [
-                  const Icon(
-                    Icons.check_circle_outline,
-                    size: 15,
-                    color: Color(0xFF2E7D32),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Attached',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: const Color(0xFF2E7D32),
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              )
-            else
-              Text(
-                'None yet',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: Colors.black38,
-                ),
-              ),
-          ],
-        ),
       ],
     );
   }
@@ -1193,6 +1187,7 @@ class _MethodRow extends StatefulWidget {
     required this.method,
     required this.locked,
     required this.onFieldChanged,
+    required this.onQrChanged,
     required this.onRemove,
     required this.maxFieldLength,
   });
@@ -1200,6 +1195,10 @@ class _MethodRow extends StatefulWidget {
   final PaymentMethodMeta method;
   final bool locked;
   final ValueChanged<String> onFieldChanged;
+
+  /// Null clears the code. Attaching one is what makes the till present a QR
+  /// for this method at checkout, so it needs no other setting.
+  final ValueChanged<Uint8List?> onQrChanged;
   final VoidCallback onRemove;
   final int maxFieldLength;
 
@@ -1279,6 +1278,12 @@ class _MethodRowState extends State<_MethodRow> {
                 ),
               ),
             ),
+          ),
+          const SizedBox(width: 8),
+          _QrButton(
+            qrBytes: method.qrImageBytes,
+            methodName: method.name,
+            onChanged: widget.onQrChanged,
           ),
           IconButton(
             onPressed: locked ? null : widget.onRemove,
@@ -1435,6 +1440,148 @@ class _VenueRowFieldState extends State<_VenueRowField> {
           focusedBorder: InputBorder.none,
         ),
       ),
+    );
+  }
+}
+
+/// The per-method QR control: a thumbnail once one is set, a button before.
+///
+/// Lives on the payment-method row rather than on the venue as a whole because
+/// a stall accepting both GCash and Maya needs a different code for each, and a
+/// single venue-level QR would show the wrong one.
+class _QrButton extends StatefulWidget {
+  const _QrButton({
+    required this.qrBytes,
+    required this.methodName,
+    required this.onChanged,
+  });
+
+  final Uint8List? qrBytes;
+  final String methodName;
+  final ValueChanged<Uint8List?> onChanged;
+
+  @override
+  State<_QrButton> createState() => _QrButtonState();
+}
+
+class _QrButtonState extends State<_QrButton> {
+  bool _busy = false;
+  String? _error;
+
+  Future<void> _pick() async {
+    if (_busy) {
+      return;
+    }
+    final picker = ImagePicker();
+    // Capped in pixels but deliberately not re-encoded: `imageQuality` is a
+    // lossy JPEG pass, which is harmless on a product photo and a real risk on
+    // something that has to stay machine-readable.
+    final file = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 2400,
+      maxHeight: 2400,
+    );
+    if (file == null) {
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    // Bytes, never the path: on web `XFile.path` is a blob URL that no decoder
+    // can open, and dart:io does not exist there at all.
+    final source = await file.readAsBytes();
+    final result = await const QrCropService().cropToQr(source);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _busy = false;
+      _error = result.found ? null : result.failureReason;
+    });
+    if (result.found) {
+      widget.onChanged(result.bytes);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bytes = widget.qrBytes;
+    final hasQr = bytes != null && bytes.isNotEmpty;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: Tooltip(
+              message: _error!,
+              child: const Icon(
+                Icons.error_outline,
+                size: 16,
+                color: AppColors.error,
+              ),
+            ),
+          ),
+        if (_busy)
+          const SizedBox(
+            width: 28,
+            height: 28,
+            child: Padding(
+              padding: EdgeInsets.all(6),
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          )
+        else if (hasQr)
+          Tooltip(
+            message: 'Replace the ${widget.methodName} QR',
+            child: InkWell(
+              onTap: _pick,
+              borderRadius: BorderRadius.circular(6),
+              child: Container(
+                width: 28,
+                height: 28,
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: AppColors.border),
+                ),
+                // contain, so the code is never cropped in preview either.
+                child: Image.memory(bytes, fit: BoxFit.contain),
+              ),
+            ),
+          )
+        else
+          TextButton.icon(
+            onPressed: _pick,
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.primary,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: const Size(0, 32),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            icon: const Icon(Icons.qr_code_2_rounded, size: 16),
+            label: const Text('QR'),
+          ),
+        if (hasQr && !_busy)
+          IconButton(
+            onPressed: () {
+              setState(() => _error = null);
+              widget.onChanged(null);
+            },
+            tooltip: 'Remove QR',
+            splashRadius: 16,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints.tightFor(width: 28, height: 32),
+            icon: const Icon(
+              Icons.close_rounded,
+              size: 13,
+              color: Colors.black38,
+            ),
+          ),
+      ],
     );
   }
 }

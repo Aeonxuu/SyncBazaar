@@ -55,6 +55,16 @@ dependencies:
   file_saver: ^0.4.0
   gal: ^2.3.3
   excel: ^4.0.6
+  # QR payment methods. Both are pure Dart, so they run on the tablet, macOS and
+  # the browser alike. zxing2 locates the QR inside an uploaded picture (its
+  # resultPoints are what make cropping *to* the code possible rather than
+  # guessing), and `image` does the decode/crop/resize/encode around it.
+  #
+  # `image` is pinned below 4.9 on purpose: from 4.9 it requires archive 4.x,
+  # while excel above still requires archive 3.x, and pub cannot satisfy both.
+  # Everything this feature needs (decode, crop, resize, encodePng) predates 4.9.
+  zxing2: ^0.2.4
+  image: ^4.3.0
 
 dev_dependencies:
   flutter_test:

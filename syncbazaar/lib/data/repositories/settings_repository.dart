@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/company.dart';
@@ -5,10 +8,35 @@ import '../remote/establishment_api_mapper.dart';
 import 'auth_repository.dart';
 
 class PaymentMethodMeta {
-  const PaymentMethodMeta({required this.name, this.extraFieldLabel});
+  const PaymentMethodMeta({
+    required this.name,
+    this.extraFieldLabel,
+    this.qrImageBytes,
+  });
 
   final String name;
   final String? extraFieldLabel;
+
+  /// The seller's QR for this method, already cropped to the code itself.
+  ///
+  /// Bytes rather than a file path, for the reason set out on `Product
+  /// .imageBytes`: a path is not portable, and on web it is a `blob:` URL that
+  /// no image widget can load. Its presence is also what tells the POS to
+  /// present a QR at checkout, so attaching one to a new method needs no code.
+  final Uint8List? qrImageBytes;
+
+  PaymentMethodMeta copyWith({
+    String? name,
+    String? extraFieldLabel,
+    Uint8List? qrImageBytes,
+    bool clearQr = false,
+  }) {
+    return PaymentMethodMeta(
+      name: name ?? this.name,
+      extraFieldLabel: extraFieldLabel ?? this.extraFieldLabel,
+      qrImageBytes: clearQr ? null : (qrImageBytes ?? this.qrImageBytes),
+    );
+  }
 }
 
 class SettingsRepository {
@@ -28,6 +56,22 @@ class SettingsRepository {
   Map<int, PaymentMethodMeta> _methodsById = {};
 
   static const String _storeNameKey = 'settings.storeName';
+  static const String _paymentQrKey = 'settings.paymentMethodQr';
+
+  /// Refuses to persist anything larger than this per code. A cropped QR is
+  /// tens of kilobytes; something far bigger means the crop went wrong, and
+  /// SharedPreferences is the wrong place for a photo.
+  static const int _maxQrBytes = 512 * 1024;
+
+  /// QR per venue-and-method, keyed by `<companyId>|<METHOD NAME>`.
+  ///
+  /// Held apart from the method lists themselves and merged only on read.
+  /// Venues and their methods come from the API and are replaced wholesale on
+  /// every reload; keeping the QR out of that path means a refresh cannot
+  /// discard an upload. It also keeps the API mapper unaware of QR entirely,
+  /// which matters while QR is a client-only feature.
+  final Map<String, Uint8List> _qrByKey = {};
+  bool _qrLoaded = false;
 
   /// Printed until the seller sets their own name, so a receipt is never
   /// headed by an empty line.
@@ -167,7 +211,6 @@ class SettingsRepository {
     String contact = '',
     double incentivePercent = 0,
     double bufferPercent = 0,
-    String? qrImagePath,
   }) async {
     await _ensureLoaded();
 
@@ -178,7 +221,6 @@ class SettingsRepository {
       contact: contact.trim(),
       incentivePercent: incentivePercent,
       bufferPercent: bufferPercent,
-      qrImagePath: qrImagePath,
     );
 
     // Created on the server first so the venue carries the id the server
@@ -213,21 +255,111 @@ class SettingsRepository {
 
   Future<Map<int, List<PaymentMethodMeta>>> paymentMethodsByCompanyId() async {
     await _ensureLoaded();
+    await _ensureQrLoaded();
     return {
       for (final entry in _locationPaymentMethodsByCompanyId.entries)
-        entry.key: List<PaymentMethodMeta>.from(entry.value),
+        entry.key: [
+          for (final method in entry.value) _withQr(entry.key, method),
+        ],
     };
   }
 
+  /// Attaches the stored QR, if this venue has one for this method.
+  PaymentMethodMeta _withQr(int companyId, PaymentMethodMeta method) {
+    final bytes = _qrByKey[_qrKey(companyId, method.name)];
+    return bytes == null ? method : method.copyWith(qrImageBytes: bytes);
+  }
+
+  static String _qrKey(int companyId, String methodName) =>
+      '$companyId|${methodName.trim().toUpperCase()}';
+
+  /// Stores, replaces, or clears the QR for one venue's payment method.
+  ///
+  /// Persisted rather than held in memory like the rest of this repository: a
+  /// QR is set up once and needed at every sale, so losing it on restart would
+  /// mean re-uploading before each day's trading.
+  Future<void> setPaymentMethodQr({
+    required int companyId,
+    required String methodName,
+    required Uint8List? bytes,
+  }) async {
+    await _ensureQrLoaded();
+    final key = _qrKey(companyId, methodName);
+    if (bytes == null) {
+      _qrByKey.remove(key);
+    } else if (bytes.lengthInBytes <= _maxQrBytes) {
+      _qrByKey[key] = bytes;
+    } else {
+      return;
+    }
+    await _persistQr();
+  }
+
+  Future<void> _ensureQrLoaded() async {
+    if (_qrLoaded) {
+      return;
+    }
+    _qrLoaded = true;
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_paymentQrKey);
+    if (raw == null || raw.isEmpty) {
+      return;
+    }
+    try {
+      final decoded = jsonDecode(raw) as Map<String, dynamic>;
+      decoded.forEach((key, value) {
+        if (value is String && value.isNotEmpty) {
+          _qrByKey[key] = base64Decode(value);
+        }
+      });
+    } catch (_) {
+      // Unreadable stored QRs are dropped rather than allowed to break start-up.
+      // Re-uploading one is a few seconds; a till that will not open is not.
+      _qrByKey.clear();
+    }
+  }
+
+  Future<void> _persistQr() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (_qrByKey.isEmpty) {
+      await prefs.remove(_paymentQrKey);
+      return;
+    }
+    await prefs.setString(
+      _paymentQrKey,
+      jsonEncode({
+        for (final entry in _qrByKey.entries) entry.key: base64Encode(entry.value),
+      }),
+    );
+  }
+
+  /// [clearMissingQr] is for the venue editor, which always holds the complete
+  /// picture: there, a method arriving without a QR means the seller removed
+  /// it. Every other caller leaves stored codes alone, so a partial write, or a
+  /// venue list refreshed from the API without QR data, cannot silently delete
+  /// a seller's payment code.
   Future<void> upsertCompanyConfiguration({
     required Company company,
     required List<PaymentMethodMeta> paymentMethods,
+    bool clearMissingQr = false,
   }) async {
     // Recorded before the write, so the venue is saved with the methods just
     // chosen rather than the ones it had a moment ago.
-    _locationPaymentMethodsByCompanyId[company.id] = _normalizePaymentMethods(
-      paymentMethods,
-    );
+    final normalized = _normalizePaymentMethods(paymentMethods);
+    _locationPaymentMethodsByCompanyId[company.id] = normalized;
+    // Persisted here rather than left to the caller, so a QR survives a restart
+    // no matter which screen saved the venue. The method lists themselves are
+    // replaced wholesale on the next API reload; these do not travel with them.
+    for (final method in normalized) {
+      if (method.qrImageBytes == null && !clearMissingQr) {
+        continue;
+      }
+      await setPaymentMethodQr(
+        companyId: company.id,
+        methodName: method.name,
+        bytes: method.qrImageBytes,
+      );
+    }
     await upsertCompany(company);
   }
 
@@ -335,6 +467,9 @@ class SettingsRepository {
       final next = PaymentMethodMeta(
         name: name,
         extraFieldLabel: _sanitizeExtraFieldLabel(item.extraFieldLabel),
+        // Carried through: normalising a venue's methods on save must not
+        // silently detach a QR the seller uploaded moments earlier.
+        qrImageBytes: item.qrImageBytes,
       );
       if (existing == -1) {
         normalized.add(next);

@@ -32,6 +32,7 @@ import '../../widgets/selectable_option_button.dart';
 import 'widgets/pos_product_card.dart';
 import '../../../core/utils/formatters.dart';
 import 'widgets/confirm_sale_dialog.dart';
+import 'widgets/qr_payment_dialog.dart';
 import 'widgets/receipt_print_dialog.dart';
 
 class PosScreen extends StatefulWidget {
@@ -402,7 +403,11 @@ class _PosScreenState extends State<PosScreen> {
   }
 
   Widget _cartPanel(BuildContext context, PosState state) {
-    final requiresPaymentExtraField = state.requiresPaymentExtraField;
+    // Not shown when the method presents a QR: the reference moves into the
+    // QR dialog at checkout, and asking for it in both places would have the
+    // cashier type it twice.
+    final requiresPaymentExtraField =
+        state.requiresPaymentExtraField && !state.requiresQrPresentment;
     final extraFieldLabel = state.selectedExtraFieldLabel;
     const subtleInputBg = Color(0xFFF5F1FB);
 
@@ -756,7 +761,12 @@ class _PosScreenState extends State<PosScreen> {
                           final posCubit = context.read<PosCubit>();
                           final dashboardCubit = context.read<DashboardCubit>();
                           final ordersCubit = context.read<OrdersCubit>();
-                          if (state.requiresPaymentExtraField &&
+                          // Skipped for QR methods: their reference is typed
+                          // into the QR dialog below, after the customer has
+                          // actually paid, so demanding it here would block a
+                          // sale on a number that cannot exist yet.
+                          if (!state.requiresQrPresentment &&
+                              state.requiresPaymentExtraField &&
                               state.paymentExtraFieldValue.trim().isEmpty) {
                             messenger.showSnackBar(
                               SnackBar(
@@ -779,7 +789,29 @@ class _PosScreenState extends State<PosScreen> {
                             );
                             return;
                           }
-                          final confirmed = await _confirmSale(context, state);
+                          // Show the code, take the reference, and only then
+                          // confirm. Cancelling here commits nothing: an
+                          // e-wallet payment that never arrived is the ordinary
+                          // reason for backing out at this point.
+                          if (state.requiresQrPresentment) {
+                            final reference = await showQrPaymentDialog(
+                              context: context,
+                              paymentMethod: state.selectedPaymentMethod,
+                              qrBytes: state.selectedPaymentQr!,
+                              amount: state.total,
+                              extraFieldLabel: state.selectedExtraFieldLabel,
+                            );
+                            if (reference == null) return;
+                            posCubit.updatePaymentExtraFieldValue(reference);
+                          }
+                          if (!context.mounted) return;
+                          final confirmed = await _confirmSale(
+                            context,
+                            // Re-read: the QR dialog just wrote the reference
+                            // into the cubit, and the captured `state` above
+                            // still has the empty value it had on tap.
+                            posCubit.state,
+                          );
                           if (!confirmed) return;
                           final receipt = await posCubit.completeSale(
                             user: widget.user,
