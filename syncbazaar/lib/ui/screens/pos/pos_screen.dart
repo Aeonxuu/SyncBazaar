@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../data/remote/api_client.dart';
 import '../../../bloc/dashboard/dashboard_cubit.dart';
 import '../../../bloc/inventory/inventory_cubit.dart';
 import '../../../bloc/orders/orders_cubit.dart';
@@ -237,6 +238,7 @@ class _PosScreenState extends State<PosScreen> {
                         onShowInfo: () =>
                             _showEventInfoDialog(context, state, event),
                         onDelete: () => _deleteEvent(context, event),
+                        deleteBlockedReason: state.deleteBlockedReason(event),
                       );
                     },
                   ),
@@ -909,10 +911,20 @@ class _PosScreenState extends State<PosScreen> {
     final dashboardCubit = context.read<DashboardCubit>();
     final inventoryCubit = context.read<InventoryCubit>();
 
+    // Refused before asking. Putting up a confirmation for something that
+    // cannot happen only to fail afterwards is worse than saying so up front.
+    final blocked = posCubit.state.deleteBlockedReason(event);
+    if (blocked != null) {
+      messenger.showSnackBar(SnackBar(content: Text(blocked)));
+      return;
+    }
+
     final confirmed = await showConfirmationDialog(
       context: context,
       title: 'Delete Bazaar',
-      message: 'Are you sure you want to delete "${event.name}"?',
+      message:
+          'Delete "${event.name}"? Any stock allocated to it goes back to '
+          'the master inventory. This cannot be undone.',
       confirmLabel: 'Delete',
       tone: ConfirmationTone.destructive,
     );
@@ -920,7 +932,19 @@ class _PosScreenState extends State<PosScreen> {
       return;
     }
 
-    await posCubit.deleteEventFromPos(user: widget.user, event: event);
+    // The success message used to be printed unconditionally. When the server
+    // refused, the bazaar stayed in the list with nothing said about why, so a
+    // delete that plainly had not happened looked like the screen was stale.
+    try {
+      await posCubit.deleteEventFromPos(user: widget.user, event: event);
+    } on ApiException catch (error) {
+      messenger.showSnackBar(SnackBar(content: Text(error.message)));
+      return;
+    } on StateError catch (error) {
+      messenger.showSnackBar(SnackBar(content: Text(error.message)));
+      return;
+    }
+
     await dashboardCubit.load(widget.user);
     await inventoryCubit.load();
     messenger.showSnackBar(
@@ -968,6 +992,7 @@ class _PosScreenState extends State<PosScreen> {
         ],
         remainingUnits: remaining,
         formatDate: _formatDate,
+        deleteBlockedReason: state.deleteBlockedReason(event),
       ),
     );
 
@@ -1637,6 +1662,7 @@ class _BazaarCard extends StatefulWidget {
     required this.onEdit,
     required this.onDelete,
     required this.onShowInfo,
+    this.deleteBlockedReason,
   });
 
   final BazaarEvent event;
@@ -1648,6 +1674,10 @@ class _BazaarCard extends StatefulWidget {
   /// Opens the details modal, from which edit and delete are reached.
   final VoidCallback onShowInfo;
   final VoidCallback onDelete;
+
+  /// Why this bazaar cannot be deleted, or null when it can be. Shown rather
+  /// than merely disabling the control, since a dead button explains nothing.
+  final String? deleteBlockedReason;
 
   @override
   State<_BazaarCard> createState() => _BazaarCardState();
@@ -1994,6 +2024,7 @@ class BazaarInfoDialog extends StatelessWidget {
     required this.staff,
     required this.remainingUnits,
     required this.formatDate,
+    this.deleteBlockedReason,
   });
 
   final BazaarEvent event;
@@ -2001,6 +2032,9 @@ class BazaarInfoDialog extends StatelessWidget {
   final List<String> staff;
   final int remainingUnits;
   final String Function(DateTime) formatDate;
+
+  /// Why this bazaar is protected from deletion, or null when it can go.
+  final String? deleteBlockedReason;
 
   static const Map<BazaarStatus, Color> _statusColors = {
     BazaarStatus.ongoing: AppColors.statusOngoing,
@@ -2121,7 +2155,10 @@ class BazaarInfoDialog extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   _QuietDeleteButton(
-                    onPressed: () => Navigator.pop(context, 'delete'),
+                    onPressed: deleteBlockedReason == null
+                        ? () => Navigator.pop(context, 'delete')
+                        : null,
+                    blockedReason: deleteBlockedReason,
                   ),
                   const SizedBox(width: 8),
                   ElevatedButton.icon(
@@ -2196,9 +2233,12 @@ class _InfoRow extends StatelessWidget {
 /// hazardous; one that never turns red gives no warning at the moment of
 /// intent. This does both, matching the row actions elsewhere in the app.
 class _QuietDeleteButton extends StatefulWidget {
-  const _QuietDeleteButton({required this.onPressed});
+  const _QuietDeleteButton({required this.onPressed, this.blockedReason});
 
-  final VoidCallback onPressed;
+  /// Null disables the button, in which case [blockedReason] says why.
+  final VoidCallback? onPressed;
+
+  final String? blockedReason;
 
   @override
   State<_QuietDeleteButton> createState() => _QuietDeleteButtonState();
@@ -2209,27 +2249,41 @@ class _QuietDeleteButtonState extends State<_QuietDeleteButton> {
 
   @override
   Widget build(BuildContext context) {
-    final color = _hovered ? AppColors.error : Colors.black45;
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: AnimatedContainer(
-        duration: AppMotion.feedback,
-        curve: AppMotion.easeOut,
-        child: OutlinedButton.icon(
-          onPressed: widget.onPressed,
-          icon: Icon(Icons.delete_outline, size: 16, color: color),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: color,
-            side: BorderSide(
-              color: _hovered ? AppColors.error : const Color(0xFFDCDCE3),
+    final blocked = widget.onPressed == null;
+    final color = blocked
+        ? Colors.black26
+        : (_hovered ? AppColors.error : Colors.black45);
+    // A disabled control has to account for itself, so the reason rides on the
+    // button rather than only appearing after someone presses it.
+    return Tooltip(
+      message: widget.blockedReason ?? '',
+      // An empty message would otherwise draw an empty tooltip.
+      triggerMode: blocked
+          ? TooltipTriggerMode.longPress
+          : TooltipTriggerMode.manual,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: AnimatedContainer(
+          duration: AppMotion.feedback,
+          curve: AppMotion.easeOut,
+          child: OutlinedButton.icon(
+            onPressed: widget.onPressed,
+            icon: Icon(Icons.delete_outline, size: 16, color: color),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: color,
+              side: BorderSide(
+                color: _hovered && !blocked
+                    ? AppColors.error
+                    : const Color(0xFFDCDCE3),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
+            label: Text('Delete', style: TextStyle(color: color)),
           ),
-          label: Text('Delete', style: TextStyle(color: color)),
         ),
       ),
     );

@@ -73,6 +73,7 @@ class PosState {
     this.paymentExtraFieldValue = '',
     this.cashTendered = '',
     this.allocations = const {},
+    this.eventIdsWithSales = const {},
   });
 
   final List<BazaarEvent> events;
@@ -87,6 +88,9 @@ class PosState {
   /// Reading the warehouse figure instead offered sizes that were never
   /// brought and quantities that could not be handed over.
   final Map<String, int> allocations;
+
+  /// Bazaars that have taken money. What makes a bazaar undeletable.
+  final Set<int> eventIdsWithSales;
   final List<CartItem> cart;
   final List<PaymentMethodMeta> paymentMethods;
   final String selectedPaymentMethod;
@@ -139,6 +143,26 @@ class PosState {
 
   bool get requiresCashTendered => paymentSection.requiresTendered;
 
+  /// Why [event] cannot be deleted, or null when it can be.
+  ///
+  /// A bazaar that has taken money is a financial record, and a finished one is
+  /// history: neither is something to tidy away. A bazaar set up but never
+  /// traded against is just a plan, and deleting it returns its stock to the
+  /// warehouse. The server enforces the sales half of this too and answers 409;
+  /// checking here means the cashier is told before the attempt rather than
+  /// after it fails.
+  String? deleteBlockedReason(BazaarEvent event) {
+    if (eventIdsWithSales.contains(event.id)) {
+      return 'This bazaar has recorded sales, so it cannot be deleted.';
+    }
+    if (event.status == BazaarStatus.ended) {
+      return 'This bazaar has finished, so it is kept as a record.';
+    }
+    return null;
+  }
+
+  bool canDeleteEvent(BazaarEvent event) => deleteBlockedReason(event) == null;
+
   /// The selected method's QR, if the seller attached one to it.
   Uint8List? get selectedPaymentQr => selectedPaymentMethodMeta?.qrImageBytes;
 
@@ -188,6 +212,7 @@ class PosState {
     String? paymentExtraFieldValue,
     String? cashTendered,
     Map<String, int>? allocations,
+    Set<int>? eventIdsWithSales,
     bool clearSelectedEvent = false,
   }) {
     return PosState(
@@ -204,6 +229,7 @@ class PosState {
       paymentExtraFieldValue:
           paymentExtraFieldValue ?? this.paymentExtraFieldValue,
       cashTendered: cashTendered ?? this.cashTendered,
+      eventIdsWithSales: eventIdsWithSales ?? this.eventIdsWithSales,
       // Dropped along with the event: allocations belong to one bazaar, and
       // carrying them into the next would price a sale against another
       // stall's stock.
@@ -251,12 +277,17 @@ class PosCubit extends Cubit<PosState> {
     final globalMethods = await _settingsRepository.paymentMethods();
     _basePaymentMethods = globalMethods;
     _methodsByCompanyId = await _settingsRepository.paymentMethodsByCompanyId();
+    // Which bazaars have taken money, so the picker can say which ones are
+    // safe to delete without asking the server one bazaar at a time.
+    final sales = await _salesRepository.listSales();
+    final soldEventIds = sales.map((sale) => sale.eventId).toSet();
     final methods = _methodsForEvent(null, globalMethods);
     emit(
       state.copyWith(
         events: events,
         clearSelectedEvent: true,
         products: products,
+        eventIdsWithSales: soldEventIds,
         paymentMethods: methods,
         selectedPaymentMethod: methods.isEmpty ? 'CASH' : methods.first.name,
       ),
@@ -561,6 +592,12 @@ class PosCubit extends Cubit<PosState> {
     required AppUser user,
     required BazaarEvent event,
   }) async {
+    // Checked here as well as in the UI: the rule protects sales records, and
+    // a rule worth having is not one that only the button enforces.
+    final blocked = state.deleteBlockedReason(event);
+    if (blocked != null) {
+      throw StateError(blocked);
+    }
     final existing = await _eventRepository.allocationsForEventByAllocationKey(
       event.id,
     );
