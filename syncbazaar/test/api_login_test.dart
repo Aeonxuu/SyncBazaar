@@ -34,6 +34,65 @@ void main() {
     return AuthRepository(apiClient: ApiClient(httpClient: client));
   }
 
+  group('an unverified account', () {
+    // The backend added email verification on 2026-09-09: login answers 403
+    // with {"error": "Account not verified, please check your email."} when
+    // User.is_verified is false. That is a different situation from a wrong
+    // password, and telling someone to check their password when the real
+    // problem is an unverified email sends them somewhere with no fix.
+    const unverified = {
+      'error': 'Account not verified, please check your email.',
+    };
+
+    test('is not reported as bad credentials', () async {
+      final repository = repositoryReturning(unverified, status: 403);
+
+      // Null is this method's way of saying "wrong email or password", which
+      // the screen turns into "Invalid credentials." A 403 must not take that
+      // path, so it throws instead and carries the reason.
+      expect(
+        () => repository.login(
+          email: 'owner@syncbazaar.com',
+          password: '123456',
+          rememberMe: false,
+        ),
+        throwsA(isA<ApiException>()),
+      );
+    });
+
+    test("surfaces the server's own wording", () async {
+      final repository = repositoryReturning(unverified, status: 403);
+
+      try {
+        await repository.login(
+          email: 'owner@syncbazaar.com',
+          password: '123456',
+          rememberMe: false,
+        );
+        fail('expected the unverified account to be refused');
+      } on ApiException catch (error) {
+        expect(error.kind, ApiErrorKind.forbidden);
+        expect(error.message, contains('not verified'));
+      }
+    });
+
+    test('stores no session for an account it could not sign in', () async {
+      final repository = repositoryReturning(unverified, status: 403);
+
+      try {
+        await repository.login(
+          email: 'owner@syncbazaar.com',
+          password: '123456',
+          rememberMe: true,
+        );
+      } on ApiException {
+        // expected
+      }
+
+      expect(await repository.restoreSession(), isNull);
+    });
+  });
+
   const loginResponse = {
     'token': 'abc123',
     'user_id': 7,
