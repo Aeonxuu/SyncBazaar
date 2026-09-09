@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:syncbazaar/models/user.dart';
 import 'package:syncbazaar/data/repositories/auth_repository.dart';
 import 'package:syncbazaar/data/repositories/event_repository.dart';
 import 'package:syncbazaar/data/repositories/orders_repository.dart';
@@ -190,7 +191,17 @@ void main() {
     final staff = (await authRepository.listUsers())
         .where((u) => u.assignedEventIdsEffective.contains(fair.id))
         .toList();
-    expect(staff.map((u) => u.name).toSet(), {'Missy', 'TG'});
+    // How many, and that they are real accounts — not which two. The generator
+    // seeds its randomness deliberately (`random.seed()  # fresh data each
+    // run`), so naming the people here pins an output the script is designed to
+    // vary, and regenerating the fixture failed this test rather than the data
+    // being wrong.
+    expect(staff, hasLength(2));
+    expect(staff.map((u) => u.email).toSet(), hasLength(2));
+    for (final member in staff) {
+      expect(member.name.trim(), isNotEmpty);
+      expect(member.role, UserRole.employee);
+    }
 
     // Nobody may be on two bazaars whose dates overlap — one person cannot
     // stand at two stalls at once. Asserted here because the failure is

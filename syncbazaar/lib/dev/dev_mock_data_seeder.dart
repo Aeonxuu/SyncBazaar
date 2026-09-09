@@ -55,6 +55,7 @@ class DevMockDataSeeder {
     try {
       final raw = await rootBundle.loadString('assets/dev/mock_data.json');
       data = jsonDecode(raw) as Map<String, dynamic>;
+      _ageForward(data);
     } catch (_) {
       return;
     }
@@ -91,6 +92,54 @@ class DevMockDataSeeder {
       );
     } catch (error, stackTrace) {
       debugPrint('DevMockDataSeeder failed: $error\n$stackTrace');
+    }
+  }
+
+  /// Moves the fixture's bazaars forward so it still describes *now*.
+  ///
+  /// The file holds absolute dates chosen relative to the day the generator
+  /// ran. Left alone it ages: a fortnight later every bazaar in it has either
+  /// finished or not started, the dashboard reports no active bazaars, and the
+  /// till has nothing to sell from. Regenerating fixes it for another fortnight
+  /// and rewrites four thousand lines to do it.
+  ///
+  /// Shifted by whole weeks so a bazaar the generator placed on a Monday is
+  /// still on a Monday: the weekday pattern is part of what makes the data look
+  /// like a real trading calendar.
+  ///
+  /// Sales need no shifting of their own. Each one is stored as a day offset
+  /// from its bazaar's start and the timestamp is built from that, so moving the
+  /// bazaar carries its takings with it.
+  static void _ageForward(Map<String, dynamic> data) {
+    final generatedOn = DateTime.tryParse(data['generated_on'] as String? ?? '');
+    if (generatedOn == null) {
+      return;
+    }
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final elapsed = today
+        .difference(DateTime(generatedOn.year, generatedOn.month, generatedOn.day))
+        .inDays;
+    if (elapsed < 7) {
+      return;
+    }
+
+    final shift = Duration(days: (elapsed / 7).round() * 7);
+    for (final event in (data['events'] as List<dynamic>? ?? const [])) {
+      final item = event as Map<String, dynamic>;
+      // August Fair is pinned to real calendar dates on purpose: it is the
+      // fixed reference the revenue-shape test measures against, and a moving
+      // target cannot be asserted on.
+      if (item['fixed_dates'] == true) {
+        continue;
+      }
+      for (final key in const ['start_date', 'end_date']) {
+        final parsed = DateTime.tryParse(item[key] as String? ?? '');
+        if (parsed != null) {
+          item[key] = parsed.add(shift).toIso8601String().split('T').first;
+        }
+      }
     }
   }
 

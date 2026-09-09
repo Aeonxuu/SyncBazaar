@@ -341,6 +341,10 @@ def main():
         "company_id": "c2",  # SM City Lucena
         "start_date": AUGUST_FAIR_START.isoformat(),
         "end_date": AUGUST_FAIR_END.isoformat(),
+        # Held still while the rest shift: this is the fixed reference the
+        # revenue-shape test measures against, and a moving target cannot be
+        # asserted on.
+        "fixed_dates": True,
         "payment_methods": ["CASH", "GCASH"],
         "assigned_employee_emails": [
             "employee@syncbazaar.com",
@@ -485,6 +489,12 @@ def main():
         ))
 
     data = {
+        # The day this ran. Every bazaar below except August Fair is placed
+        # relative to it, so the app shifts them forward by whole weeks on load
+        # and the fixture keeps describing "now" instead of aging into a
+        # calendar where nothing is running. Drop this key and the data silently
+        # goes stale again a fortnight later.
+        "generated_on": TODAY.isoformat(),
         "companies": COMPANIES,
         "products": products,
         "events": events,
