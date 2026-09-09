@@ -1212,7 +1212,9 @@ class _ExportButton extends StatefulWidget {
   final String label;
 
   /// Returns the phrase describing where the file went.
-  final Future<String> Function() onExport;
+  /// Null means the save was dismissed rather than that it failed, so the
+  /// button says nothing instead of claiming a file was written.
+  final Future<String?> Function() onExport;
 
   @override
   State<_ExportButton> createState() => _ExportButtonState();
@@ -1225,7 +1227,7 @@ class _ExportButtonState extends State<_ExportButton> {
     setState(() => _busy = true);
     try {
       final where = await widget.onExport();
-      if (!mounted) return;
+      if (!mounted || where == null) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(where)));

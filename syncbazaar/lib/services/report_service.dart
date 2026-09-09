@@ -85,7 +85,7 @@ class ReportService {
   /// paperwork looks the same however it was produced.
   ///
   /// Returns the phrase to show the user.
-  Future<String> exportStatementOfAccount({
+  Future<String?> exportStatementOfAccount({
     required int eventId,
     required String eventName,
   }) => _export(
@@ -100,7 +100,7 @@ class ReportService {
   /// Superseded for the venue's copy by [exportOrdersWorkbook], which the
   /// venue actually reconciles against; kept because a flat single-table CSV
   /// is still the easier thing to feed to another system.
-  Future<String> exportListOfOrders({
+  Future<String?> exportListOfOrders({
     required int eventId,
     required String eventName,
   }) => _export(
@@ -118,7 +118,7 @@ class ReportService {
   /// therefore does not check [isAvailable]: the sales are already on the
   /// tablet, so this is the one document that can still be produced with the
   /// server unreachable.
-  Future<String> exportOrdersWorkbook({
+  Future<String?> exportOrdersWorkbook({
     required String eventName,
     required List<OrderLine> lines,
     required Map<String, String?> extraFieldLabelByMethod,
@@ -141,7 +141,7 @@ class ReportService {
     }
   }
 
-  Future<String> _export({
+  Future<String?> _export({
     required String path,
     required DocumentFormat format,
     required String fallbackName,
