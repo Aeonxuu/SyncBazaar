@@ -1,6 +1,6 @@
 # Plan: offline storage
 
-**Status:** not started
+**Status:** phase 1 done, phase 2 not started
 **Owner:** frontend
 **Opened:** 2026-09-09
 
@@ -163,4 +163,18 @@ does not need interrupting.
 
 ## Changes
 
-*Nothing yet. Append here as decisions move, with the date and the reason.*
+**2026-09-09 — Phase 1 landed.** `LocalStore`, `Sale.toJson`/`fromJson`, and the queue persisted
+at all four seams. Verified by reverting the write and watching the tests fail.
+
+**2026-09-09 — Storage faults do not refuse a sale.** Not in the original plan. `_restoreQueue` and
+`_persistQueue` swallow storage errors and carry on in memory. A customer has already paid by the
+time this runs and the money is in the till, so rejecting the sale because the device could not
+write it down is the wrong trade; the result is never worse than the in-memory behaviour it
+replaced. The cost is that a persistent storage fault is silent, which is worth revisiting if it
+ever happens for real.
+
+**2026-09-09 — Three test files needed a storage environment.** `dashboard_kpi_and_history_test`,
+`transaction_history_labels_test` and `sale_upload_service_test` build a `SalesRepository` and now
+touch storage through `addSale`, so they need `TestWidgetsFlutterBinding.ensureInitialized()` and a
+fake store. Worth knowing for phase 2: any test that reaches a repository which caches will need
+the same.

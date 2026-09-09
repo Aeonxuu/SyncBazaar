@@ -1,3 +1,4 @@
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:syncbazaar/bloc/dashboard/dashboard_cubit.dart';
 import 'package:syncbazaar/data/repositories/event_repository.dart';
@@ -11,6 +12,10 @@ import 'package:syncbazaar/models/user.dart';
 /// summary panel it expands into, and a walk-in sale that could not be found in
 /// the transaction history.
 void main() {
+  // Sales are written to local storage as they are recorded, so these
+  // need a binding and a fake store even when they never read one back.
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   const owner = AppUser(
     id: 1,
     name: 'Lalaine',
@@ -24,6 +29,7 @@ void main() {
   late DashboardCubit cubit;
 
   setUp(() {
+    SharedPreferences.setMockInitialValues({});
     events = EventRepository();
     sales = SalesRepository();
     products = ProductRepository();

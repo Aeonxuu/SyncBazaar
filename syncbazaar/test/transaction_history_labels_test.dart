@@ -1,3 +1,4 @@
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:syncbazaar/bloc/orders/orders_cubit.dart';
 import 'package:syncbazaar/data/repositories/product_repository.dart';
@@ -12,6 +13,11 @@ import 'package:syncbazaar/models/sale.dart';
 /// a sale rung up since launch and "(Black, 42)" for the identical product
 /// read back from the server -- two rows, one shoe, in one list.
 void main() {
+  // Sales are written to local storage as they are recorded, so these
+  // need a binding and a fake store even when they never read one back.
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(() => SharedPreferences.setMockInitialValues({}));
   late ProductRepository products;
   late SalesRepository sales;
   late int productId;

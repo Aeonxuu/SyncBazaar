@@ -81,6 +81,55 @@ class Sale {
   final OrderStatus orderStatus;
   final bool synced;
 
+  /// Round-trips a sale through local storage.
+  ///
+  /// Separate from the API mappers, which translate the *server's* shape. This
+  /// one has to preserve the client's own fields, `clientUuid` and `synced`
+  /// above all: without the uuid the server would record a resent sale twice,
+  /// and without the flag a queued sale would look already delivered.
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'client_uuid': clientUuid,
+    'event_id': eventId,
+    'product_id': productId,
+    'variant_option_id_a': variantOptionIdA,
+    'variant_option_id_b': variantOptionIdB,
+    'customer_name': customerName,
+    'sold_by_id': soldById,
+    'employee_id': employeeId,
+    'payment_method': paymentMethod,
+    'qty': qty,
+    'total': total,
+    'timestamp': timestamp.toIso8601String(),
+    'order_status': orderStatus.name,
+    'synced': synced,
+  };
+
+  /// Rebuilds a sale written by [toJson].
+  ///
+  /// Throws on anything it cannot read, so a corrupt row is caught by the
+  /// caller and dropped rather than becoming a sale with a zero total.
+  factory Sale.fromJson(Map<String, dynamic> json) => Sale(
+    id: (json['id'] as num).toInt(),
+    clientUuid: json['client_uuid'] as String,
+    eventId: (json['event_id'] as num).toInt(),
+    productId: (json['product_id'] as num).toInt(),
+    variantOptionIdA: (json['variant_option_id_a'] as num?)?.toInt(),
+    variantOptionIdB: (json['variant_option_id_b'] as num?)?.toInt(),
+    customerName: json['customer_name'] as String? ?? kWalkInCustomer,
+    soldById: (json['sold_by_id'] as num?)?.toInt() ?? 0,
+    employeeId: json['employee_id'] as String? ?? '',
+    paymentMethod: json['payment_method'] as String? ?? 'CASH',
+    qty: (json['qty'] as num).toInt(),
+    total: (json['total'] as num).toDouble(),
+    timestamp: DateTime.parse(json['timestamp'] as String),
+    orderStatus: OrderStatus.values.firstWhere(
+      (status) => status.name == json['order_status'],
+      orElse: () => OrderStatus.completed,
+    ),
+    synced: json['synced'] as bool? ?? false,
+  );
+
   Sale copyWith({OrderStatus? orderStatus, bool? synced}) {
     return Sale(
       id: id,

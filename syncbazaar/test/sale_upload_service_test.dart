@@ -16,6 +16,9 @@ import 'package:syncbazaar/services/sale_upload_service.dart';
 /// A sale is recorded locally first and pushed afterwards, so the till keeps
 /// working when the wifi does not. These cover what happens on the way back.
 void main() {
+  // Sales are written to local storage as they are recorded, so these
+  // need a binding and a fake store even when they never read one back.
+  TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   Sale saleWith({
