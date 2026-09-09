@@ -66,6 +66,7 @@ class DashboardState {
     List<CustomerHistoryData>? recentOrders,
     List<String>? bazaarFilterOptions,
     String? selectedBazaarFilter,
+    this.hasLoaded = false,
   }) : _kpis = kpis,
        _bazaarSummaries = bazaarSummaries,
        _dailySales = dailySales,
@@ -74,6 +75,13 @@ class DashboardState {
        _selectedBazaarFilter = selectedBazaarFilter;
 
   final List<BazaarEvent> events;
+
+  /// Whether a load has finished, successfully or not.
+  ///
+  /// Distinguishes "the figures are on their way" from "there are none", which
+  /// an empty list cannot. Before this the dashboard rendered nothing at all
+  /// while it waited, and blank reads as no data rather than as loading.
+  final bool hasLoaded;
   final List<DashboardKpiData>? _kpis;
   final List<BazaarSummaryData>? _bazaarSummaries;
   final List<double>? _dailySales;
@@ -103,6 +111,7 @@ class DashboardState {
     List<CustomerHistoryData>? recentOrders,
     List<String>? bazaarFilterOptions,
     String? selectedBazaarFilter,
+    bool? hasLoaded,
   }) {
     return DashboardState(
       events: events ?? this.events,
@@ -113,6 +122,7 @@ class DashboardState {
       recentOrders: recentOrders ?? this.recentOrders,
       bazaarFilterOptions: bazaarFilterOptions ?? this.bazaarFilterOptions,
       selectedBazaarFilter: selectedBazaarFilter ?? this.selectedBazaarFilter,
+      hasLoaded: hasLoaded ?? this.hasLoaded,
     );
   }
 }
@@ -152,10 +162,16 @@ class DashboardCubit extends Cubit<DashboardState> {
   /// Throws when the server cannot be reached, so the screen can say so rather
   /// than presenting stale figures as fresh ones.
   Future<void> refreshFromServer(AppUser user) async {
-    await _productRepository.refresh();
-    await _eventRepository.refresh();
-    await _salesRepository.refresh();
-    await load(user);
+    try {
+      await _productRepository.refresh();
+      await _eventRepository.refresh();
+      await _salesRepository.refresh();
+    } finally {
+      // Rebuilt from whatever is held even when the refetch failed, so a
+      // dropped connection leaves the previous figures on screen rather than
+      // an empty dashboard. The caller still sees the error and reports it.
+      await load(user);
+    }
   }
 
   Future<void> load(AppUser user) async {
@@ -248,6 +264,9 @@ class DashboardCubit extends Cubit<DashboardState> {
           selectedBazaarFilter: defaultFilter,
           isAdminOrOwner: user.isAdminOrOwner,
         ),
+        // The wait is over however it went. Leaving skeletons up after a
+        // failure would be a worse lie than showing what is held.
+        hasLoaded: true,
       ),
     );
   }

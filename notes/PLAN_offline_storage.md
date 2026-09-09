@@ -173,6 +173,21 @@ write it down is the wrong trade; the result is never worse than the in-memory b
 replaced. The cost is that a persistent storage fault is silent, which is worth revisiting if it
 ever happens for real.
 
+**2026-09-09 — Skeleton loaders added ahead of phase 2.** Not in the original plan. Tablet testing
+showed the dashboard rendering nothing while it loaded, which reads as "no data" rather than
+"loading" and is worst for a cashier reopening mid-bazaar. `DashboardState` gains `hasLoaded` so
+the screen can tell a wait from an empty result, and the KPI row shows four placeholders shaped to
+the real card. Set even when a load fails: leaving placeholders up forever is a worse lie than
+showing what is held. A failed refresh now also rebuilds from what is held rather than emptying the
+dashboard.
+
+**2026-09-09 — The offline dashboard needs phase 2, not a stored total.** The user proposed keeping
+the last known figures and counting on from them. Rejected in favour of caching the underlying
+sales and bazaars and letting the dashboard recompute: a total that cannot be recomputed cannot be
+corrected, and caching the source fixes the empty product grid and bazaar list at the same time.
+The figures will need a staleness marker when they do appear offline, since a device that has
+missed another till's sales is wrong rather than merely old.
+
 **2026-09-09 — Three test files needed a storage environment.** `dashboard_kpi_and_history_test`,
 `transaction_history_labels_test` and `sale_upload_service_test` build a `SalesRepository` and now
 touch storage through `addSale`, so they need `TestWidgetsFlutterBinding.ensureInitialized()` and a

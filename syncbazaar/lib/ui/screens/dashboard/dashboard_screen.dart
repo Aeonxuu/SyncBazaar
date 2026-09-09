@@ -11,6 +11,7 @@ import 'widgets/analyze_card.dart';
 import 'widgets/average_daily_sales_card.dart';
 import 'widgets/customer_history_card.dart';
 import 'widgets/dashboard_kpi_card.dart';
+import 'widgets/dashboard_kpi_skeleton.dart';
 
 /// The one gap between any two blocks on this screen — between KPI cards in
 /// either axis, between the two cards in the row below them, and between the
@@ -183,6 +184,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildKpiSection(double width, DashboardState state) {
     final kpis = state.kpis.take(4).toList();
+    // Four placeholders while the figures are on their way. The dashboard used
+    // to render nothing until they arrived, which reads as "no data" rather
+    // than "loading" — worst for a cashier reopening the app mid-bazaar, who
+    // cannot tell a slow network from lost takings. Four because that is how
+    // many cards there will be, so nothing moves when the numbers land.
+    final showSkeletons = !state.hasLoaded && kpis.isEmpty;
     const icons = <IconData>[
       Icons.attach_money_outlined,
       Icons.show_chart_outlined,
@@ -192,7 +199,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final columns = width >= 760 ? 4 : 2;
 
     return GridView.builder(
-      itemCount: kpis.length,
+      itemCount: showSkeletons ? 4 : kpis.length,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -207,6 +214,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         mainAxisExtent: _kpiCardHeight,
       ),
       itemBuilder: (context, index) {
+        if (showSkeletons) {
+          return const DashboardKpiSkeleton();
+        }
         final kpi = kpis[index];
         // Index 2 = Active Bazaars, index 3 = Total Orders — these two KPI
         // cards double as toggles for the (hidden-by-default) detail
