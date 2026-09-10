@@ -16,6 +16,7 @@ import '../../../models/product_variant.dart';
 import '../../../models/user.dart';
 import '../../../data/repositories/product_repository.dart';
 import '../../widgets/confirmation_dialog.dart';
+import '../../widgets/offline_data_notice.dart';
 import 'widgets/discard_sale_guard.dart';
 import '../../widgets/date_range_picker_dialog.dart';
 import '../../widgets/custom_card.dart';
@@ -249,6 +250,10 @@ class _PosScreenState extends State<PosScreen> {
   }
 
   Widget _productPanel(BuildContext context, PosState state) {
+    // Non-null when the catalogue on screen came from storage rather than the
+    // server. It matters more here than on the dashboard: a stale stock count
+    // can be sold past, and the customer is standing at the counter.
+    final servedFrom = context.read<AuthRepository>().api.servingCacheFrom;
     final query = _productSearchController.text.trim().toLowerCase();
     final visibleProducts = query.isEmpty
         ? state.products
@@ -261,6 +266,10 @@ class _PosScreenState extends State<PosScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (servedFrom != null) ...[
+          OfflineDataNotice(storedAt: servedFrom),
+          const SizedBox(height: 10),
+        ],
         Row(
           children: [
             // A breadcrumb rather than a bordered button. Leaving the bazaar

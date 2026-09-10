@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../data/remote/api_client.dart';
+import '../../../data/repositories/auth_repository.dart';
 import '../../../bloc/dashboard/dashboard_cubit.dart';
 import '../../../core/constants/colors.dart';
 import '../../../core/constants/motion.dart';
 import '../../../models/user.dart';
+import '../../widgets/offline_data_notice.dart';
 import 'widgets/active_bazaars_card.dart';
 import 'widgets/analyze_card.dart';
 import 'widgets/average_daily_sales_card.dart';
@@ -74,6 +76,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final dashboardCubit = context.read<DashboardCubit>();
+    // Non-null when the last read was answered from storage rather than the
+    // server. Taken straight from the client rather than carried through the
+    // cubit: it is a property of the connection, not of the dashboard, and the
+    // POS will want the same answer.
+    final servedFrom = context.read<AuthRepository>().api.servingCacheFrom;
 
     return BlocBuilder<DashboardCubit, DashboardState>(
       builder: (context, state) {
@@ -96,6 +103,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     children: [
                       _buildHeader(context, dashboardCubit, width, state),
                       const SizedBox(height: _dashboardGutter),
+                      // Directly above the figures it qualifies, so the caveat
+                      // and the numbers are read together rather than the
+                      // caveat living somewhere it can be missed.
+                      if (servedFrom != null) ...[
+                        OfflineDataNotice(storedAt: servedFrom),
+                        const SizedBox(height: _dashboardGutter),
+                      ],
                       _buildKpiSection(width, state),
                       AnimatedSize(
                         duration: AppMotion.entrance,

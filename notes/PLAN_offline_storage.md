@@ -1,6 +1,6 @@
 # Plan: offline storage
 
-**Status:** phase 1 done, phase 2 caching done, staleness marker outstanding
+**Status:** phase 1 and phase 2 done; awaiting tablet verification
 **Owner:** frontend
 **Opened:** 2026-09-09
 
@@ -176,9 +176,11 @@ failures. A 403 or a 500 is the server speaking and is never covered up, and a f
 never stored. The cache is dropped on sign-out, since one outliving its session would show a
 vendor's takings to whoever logs in next.
 
-**2026-09-10 — Staleness marker still outstanding.** `ApiClient.servingCacheFrom` exposes when the
-served copy was stored, and nothing displays it yet. Until it does, an offline dashboard shows
-figures that are wrong rather than merely old, with nothing saying so.
+**2026-09-10 — Staleness marker done.** A quiet line above the dashboard's figures and above the
+POS product grid, reading "Offline. Showing saved figures from 9:14 PM". A time while it is the
+same day, a date and time once it is not, since past midnight a bare time reads as an hour ago.
+Read straight from `ApiClient.servingCacheFrom` in the screens rather than carried through a cubit:
+it describes the connection, not any one screen, and both wanted the same answer.
 
 **2026-09-10 — `receipt_print_dialog_test` is flaky under load.** It uses real three-second delays
 inside `runAsync` and failed once in a full parallel run while passing alone. Pre-existing, not
