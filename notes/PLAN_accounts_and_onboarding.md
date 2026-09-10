@@ -104,6 +104,27 @@ Forwardable as-is.
 > or delete any vendor. Only one vendor exists so nothing is exposed yet, but it is worth closing
 > before there are two.
 >
+> **5. Venues should belong to a store, not be shared by everyone.** `Establishment` has no vendor
+> field, so every stall sees and can edit the same venue rows. That is wrong for two reasons:
+> `incentive_percent` and `buffer_percent` are terms negotiated between one stall and one venue, and
+> in the real world different stores trade at different places. Right now one stall changing its
+> terms changes them for everybody, and any signed-in user can delete a venue another stall's bazaar
+> depends on.
+>
+> What that needs:
+>
+> - A `vendor` foreign key on `Establishment`, with a migration assigning the three existing rows to
+>   vendor 1.
+> - The endpoints moved under the vendor, matching the pattern products, employees and payment
+>   methods already follow: `/api/core/vendor/<vendor_pk>/establishment/`, scoped to that vendor.
+> - `BazaarEventSerializer.establishment` currently accepts `Establishment.objects.all()`, so a
+>   bazaar can be attached to another stall's venue. It needs scoping to the requester's vendor too,
+>   or the foreign key above can be bypassed on the way in.
+>
+> Worth saying explicitly: **two stalls both trading at MSEUF Campus should end up with two rows**,
+> one each, with their own terms. Duplicate names across vendors are correct here, not something to
+> deduplicate.
+>
 > One question rather than a request: **should owners be able to sign up at all**, or are owner
 > accounts something you create? If owner accounts are provisioned, item 2 goes away and public
 > registration only has to serve employees, which is a much smaller job.
@@ -132,13 +153,15 @@ With five stalls, **every stall owner can list, rename and delete every other st
 real vendors are recording real sales. Backend item 4 stops being theoretical the moment a second
 vendor exists, and should be done before the festival rather than after.
 
-**Not a problem, for the record:** venues are shared on purpose. `Establishment` has no vendor
-field, so every stall seeing "MSEUF Campus" is intended rather than a leak. Two things about that
-are still worth a decision:
+**Venues need to become per-stall too, and that is backend item 5.** They are currently shared:
+`Establishment` has no vendor field. That is survivable for this one festival, where every stall
+really is at MSEUF Campus, but the terms are not shared even then. `incentive_percent` and
+`buffer_percent` are negotiated between one stall and one venue, so one stall editing them changes
+every other stall's terms, and any signed-in user can delete a venue another stall's bazaar
+depends on.
 
-- `incentive_percent` and `buffer_percent` sit on the venue and so are the same for every stall.
-  If different stalls negotiate different terms with the same venue, that does not hold.
-- Any signed-in user can edit or delete a venue, including one another stall's bazaar is using.
+Ordering for the festival: item 4 (scoping vendors) is the one that must be done. Item 5 can follow,
+as long as nobody edits venue terms on the day.
 
 ## Client phases
 
@@ -216,4 +239,12 @@ Both endpoints exist and neither is used.
 
 ## Changes
 
-*Nothing yet. Append here as decisions move, with the date and the reason.*
+**2026-09-10 — Venues become per-store.** Added as backend item 5 at the user's direction. The
+original note recorded shared venues as intended; that was wrong about the terms. Incentive and
+buffer percentages are negotiated per stall, and different stores trade at different places, so
+`Establishment` needs a vendor and its endpoints need moving under the vendor path. Nothing can be
+done client-side first: there is no owner on the row to filter by.
+
+Client work once that lands: point `SettingsRepository` at
+`/api/core/vendor/<id>/establishment/` instead of `/api/core/establishment/`, for both reading and
+creating. The mapper itself should not need changing.
