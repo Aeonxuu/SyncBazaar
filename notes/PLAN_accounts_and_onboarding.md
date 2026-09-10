@@ -125,9 +125,35 @@ Forwardable as-is.
 > one each, with their own terms. Duplicate names across vendors are correct here, not something to
 > deduplicate.
 >
-> One question rather than a request: **should owners be able to sign up at all**, or are owner
-> accounts something you create? If owner accounts are provisioned, item 2 goes away and public
-> registration only has to serve employees, which is a much smaller job.
+> **6. `resend-verification/` is public and unthrottled.** It is `AllowAny`, takes an email, and
+> sends a code, and there is no throttling configured anywhere in the project. So anyone can trigger
+> unlimited verification emails to any registered address. It also confirms whether an address is
+> registered, since a known one returns "Verification code sent." and an unknown one 404s.
+>
+> Worth adding a throttle, and answering identically either way so the endpoint cannot be used to
+> find out who has an account.
+>
+> **7. A question, not a request: should the owner be setting the employee's password?**
+>
+> `POST /vendor/<id>/employee/` takes a password, so the person creating the account chooses it. For
+> a real employee being set up by their manager that is convenient and fine. It has two consequences
+> worth weighing:
+>
+> - The owner knows the employee's password. If the employee never changes it, the owner can sign in
+>   as them, and sales are recorded against whoever is signed in.
+> - An owner can enter any email at all. Verification stops that account being *used*, which is a
+>   real guard, but the account is still created and attached to the store, the staff list shows
+>   someone who does not work there, and a stranger receives an unsolicited code. If that stranger
+>   ever verifies, the owner holds working credentials to an account bearing their email.
+>
+> The alternative is an invite: create the account with no usable password, and have the person set
+> one when they verify. Then the owner never knows it, and an address entered by mistake simply goes
+> nowhere. It is more work and it changes the flow we have just settled on, so it is a question
+> rather than a request.
+>
+> One more question: **should owners be able to sign up at all**, or are owner accounts something
+> you create? We have decided for now that they are provisioned, which is why items 1 to 3 above are
+> not being asked for.
 
 ---
 
@@ -238,6 +264,20 @@ Both endpoints exist and neither is used.
 ---
 
 ## Changes
+
+**2026-09-10 — Two more for the backend, from thinking through what verification actually
+guards.** The user asked whether verification stops an owner adding an email they do not control.
+It does stop the account being *used*, which is the important half. It does not stop the account
+being created and attached to the store, does not stop a stranger receiving an unsolicited code,
+and does not stop the owner knowing the password they set for it.
+
+Added as backend item 6 (`resend-verification/` is public and unthrottled, so it can be used to
+mail-bomb an address and to find out whether one is registered) and item 7 (a question about
+whether the owner should be setting the employee's password at all, or whether it should be an
+invite the employee completes).
+
+Item 7 changes the flow decided on 2026-09-10, so it is deliberately posed as a question. Nothing
+here blocks the festival.
 
 **2026-09-10 — Owners will be provisioned, not self-registered.** Decided with the user. Backend
 items 1, 2 and 3 are dropped: no public signup endpoint, no self-attaching owner, and no way to
