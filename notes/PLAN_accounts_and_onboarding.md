@@ -110,6 +110,36 @@ Forwardable as-is.
 
 ---
 
+## Testing with real stalls at the English Festival
+
+Several stalls, each a separate business with its own products and takings, on a day when things
+have to work. This does **not** need self-registration.
+
+**Create each stall by hand before the day.** Django admin is enabled at `/admin/`, and `User`,
+`Vendor` and `VendorAssignment` are all registered, so for each stall:
+
+1. A `Vendor` with the stall's business name.
+2. A `User` with role Owner, **with `is_verified` ticked**, so they can sign in straight away
+   rather than waiting on an emailed code on the day.
+3. A `VendorAssignment` linking that user to that vendor.
+
+Each stall then signs in and sees only their own catalogue, bazaars and sales. Nothing new is
+needed server-side for this.
+
+**One thing must be fixed first.** `VendorListGenericApiView` and `VendorDetailGenericApiView`
+declare no `permission_classes` and use `Vendor.objects.all()`. With one vendor that is harmless.
+With five stalls, **every stall owner can list, rename and delete every other stall**, on a day when
+real vendors are recording real sales. Backend item 4 stops being theoretical the moment a second
+vendor exists, and should be done before the festival rather than after.
+
+**Not a problem, for the record:** venues are shared on purpose. `Establishment` has no vendor
+field, so every stall seeing "MSEUF Campus" is intended rather than a leak. Two things about that
+are still worth a decision:
+
+- `incentive_percent` and `buffer_percent` sit on the venue and so are the same for every stall.
+  If different stalls negotiate different terms with the same venue, that does not hold.
+- Any signed-in user can edit or delete a venue, including one another stall's bazaar is using.
+
 ## Client phases
 
 Ordered so each lands something usable, and so the parts that are blocked come last.
