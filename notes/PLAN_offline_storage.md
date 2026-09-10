@@ -1,6 +1,6 @@
 # Plan: offline storage
 
-**Status:** phase 1 done, phase 2 not started
+**Status:** phase 1 done, phase 2 caching done, staleness marker outstanding
 **Owner:** frontend
 **Opened:** 2026-09-09
 
@@ -162,6 +162,27 @@ does not need interrupting.
 ---
 
 ## Changes
+
+**2026-09-10 — Phase 2 built at the HTTP client, not in the repositories.** A departure from the
+plan above, which said to cache parsed data in `ProductRepository._loadFromApi` and
+`EventRepository._loadFromApi`. Instead `ApiClient.get` stores each successful GET response exactly
+as the server sent it, and replays it when the server cannot be reached. Every repository gained
+offline support without being touched, and the mappers stay the only code that reads the API, so a
+cached answer and a live one cannot drift apart. It also means no model had to learn to serialise
+itself.
+
+The rule that keeps it honest: a stored answer stands in **only** for `network` and `timeout`
+failures. A 403 or a 500 is the server speaking and is never covered up, and a failed response is
+never stored. The cache is dropped on sign-out, since one outliving its session would show a
+vendor's takings to whoever logs in next.
+
+**2026-09-10 — Staleness marker still outstanding.** `ApiClient.servingCacheFrom` exposes when the
+served copy was stored, and nothing displays it yet. Until it does, an offline dashboard shows
+figures that are wrong rather than merely old, with nothing saying so.
+
+**2026-09-10 — `receipt_print_dialog_test` is flaky under load.** It uses real three-second delays
+inside `runAsync` and failed once in a full parallel run while passing alone. Pre-existing, not
+caused by this work, and worth rewriting against a controllable clock if it recurs.
 
 **2026-09-09 — Phase 1 landed.** `LocalStore`, `Sale.toJson`/`fromJson`, and the queue persisted
 at all four seams. Verified by reverting the write and watching the tests fail.

@@ -465,6 +465,10 @@ class AuthRepository {
       // Already signed out as far as this device is concerned.
     }
 
+    // Dropped with the session that fetched it. A cache outliving its login
+    // would show one vendor's bazaars and takings to whoever signs in next.
+    await _api.clearCache();
+
     _api.token = null;
     vendorId = null;
     vendorName = null;

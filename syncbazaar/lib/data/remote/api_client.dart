@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../../core/config/api_config.dart';
+import 'api_cache.dart';
 
 /// Why a call failed, at the granularity the UI actually branches on.
 ///
@@ -56,12 +57,34 @@ class ApiException implements Exception {
 /// that the token header, the timeout, and error mapping are written once
 /// rather than at every call site.
 class ApiClient {
-  ApiClient({http.Client? httpClient, String baseUrl = ApiConfig.baseUrl})
-    : _http = httpClient ?? http.Client(),
-      _baseUrl = baseUrl;
+  ApiClient({
+    http.Client? httpClient,
+    String baseUrl = ApiConfig.baseUrl,
+    ApiCache cache = const ApiCache(),
+  }) : _http = httpClient ?? http.Client(),
+       _baseUrl = baseUrl,
+       _cache = cache;
 
   final http.Client _http;
   final String _baseUrl;
+  final ApiCache _cache;
+
+  /// When the answer currently being served was stored, or null if it came
+  /// from the server just now.
+  ///
+  /// Read by the UI so it can say it is working from a saved copy and how old
+  /// that copy is. A device that has missed another till's sales is wrong
+  /// rather than merely late, and presenting those figures as current is how
+  /// an argument starts at closing time.
+  DateTime? get servingCacheFrom => _servingCacheFrom;
+  DateTime? _servingCacheFrom;
+
+  /// Forgets stored answers. Called on sign-out: a cache outliving its session
+  /// would show one vendor's data to whoever logs in next.
+  Future<void> clearCache() async {
+    _servingCacheFrom = null;
+    await _cache.clearAll();
+  }
 
   /// Which server this client talks to. Read by `AuthRepository` so a session
   /// can be tied to the backend that issued it.
@@ -99,7 +122,28 @@ class ApiClient {
   /// responsible for remembering it across launches.
   String? token;
 
-  Future<dynamic> get(String path) => _send('GET', path);
+  /// A GET, falling back to the last good answer when the server cannot be
+  /// reached.
+  ///
+  /// Only for an unreachable server. A 403 or a 500 is the server answering,
+  /// and serving yesterday's data over a real refusal would hide it.
+  Future<dynamic> get(String path) async {
+    try {
+      final body = await _send('GET', path, cachePath: path);
+      _servingCacheFrom = null;
+      return body;
+    } on ApiException catch (error) {
+      if (!error.isOffline) {
+        rethrow;
+      }
+      final cached = await _cache.read(path);
+      if (cached == null) {
+        rethrow;
+      }
+      _servingCacheFrom = cached.storedAt;
+      return cached.body;
+    }
+  }
 
   /// Fetches a file rather than JSON.
   ///
@@ -179,7 +223,12 @@ class ApiClient {
 
   Future<dynamic> delete(String path) => _send('DELETE', path);
 
-  Future<dynamic> _send(String method, String path, {Object? body}) async {
+  Future<dynamic> _send(
+    String method,
+    String path, {
+    Object? body,
+    String? cachePath,
+  }) async {
     final uri = Uri.parse('$_baseUrl$path');
     final request = http.Request(method, uri)
       ..headers['Content-Type'] = 'application/json';
@@ -199,7 +248,13 @@ class ApiClient {
       final streamed = await _http.send(request).timeout(_nextTimeout);
       final response = await http.Response.fromStream(streamed);
       _lastReplyAt = DateTime.now();
-      return _decode(response);
+      // Decoded first: this throws for anything that is not a success, so only
+      // answers worth replaying are stored.
+      final decoded = _decode(response);
+      if (cachePath != null) {
+        await _cache.write(cachePath, response.body);
+      }
+      return decoded;
     } on TimeoutException {
       throw const ApiException(
         ApiErrorKind.timeout,

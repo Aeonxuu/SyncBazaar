@@ -52,6 +52,26 @@ class LocalStore {
     await prefs.setString(key, jsonEncode(rows));
   }
 
+  /// Reads a raw string previously written under [key].
+  ///
+  /// For content this class should not interpret, such as an API response held
+  /// exactly as the server sent it.
+  Future<String?> readRaw(String key) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(key);
+  }
+
+  Future<void> writeRaw(String key, String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(key, value);
+  }
+
+  /// Every key currently stored under [prefix]. Used to clear a whole family.
+  Future<Set<String>> keysWithPrefix(String prefix) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getKeys().where((key) => key.startsWith(prefix)).toSet();
+  }
+
   Future<void> clear(String key) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(key);
