@@ -4,6 +4,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../bloc/settings/settings_cubit.dart';
 import '../../../core/constants/colors.dart';
 import '../../../models/user.dart';
+import 'widgets/info_document_dialog.dart';
+import 'legal_documents.dart';
 
 /// App preferences.
 ///
@@ -86,9 +88,98 @@ class SettingsScreen extends StatelessWidget {
                   onChanged: context.read<SettingsCubit>().updateAutoSync,
                 ),
               ),
+              const SizedBox(height: 24),
+              Text(
+                'About',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'How this app handles your information, and answers to common '
+                'questions',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: Colors.black45,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.border),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  children: [
+                    for (var i = 0; i < settingsDocuments.length; i++) ...[
+                      if (i > 0)
+                        const Divider(height: 1, color: AppColors.border),
+                      _DocumentRow(document: settingsDocuments[i]),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+/// One tappable line opening a reference document.
+///
+/// A row rather than a card each: three documents as three cards would give
+/// reading matter the same weight as the settings above them, which are things
+/// a person came here to change.
+class _DocumentRow extends StatelessWidget {
+  const _DocumentRow({required this.document});
+
+  final InfoDocument document;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return InkWell(
+      onTap: () => showInfoDocument(context: context, document: document),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    document.title,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    document.summary,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: Colors.black45,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Icon(
+              Icons.chevron_right_rounded,
+              size: 20,
+              color: Colors.black38,
+            ),
+          ],
+        ),
       ),
     );
   }
