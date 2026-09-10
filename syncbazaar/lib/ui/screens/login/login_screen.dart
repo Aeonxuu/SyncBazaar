@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../bloc/auth/auth_cubit.dart';
 import '../../../core/constants/colors.dart';
 import '../../widgets/floating_label_text_field.dart';
+import 'verify_account_dialog.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -198,6 +199,30 @@ class _LoginScreenState extends State<LoginScreen> {
               ],
             ),
           ),
+          // Offered only when the server says the account is unverified, which
+          // is the one refusal a person can actually resolve from here. It used
+          // to be a dead end: the message named the problem and the app gave
+          // them nothing to do about it.
+          if (_looksUnverified(state.error as String)) ...[
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: state.isLoading
+                    ? null
+                    : () => _verifyThenSignIn(context),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                ),
+                icon: const Icon(Icons.mark_email_read_outlined, size: 16),
+                label: const Text('Enter the code from your email'),
+              ),
+            ),
+          ],
         ],
         const SizedBox(height: 18),
         SizedBox(
@@ -226,6 +251,35 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       ],
     );
+  }
+
+  /// Whether the server refused because the account has not been confirmed.
+  ///
+  /// Matched on the wording because the message is the server's, and a fixed
+  /// string here would silently stop matching if it were reworded. Deliberately
+  /// loose: showing the button when it is not needed costs a tap, hiding it
+  /// when it is needed leaves someone stuck.
+  static bool _looksUnverified(String error) =>
+      error.toLowerCase().contains('not verified') ||
+      error.toLowerCase().contains('verify');
+
+  /// Confirms the account, then signs in with what is already typed.
+  ///
+  /// Signing in for them rather than returning to a filled form they have to
+  /// submit again: they have just proved the account is theirs, and the
+  /// password is still in the field.
+  Future<void> _verifyThenSignIn(BuildContext context) async {
+    final cubit = context.read<AuthCubit>();
+    final email = _emailController.text.trim();
+    if (email.isEmpty) {
+      return;
+    }
+
+    final verified = await showVerifyAccountDialog(context: context, email: email);
+    if (!verified) {
+      return;
+    }
+    await cubit.login(email, _passwordController.text, true);
   }
 
   Widget _buildForgotPasswordContent(BuildContext context) {

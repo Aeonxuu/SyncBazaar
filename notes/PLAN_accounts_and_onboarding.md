@@ -1,6 +1,6 @@
 # Plan: registration and onboarding
 
-**Status:** not started, partly blocked on the backend
+**Status:** owner signup dropped; verification done; password management outstanding
 **Owner:** frontend, with backend items listed for the backend developer
 **Opened:** 2026-09-10
 
@@ -238,6 +238,22 @@ Both endpoints exist and neither is used.
 ---
 
 ## Changes
+
+**2026-09-10 — Owners will be provisioned, not self-registered.** Decided with the user. Backend
+items 1, 2 and 3 are dropped: no public signup endpoint, no self-attaching owner, and no way to
+attach an existing employee, because owners already create employee accounts outright through
+`POST /vendor/<id>/employee/`, which the app has always used. Phases 1, 3 and 4 go with them.
+Remaining backend work is item 4 (scope the vendor endpoints, before the festival) and item 5
+(venues per store).
+
+**2026-09-10 — Verification built.** Phase 2 done. Sign-in offers "Enter the code from your email"
+when the server refuses an unverified account, and signs the person in once confirmed rather than
+returning them to a form they have to submit again. This closed a live gap: every employee an owner
+added was unverified, sign-in refuses unverified accounts, and the app offered nothing to do about
+it.
+
+The dialog says the code expires in ten minutes before it is needed rather than after it fails,
+and keeps the server's own wording, since "invalid" and "expired" call for different actions.
 
 **2026-09-10 — Venues become per-store.** Added as backend item 5 at the user's direction. The
 original note recorded shared venues as intended; that was wrong about the terms. Incentive and

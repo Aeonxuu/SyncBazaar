@@ -219,6 +219,46 @@ class AuthRepository {
     );
   }
 
+  /// Confirms an account with the code emailed when it was created.
+  ///
+  /// Accounts are created unverified and login refuses an unverified account,
+  /// so without this an employee an owner has just added cannot sign in at all.
+  ///
+  /// Returns null on success. Returns the server's own wording on failure,
+  /// which distinguishes a wrong code from an expired one, and the difference
+  /// decides whether the person retypes it or asks for a new one.
+  Future<String?> verifyAccount({
+    required String email,
+    required String code,
+  }) async {
+    try {
+      await _api.post(
+        '/api/auth/verify-account/',
+        body: {
+          'email': email.trim().toLowerCase(),
+          'code': code.trim(),
+        },
+      );
+      return null;
+    } on ApiException catch (error) {
+      return error.message;
+    }
+  }
+
+  /// Sends a fresh code. The one before it expires after ten minutes, which is
+  /// easily long enough to miss while finding the email.
+  Future<String?> resendVerification({required String email}) async {
+    try {
+      await _api.post(
+        '/api/auth/resend-verification/',
+        body: {'email': email.trim().toLowerCase()},
+      );
+      return null;
+    } on ApiException catch (error) {
+      return error.message;
+    }
+  }
+
   Future<AppUser> addUser({
     required String name,
     required String email,
