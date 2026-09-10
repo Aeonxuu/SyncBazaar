@@ -163,6 +163,18 @@ does not need interrupting.
 
 ## Changes
 
+**2026-09-10 — Verified on the tablet.** Offline cold start shows real figures with the staleness
+line, bazaars open with their products, sales complete and queue, and the notice clears on
+reconnect. Two follow-ups came out of it, neither started:
+
+- **Warm the cache at login.** Only screens visited while online are cached, because the cache
+  fills as a side effect of fetching. Creating a bazaar offline failed with an empty employee list,
+  since Staff had never been opened. Fetching staff, venues and the catalogue once at sign-in would
+  make the whole app available offline rather than the parts that happened to be browsed.
+- **Say why a form cannot be used offline.** That failure presented as an empty dropdown rather
+  than as "you are offline", so the cause had to be worked out. Writes should refuse with a reason;
+  reading old data offline is fine, writing is not.
+
 **2026-09-10 — Phase 2 built at the HTTP client, not in the repositories.** A departure from the
 plan above, which said to cache parsed data in `ProductRepository._loadFromApi` and
 `EventRepository._loadFromApi`. Instead `ApiClient.get` stores each successful GET response exactly
