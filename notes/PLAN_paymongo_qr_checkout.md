@@ -1,6 +1,6 @@
 # Plan: automatic QR payment with PayMongo
 
-**Status:** not started, blocked on the backend
+**Status:** not started, waiting on backend endpoints (simpler flow chosen 2026-09-12)
 **Opened:** 2026-09-12
 **Why:** advisers asked that cashiers stop typing reference numbers by hand
 
@@ -10,6 +10,9 @@ the text above.
 ---
 
 ## Read this first
+
+> **Superseded in part.** The 2026-09-12 "simpler flow" entry under **Changes** at the bottom
+> replaces this section. Read that first.
 
 Two things to settle before anyone writes code.
 
@@ -101,6 +104,9 @@ What happens today when a cashier presses **Finish**, with file paths.
 ---
 
 ## What has to change, and what it costs
+
+> **Superseded in part.** The 2026-09-12 "simpler flow" entry under **Changes** at the bottom
+> replaces this section. Read that first.
 
 The new flow **inverts the order**: the sale must exist on the server *before* payment, because the
 QR is generated against it. Today the sale is created after payment and uploaded later.
@@ -291,4 +297,35 @@ work finished on 10 September exists precisely for it.
 
 ## Changes
 
-*Nothing yet. Append here as decisions move, with the date and the reason.*
+**2026-09-12 — Test API keys confirmed.** Lala got the `sk_test` key after personal identity
+verification. No DTI or BIR needed. Closes open question 2.
+
+**2026-09-12 — Switched to a simpler flow.** The QR is no longer attached to a sale or a checkout.
+Payment still happens before the sale is created, same as today.
+
+Reason: the Checkout design needed a new model, immediate sale uploads, and changes to
+`completeSale`, which is too much for our timeline.
+
+New flow:
+
+1. Cashier taps QR Ph. The app sends the basket total to `POST /qr/create/`.
+2. Backend creates the PayMongo QR and returns `qr_image`, `intent_id`, and `test_url` if
+   available.
+3. App shows the QR and polls `GET /qr/<intent_id>/status/` every 3 seconds.
+4. When paid, the backend returns `reference_number`. The app fills it into the existing reference
+   field.
+5. The app creates and uploads the sales exactly as it does today.
+
+Cancelled: step 1 (checkout identity), step 2 (upload on demand), and the "create the sale
+server-side first" part of step 6. The Checkout record in "Read this first" is no longer needed.
+
+Still planned: step 3 (payment service), step 4 (dialog states), step 5 (polling, timer cancelled in
+`dispose`), step 7 (manual fallback), step 8 (mark reference as auto or manual).
+
+Backend: Amrei builds one standalone `QRPaymentIntent` model (`intent_id`, `amount`, `status`,
+`reference_number`, `created_at`) and the two endpoints. `Sale`, `Payment` and `batch-sale` stay
+unchanged.
+
+Known limitations: the amount comes from the app. If the tablet closes mid-wait, the payment goes
+through but no sale is created. The cashier finds the payment in the PayMongo dashboard and redoes
+the sale with manual entry.
