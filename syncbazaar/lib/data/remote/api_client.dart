@@ -127,13 +127,23 @@ class ApiClient {
   ///
   /// Only for an unreachable server. A 403 or a 500 is the server answering,
   /// and serving yesterday's data over a real refusal would hide it.
-  Future<dynamic> get(String path) async {
+  ///
+  /// Pass [useCache] false for anything whose answer is only true at the moment
+  /// it is asked. A payment status is the case this exists for: a stale
+  /// "pending" is harmless, but a stale "paid" would tell a cashier the money
+  /// arrived while the device is offline, and the sale would be completed
+  /// against a payment that never happened.
+  Future<dynamic> get(String path, {bool useCache = true}) async {
     try {
-      final body = await _send('GET', path, cachePath: path);
+      final body = await _send(
+        'GET',
+        path,
+        cachePath: useCache ? path : null,
+      );
       _servingCacheFrom = null;
       return body;
     } on ApiException catch (error) {
-      if (!error.isOffline) {
+      if (!useCache || !error.isOffline) {
         rethrow;
       }
       final cached = await _cache.read(path);
