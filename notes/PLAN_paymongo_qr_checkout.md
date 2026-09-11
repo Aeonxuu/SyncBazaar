@@ -297,6 +297,45 @@ work finished on 10 September exists precisely for it.
 
 ## Changes
 
+**2026-09-12 — Sale-scoping removed (commit `a4b1801`). Three of the six mismatches fixed, two
+remain, three new ones introduced.** Re-checked against the backend repo.
+
+**Routes now, both standalone:**
+
+```
+POST /api/bazaar/qr-intent/create/            body: { "amount": <whole pesos> }
+GET  /api/bazaar/qr-intent/<intent_id>/status/
+```
+
+**Fixed.** The QR no longer attaches to a sale and the `sale` foreign key is gone from the model,
+so payment can happen before the sale exists, which is what the simpler flow needs (mismatches 1,
+2 and 3). The response key is now `qr_image`, matching the agreed name (mismatch 5), though the
+value is a URL rather than base64 and the service comment still says "base64 data URI".
+
+**Still open.**
+
+- **Expired and failed remain unreachable.** `PAYMONGO_STATUS_MAP` is unchanged and maps only
+  `succeeded`, `processing`, `awaiting_payment_method` and `awaiting_next_action`. Nothing produces
+  `EX` or `FL`, so an expired QR reads pending forever and the app's expired state never fires.
+- **No cancel endpoint and no webhook.** Polling is still the only thing that updates status, so a
+  payment completed after the tablet closes is never recorded on the server either.
+
+**New, and worth acting on.**
+
+- **The amount unit is ambiguous, and getting it wrong is a hundredfold error.** The model reads
+  `amount = models.IntegerField() # in centavos`, while `services_paymongo.create_qr_payment_intent`
+  does `int(amount * 100)`. The app must therefore send **whole pesos**. Anyone following that
+  comment and sending centavos would charge the customer a hundred times the amount. The comment
+  needs correcting before either side builds against it.
+- **`IntegerField` with `min_value=100`.** Whole pesos only, so a total of PHP 2,300.50 cannot be
+  sent. If the minimum is pesos, any sale under PHP 100 is rejected outright. Worth confirming
+  whether that is PayMongo's floor or an accident.
+- **The permissions dropped.** Both views were `IsAuthenticated, IsAdminOrEventVendor` and are now
+  `IsAuthenticated`, with the status lookup unscoped (`get_object_or_404(QrPaymentIntent,
+  intent_id=intent_id)`). Any signed-in user can read any intent by id, including another stall's
+  amount and reference number. This sits in the same territory as the vendor-scoping item already
+  flagged as urgent before the festival.
+
 **2026-09-12 — Backend endpoints landed (commit `3a02dc4`), and they differ from the simpler
 flow.** Read against the backend repo. The earlier **API assumptions** section is left as written;
 this entry is what was actually built.
