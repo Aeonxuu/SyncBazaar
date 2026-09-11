@@ -297,6 +297,67 @@ work finished on 10 September exists precisely for it.
 
 ## Changes
 
+**2026-09-12 — Backend endpoints landed (commit `3a02dc4`), and they differ from the simpler
+flow.** Read against the backend repo. The earlier **API assumptions** section is left as written;
+this entry is what was actually built.
+
+**Create**
+
+```
+POST /api/bazaar/event/<event_pk>/sale/<sale_pk>/qr-intent/
+```
+
+Auth required: `IsAuthenticated` + `IsAdminOrEventVendor`. **No request body.** The amount is taken
+server-side from `sale.total`.
+
+`201` response:
+
+```json
+{ "intent_id": "pi_...", "qr_image_url": "https://...", "test_url": "https://...",
+  "status": "PD", "amount": "2300.00" }
+```
+
+`502` if PayMongo fails: `{ "error": "...", "detail": "..." }`
+
+**Status**
+
+```
+GET /api/bazaar/event/<event_pk>/sale/<sale_pk>/qr-intent/<intent_id>/status/
+```
+
+Same auth. No body.
+
+```json
+pending  { "intent_id": "pi_...", "status": "PD", "reference_number": null,      "paid_at": null }
+paid     { "intent_id": "pi_...", "status": "PA", "reference_number": "pay_...", "paid_at": "2026-09-12T14:02:11Z" }
+expired  { "intent_id": "pi_...", "status": "EX", "reference_number": null,      "paid_at": null }
+```
+
+Status codes are two letters, not words: `PD` pending, `PA` paid, `EX` expired, `FL` failed.
+
+**Where the values come from.** `reference_number` is PayMongo's **payment id** (`pay_...`), read
+from `payments[0].id` on the retrieved intent (`services_paymongo.py`). It is not the reference a
+customer sees in their wallet app. `paid_at` is `timezone.now()` at the moment the app polls and
+the status first reads paid, so it records when the server noticed, not when the customer paid, and
+it is never set if nobody polls.
+
+**Mismatches with the simpler flow above, for the team to settle:**
+
+1. **The QR is attached to a sale.** Both routes require `sale_pk` and the intent has a `sale`
+   foreign key. The simpler flow says the QR is standalone and payment happens *before* the sale
+   exists. As built, the app cannot call this at the point it needs to.
+2. **The amount is not sent by the app.** It comes from `sale.total`, and the endpoint takes no
+   body. The simpler flow has the app sending the basket total.
+3. **`sale.total` is one cart line, not the basket.** A four-item basket is four sale rows, so the
+   QR would be for one line's amount.
+4. **Expired and failed are unreachable.** `PAYMONGO_STATUS_MAP` maps only `succeeded`,
+   `processing`, `awaiting_payment_method` and `awaiting_next_action`. Nothing produces `EX` or
+   `FL`, so an expired QR reads pending forever and the app's expired state never fires.
+5. **The QR is a URL, not base64.** The response gives `qr_image_url`; the service's own comment
+   says base64 data URI, so comment and code disagree.
+6. **No cancel endpoint**, and **no webhook**. Polling is the only way status ever changes, so a
+   payment made after the tablet closes is never recorded on the server either.
+
 **2026-09-12 — Test API keys confirmed.** Lala got the `sk_test` key after personal identity
 verification. No DTI or BIR needed. Closes open question 2.
 
