@@ -1,6 +1,11 @@
 # Plan: automatic QR payment with PayMongo
 
-**Status:** not started, waiting on backend endpoints (simpler flow chosen 2026-09-12)
+**Status:** part built. Steps 3 (payment service) and 4 (dialog states) are done and committed on
+`feature/paymongo-qr` (commit `b1acb36`), covered by 23 tests against a fake server. Neither has yet
+been run against a real one; `notes/TEST_paymongo_local.md` is how to do that. Waiting on two
+things: the QR endpoints reaching the hosted backend on Render, and step 6, wiring the dialog into
+Finish.
+Steps 7 and 8 (manual fallback selection, marking a reference automatic or manual) follow that.
 **Opened:** 2026-09-12
 **Why:** advisers asked that cashiers stop typing reference numbers by hand
 
