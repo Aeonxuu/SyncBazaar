@@ -297,6 +297,46 @@ work finished on 10 September exists precisely for it.
 
 ## Changes
 
+**2026-09-12 — Backend caught up (commit `7635aea`). Three of the five open items fixed, one partly
+fixed, one still open.** Re-checked against the backend clone while writing the local test guide.
+
+**Fixed: the amount unit, and the whole-pesos limit with it.**
+`QrPaymentIntentCreateSerializer.amount` is now a `DecimalField(max_digits=10, decimal_places=2,
+min_value=Decimal("1.00"))`, and the view converts to centavos itself with `int(amount_pesos * 100)`
+before calling PayMongo. The model comment now reads "app sends pesos; stored here as centavos"
+rather than contradicting the code. This closes the hundredfold risk and the `IntegerField` problem
+together: PHP 2,300.50 sends fine, and the floor is 1 peso rather than 100. The client sends a
+decimal string, as agreed.
+
+Worth remembering when reading the database: the request is in pesos and the stored `amount` is in
+centavos, so a PHP 2,300.50 sale shows as `230050` in Django admin. Both are right, they are just
+different units.
+
+**Fixed: the intent leak.** The model gained a `created_by` field (migration `0017`) and the status
+view gained `_accessible_queryset`: a superuser sees every intent, an owner or admin sees their own
+vendor's, and everyone else sees only their own. Another stall's intent id now returns 404 instead
+of its amount and reference number. Note that both views still list only `[IsAuthenticated]`, so the
+scoping lives in the queryset rather than in a permission class. The hole is closed either way, but
+it is not the `IsAdminOrEventVendor` shape the rest of the API uses.
+
+**Partly fixed: expired and failed.** `PAYMONGO_STATUS_MAP` gained `"failed" -> FL` and
+`"expired" -> EX`, and the status view now marks an intent expired on its own after
+`QR_EXPIRATION = 30 minutes`. The local timer is the part that will actually fire. PayMongo's
+payment intent statuses are `awaiting_payment_method`, `awaiting_next_action`, `processing`,
+`succeeded` and `cancelled`, so neither new key matches anything PayMongo sends, and `cancelled` is
+unmapped. Expect `EX` after thirty minutes of waiting, and `FL` essentially never. The app's failed
+state is built and tested, it simply has nothing to trigger it yet.
+
+**Still open, both with Amrei.**
+
+- **No cancel endpoint.** Closing the dialog only stops the app asking. The intent stays pending on
+  the server for good, so a count of pending payments counts nothing real.
+- **No webhook.** Polling remains the only thing that updates status, so a payment that completes
+  after the tablet closes is never recorded and no sale exists for it.
+
+**Testing this locally:** `notes/TEST_paymongo_local.md` covers running the backend on a Mac,
+pointing the app at it, and reaching the dialog before it is wired into Finish.
+
 **2026-09-12 — Sale-scoping removed (commit `a4b1801`). Three of the six mismatches fixed, two
 remain, three new ones introduced.** Re-checked against the backend repo.
 
