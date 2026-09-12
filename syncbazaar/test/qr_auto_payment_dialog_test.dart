@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:syncbazaar/core/theme/app_theme.dart';
 import 'package:syncbazaar/data/remote/api_client.dart';
@@ -163,6 +164,62 @@ void main() {
     });
   });
 
+  group('the simulator link', () {
+    // Scanning a test QR with a real wallet moves real money, so this link is
+    // the only safe way to pay the code on screen. A dialog that mentions
+    // simulating payment without offering it is worse than one that says
+    // nothing.
+    testWidgets('is offered while a test code is waiting', (tester) async {
+      await open(tester, _FakeService());
+
+      expect(
+        find.text('Test mode. Do not scan. Tap to copy the simulator link.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('is absent in live mode, where there is nothing to copy', (
+      tester,
+    ) async {
+      await open(tester, _FakeService(testUrl: null));
+
+      expect(find.textContaining('Test mode'), findsNothing);
+    });
+
+    testWidgets('puts the link on the clipboard and says so', (tester) async {
+      String? copied;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            copied = (call.arguments as Map)['text'] as String?;
+          }
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+
+      await open(tester, _FakeService());
+      await tester.tap(
+        find.text('Test mode. Do not scan. Tap to copy the simulator link.'),
+      );
+      await tester.pump();
+
+      expect(copied, 'https://test.example/simulate');
+      // The confirmation has to be in the dialog itself. A SnackBar would sit
+      // behind the modal barrier, dimmed.
+      expect(
+        find.text('Link copied. Paste it in a browser to simulate payment.'),
+        findsOneWidget,
+      );
+    });
+  });
+
   group('when things go wrong', () {
     testWidgets('a lost connection keeps the code up and says so', (
       tester,
@@ -270,7 +327,11 @@ class _FakeService implements QrPaymentService {
     this.offlineAfterPolls,
     this.failToCreate = false,
     this.qrImage = 'https://cdn.example/qr.png',
+    this.testUrl = 'https://test.example/simulate',
   });
+
+  /// Present in test mode only. Live mode sends nothing here.
+  final String? testUrl;
 
   /// What the gateway put in the picture field. PayMongo sends a base64 data
   /// URI here despite calling it `image_url`.
@@ -295,7 +356,7 @@ class _FakeService implements QrPaymentService {
       intentId: 'pi_abc',
       qrImage: qrImage,
       status: QrPaymentStatus.pending,
-      testUrl: 'https://test.example/simulate',
+      testUrl: testUrl,
     );
   }
 

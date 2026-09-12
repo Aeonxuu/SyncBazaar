@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../../core/constants/colors.dart';
 import '../../../../core/constants/motion.dart';
@@ -85,6 +85,10 @@ class _QrAutoPaymentDialogState extends State<_QrAutoPaymentDialog> {
   Uint8List? _qrBytes;
   String? _message;
 
+  /// True once the simulator link has been put on the clipboard, so the line
+  /// can say so rather than leaving the cashier tapping it again.
+  bool _testLinkCopied = false;
+
   /// True while the connection is down but the code is still up. The customer
   /// may already have paid, so this is a note rather than a failure.
   bool _reconnecting = false;
@@ -119,6 +123,8 @@ class _QrAutoPaymentDialogState extends State<_QrAutoPaymentDialog> {
       _phase = _Phase.preparing;
       _message = null;
       _reconnecting = false;
+      // A new code has a new link, so a previous copy is stale.
+      _testLinkCopied = false;
     });
 
     try {
@@ -218,6 +224,13 @@ class _QrAutoPaymentDialogState extends State<_QrAutoPaymentDialog> {
       }
     } finally {
       _polling = false;
+    }
+  }
+
+  Future<void> _copyTestLink(String url) async {
+    await Clipboard.setData(ClipboardData(text: url));
+    if (mounted) {
+      setState(() => _testLinkCopied = true);
     }
   }
 
@@ -510,16 +523,50 @@ class _QrAutoPaymentDialogState extends State<_QrAutoPaymentDialog> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
+          // Only in test mode, which is the only time the server sends a
+          // simulator link. Without it there is no way to pay the code on
+          // screen: the one thing a cashier must never do is scan it, because
+          // PayMongo issues real QR codes in test mode and scanning one moves
+          // real money.
           if (testUrl != null && _phase == _Phase.waiting)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Text(
-                // Never scan a test code: PayMongo issues real QR codes in
-                // test mode and scanning one moves real money.
-                'Test mode. Simulate payment instead of scanning.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: AppColors.statusUpcoming,
-                  fontWeight: FontWeight.w600,
+            Align(
+              alignment: Alignment.centerLeft,
+              child: InkWell(
+                onTap: () => _copyTestLink(testUrl),
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  // 14 vertical against a ~16 line box clears the 44px tap
+                  // target this app holds checkout controls to.
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 14,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _testLinkCopied ? Icons.check : Icons.copy_outlined,
+                        size: 16,
+                        color: AppColors.statusUpcoming,
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          _testLinkCopied
+                              ? 'Link copied. Paste it in a browser to simulate payment.'
+                              : 'Test mode. Do not scan. Tap to copy the simulator link.',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: AppColors.statusUpcoming,
+                            fontWeight: FontWeight.w600,
+                            decoration: _testLinkCopied
+                                ? null
+                                : TextDecoration.underline,
+                            decorationColor: AppColors.statusUpcoming,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
