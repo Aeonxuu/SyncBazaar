@@ -1,12 +1,12 @@
 # Plan: automatic QR payment with PayMongo
 
-**Status:** part built, and it has drawn a real QR. Steps 3 (payment service) and 4 (dialog states)
-are done and committed on `feature/paymongo-qr`, covered by 31 tests against a fake server. The
-first run against a real PayMongo test key got a real code back and then failed to draw it, which
-is how the base64 picture was found; fixed in `04799f7`. Nothing has yet been watched through to a completed payment.
-`notes/TEST_paymongo_local.md` is how to run it. Waiting on two things: the QR endpoints reaching
-the hosted backend on Render, and step 6, wiring the dialog into Finish. Steps 7 and 8 (manual
-fallback selection, marking a reference automatic or manual) follow that.
+**Status:** all eight steps built on `feature/paymongo-qr`, and partly verified. The payment
+service, dialog and polling were run against a local backend and a real test key, and passed. The
+checkout wiring, the manual fallback and the automatic-or-manual mark came after that run, and the
+two bugs the first attempt at them turned up (`66a0b52`) have not been re-run locally since. So:
+built, and unverified from Finish onwards. `notes/TEST_paymongo_local.md` is how to run it. Also
+waiting on the QR endpoints reaching the hosted backend on Render, so the tablet can be tested
+against it.
 **Opened:** 2026-09-12
 **Why:** advisers asked that cashiers stop typing reference numbers by hand
 
@@ -302,6 +302,45 @@ work finished on 10 September exists precisely for it.
 ---
 
 ## Changes
+
+**2026-09-12 — Test mode is what the adviser expects. Closes open question 6.** The feature has to
+work for testing; no real payment is required.
+
+**What this settles.** The scope is a working integration in test mode, which is what is built. No
+live key, no real money, and no commitment to handling either. Question 7, whose account PayMongo
+would settle to, stops being a blocker for the same reason: there is no account to settle to in test
+mode. It comes back the moment anyone talks about going live, so it is narrowed rather than closed.
+
+**What this does not change, and the first one matters most.**
+
+- **Never scan a test QR with a real wallet.** Test mode still issues real QR codes, and scanning
+  one moves real money out of a real account. "Test mode only" makes this more likely to be
+  forgotten, not less: nothing on screen looks dangerous. Pay through the `test_url` instead, which
+  the dialog now copies to the clipboard for you.
+- **The missing webhook and cancel endpoint stay missing.** They matter less with no real money at
+  stake, so they are no longer worth blocking on, but the behaviour they cause is still there: a
+  payment completed after the tablet closes is never recorded, and a cancelled code sits pending on
+  the server for good. Both are worth a sentence in the write-up rather than a fix.
+- **The demo has to be honest about which it is.** A designed-and-working test integration is a
+  reasonable thing to show. Describing it as taking real payments would not be.
+
+**2026-09-12 — Steps 6, 7 and 8 built (commits `466b32d` and `66a0b52`).** Finish now offers the
+gateway's code, waits for payment, and writes the confirmed reference into the field a cashier used
+to type. The manual path stays reachable throughout and shows the stall's saved code beside the
+reference box. Each sale records whether its reference was confirmed or typed, and carries that into
+the orders export.
+
+Two decisions worth keeping. Which methods go through the gateway is a name match (`QR PH`,
+`PAYMONGO`, however spelled), because a stall's saved GCash code pays the stall and a gateway code
+pays the gateway's account; treating every non-cash method as automatic would quietly redirect a
+customer's money. And the reference source stays on the device, because `Payment` has nowhere to put
+it and the batch endpoint drops fields it does not know, so sending it would look recorded while
+being discarded. A column on `Payment` is the ask for Amrei.
+
+First run found two things, both fixed in `66a0b52`: a gateway method with no picture uploaded asked
+for a reference that cannot exist yet and refused to finish the sale without one, and the payment
+method list was loaded once at sign-in and never refreshed, so a method added on the server needed an
+app restart to appear. Sync now refreshes venues and payment methods too.
 
 **2026-09-12 — `qr_image` is base64, not a URL (fixed in commit `04799f7`).** Found by Lala running
 the dialog against a real key: the QR panel showed "The code could not be loaded" while everything
