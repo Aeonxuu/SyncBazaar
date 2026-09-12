@@ -105,6 +105,28 @@ void main() {
   /// Deliberately says nothing about its *status*: that is derived from
   /// `DateTime.now()`, so pinning "ongoing" here would turn into a failing
   /// test on 8 August rather than a useful assertion.
+  test('seeded sales are not queued for upload', () async {
+    // They are invented by the fixture. Queuing them meant that running the
+    // demo build once and then pointing the app at a real backend offered that
+    // server 244 sales that never happened, and left a pending count nothing
+    // could clear. The comment beside the flag already said these count as
+    // being on the server; the flag disagreed with it.
+    SharedPreferences.setMockInitialValues({});
+    final salesRepository = SalesRepository();
+
+    await DevMockDataSeeder(
+      eventRepository: EventRepository(),
+      productRepository: ProductRepository(),
+      salesRepository: salesRepository,
+      ordersRepository: OrdersRepository(),
+      settingsRepository: SettingsRepository(),
+      authRepository: AuthRepository(),
+    ).seed();
+
+    expect(await salesRepository.listSales(), isNotEmpty);
+    expect(await salesRepository.listUnsyncedSales(), isEmpty);
+  });
+
   test('seeds August Fair day by day, inside the revenue band', () async {
     SharedPreferences.setMockInitialValues({});
     final eventRepository = EventRepository();

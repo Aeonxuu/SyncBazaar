@@ -8,6 +8,28 @@
 /// and the `SaleReturn` it records.
 enum OrderStatus { completed, returned }
 
+/// How a payment reference reached a sale.
+///
+/// "The gateway confirmed this" and "someone read it off a phone and typed it"
+/// are different kinds of evidence, and the difference only matters later, when
+/// a figure is questioned and the sale is months old. Recording it at the till
+/// is the only moment it is free.
+///
+/// Null on a sale with no reference at all, which is every cash sale.
+enum ReferenceSource {
+  /// Read back from the payment gateway, which had already seen the money.
+  automatic,
+
+  /// Typed by whoever was at the till.
+  manual;
+
+  /// For the orders export, where a human reads it.
+  String get label => switch (this) {
+    ReferenceSource.automatic => 'Automatic',
+    ReferenceSource.manual => 'Manual',
+  };
+}
+
 /// What to call a customer who did not give a name.
 const String kWalkInCustomer = 'Walk-in';
 
@@ -38,6 +60,8 @@ class Sale {
     required this.customerName,
     this.soldById = 0,
     required this.employeeId,
+    this.referenceSource,
+    this.originServer,
     required this.paymentMethod,
     required this.qty,
     required this.total,
@@ -74,6 +98,27 @@ class Sale {
   final int soldById;
 
   final String employeeId;
+
+  /// How [employeeId] was obtained. Null when there is no reference, and on
+  /// every sale recorded before this was tracked.
+  final ReferenceSource? referenceSource;
+
+  /// The API this sale was rung up against, as a base URL.
+  ///
+  /// A sale names a bazaar and a product by id, and an id means nothing outside
+  /// the database that minted it. Pointing the app at a different server and
+  /// letting the queue drain into it offers that server sales describing rows
+  /// it has never heard of, and in the worst case rows it has, holding
+  /// something else entirely. The session already refuses to travel between
+  /// backends for the same reason; the queue did not.
+  ///
+  /// Null on a sale rung up with no server attached, which is the demo build,
+  /// and on anything queued before this was recorded. Null is treated as
+  /// unknown rather than foreign: a real sale queued offline before an upgrade
+  /// is the only copy of that money, and stranding it would be worse than the
+  /// problem this prevents.
+  final String? originServer;
+
   final String paymentMethod;
   final int qty;
   final double total;
@@ -97,6 +142,8 @@ class Sale {
     'customer_name': customerName,
     'sold_by_id': soldById,
     'employee_id': employeeId,
+    'reference_source': referenceSource?.name,
+    'origin_server': originServer,
     'payment_method': paymentMethod,
     'qty': qty,
     'total': total,
@@ -119,6 +166,12 @@ class Sale {
     customerName: json['customer_name'] as String? ?? kWalkInCustomer,
     soldById: (json['sold_by_id'] as num?)?.toInt() ?? 0,
     employeeId: json['employee_id'] as String? ?? '',
+    // Unknown rather than guessed for a sale queued before this existed:
+    // calling an old typed reference "automatic" would be inventing evidence.
+    referenceSource: ReferenceSource.values
+        .where((source) => source.name == json['reference_source'])
+        .firstOrNull,
+    originServer: json['origin_server'] as String?,
     paymentMethod: json['payment_method'] as String? ?? 'CASH',
     qty: (json['qty'] as num).toInt(),
     total: (json['total'] as num).toDouble(),
@@ -130,7 +183,11 @@ class Sale {
     synced: json['synced'] as bool? ?? false,
   );
 
-  Sale copyWith({OrderStatus? orderStatus, bool? synced}) {
+  Sale copyWith({
+    OrderStatus? orderStatus,
+    bool? synced,
+    String? originServer,
+  }) {
     return Sale(
       id: id,
       // Deliberately carried through unchanged, and not exposed as a parameter:
@@ -144,6 +201,12 @@ class Sale {
       customerName: customerName,
       soldById: soldById,
       employeeId: employeeId,
+      referenceSource: referenceSource,
+      // Set once and never changed, the same rule as `clientUuid` above and for
+      // the same kind of reason. A sale relabelled with whatever server is
+      // connected now is a sale that will upload into the wrong database, and
+      // the relabelling is exactly what restoring the queue would do.
+      originServer: this.originServer ?? originServer,
       paymentMethod: paymentMethod,
       qty: qty,
       total: total,

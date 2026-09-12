@@ -94,4 +94,23 @@ void main() {
     expect(body['incentive_percent'], 13);
     expect(body['buffer_percent'], 5);
   });
+
+  group('venue paths', () {
+    // Worth pinning: a wrong path here is not a compile error, it is a 404 at
+    // runtime on the screen that lists every venue. The shared
+    // `/api/core/establishment/` these replaced now returns exactly that.
+    test('the list hangs off the store', () {
+      expect(establishmentsPath(4), '/api/core/vendor/4/establishment/');
+    });
+
+    test('one venue hangs off the same store', () {
+      expect(establishmentPath(4, 12), '/api/core/vendor/4/establishment/12/');
+    });
+
+    test('the store in the path is the caller, not the venue', () {
+      // Reads as an obvious pairing until the two ids are close together, and
+      // swapping them is a 403 rather than anything that looks like a bug.
+      expect(establishmentPath(7, 8), '/api/core/vendor/7/establishment/8/');
+    });
+  });
 }

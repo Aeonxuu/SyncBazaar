@@ -29,6 +29,7 @@ void main() {
     int? optionB = 7,
     String payment = 'CASH',
     bool synced = false,
+    String? origin,
   }) => Sale(
     id: 1,
     clientUuid: uuid,
@@ -38,6 +39,7 @@ void main() {
     variantOptionIdB: optionB,
     customerName: 'Walk-in',
     employeeId: '',
+    originServer: origin,
     paymentMethod: payment,
     qty: 2,
     total: 3800,
@@ -172,5 +174,115 @@ void main() {
     expect(result.uploaded, 0);
     expect(result.skipped, 1);
     expect((await sales.listUnsyncedSales()), hasLength(1));
+  });
+
+  group('sales belonging to another server', () {
+    test('are never offered to this one', () async {
+      // The ids on such a sale were issued by a different database. At best
+      // this server rejects them; at worst it accepts them against whatever
+      // rows happen to share those numbers, which is a real sale recorded
+      // against the wrong product at the wrong bazaar.
+      final sales = SalesRepository();
+      await sales.addSale(saleWith(origin: 'http://127.0.0.1:8000'));
+
+      var calls = 0;
+      final uploader = SaleUploadService(
+        auth: AuthRepository(
+          apiClient: ApiClient(
+            baseUrl: 'https://elsewhere.test',
+            httpClient: MockClient((_) async {
+              calls++;
+              return http.Response('[]', 200);
+            }),
+          ),
+        ),
+        events: await eventsWithStockRow(),
+        products: ProductRepository(),
+        sales: sales,
+      );
+
+      final result = await uploader.uploadPending();
+
+      expect(calls, 0, reason: 'it must not even ask the wrong server');
+      expect(result.uploaded, 0);
+      expect(result.elsewhere, 1);
+    });
+
+    test('are not counted as waiting for this one', () async {
+      // Counting them as pending leaves a "still waiting" figure that no
+      // amount of syncing can ever clear, which teaches a cashier to ignore
+      // the one message that tells them whether their takings got through.
+      final sales = SalesRepository();
+      await sales.addSale(saleWith(origin: 'http://127.0.0.1:8000'));
+
+      final uploader = SaleUploadService(
+        auth: AuthRepository(
+          apiClient: ApiClient(
+            baseUrl: 'https://elsewhere.test',
+            httpClient: MockClient((_) async => http.Response('[]', 200)),
+          ),
+        ),
+        events: await eventsWithStockRow(),
+        products: ProductRepository(),
+        sales: sales,
+      );
+
+      expect((await uploader.uploadPending()).skipped, 0);
+    });
+
+    test('are kept, not discarded', () async {
+      // Point the app back at the server they came from and they upload as
+      // normal. This is not the code that decides somebody's records are
+      // worthless.
+      final sales = SalesRepository();
+      await sales.addSale(saleWith(origin: 'http://127.0.0.1:8000'));
+
+      final uploader = SaleUploadService(
+        auth: AuthRepository(
+          apiClient: ApiClient(
+            baseUrl: 'https://elsewhere.test',
+            httpClient: MockClient((_) async => http.Response('[]', 200)),
+          ),
+        ),
+        events: await eventsWithStockRow(),
+        products: ProductRepository(),
+        sales: sales,
+      );
+      await uploader.uploadPending();
+
+      expect(await sales.listUnsyncedSales(), hasLength(1));
+    });
+
+    test('a sale with no origin recorded is not treated as foreign', () async {
+      // Backward compatibility, and it is the careful direction. A real sale
+      // queued offline before this existed is the only copy of that money;
+      // refusing to upload it would be worse than the problem being fixed.
+      //
+      // It is counted as waiting rather than held back, which is what says it
+      // went through the origin check and came out the other side. (It gets no
+      // further here because this harness has no server-issued stock ids, which
+      // is why every test in this file expects nothing uploaded.)
+      final sales = SalesRepository();
+      await sales.addSale(saleWith());
+
+      final uploader = SaleUploadService(
+        auth: AuthRepository(
+          apiClient: ApiClient(
+            baseUrl: 'https://elsewhere.test',
+            httpClient: MockClient(
+              (_) async => http.Response('[{"id": 1, "name": "CASH"}]', 200),
+            ),
+          ),
+        ),
+        events: await eventsWithStockRow(),
+        products: ProductRepository(),
+        sales: sales,
+      );
+
+      final result = await uploader.uploadPending();
+
+      expect(result.elsewhere, 0, reason: 'unknown origin is not foreign');
+      expect(result.skipped, 1);
+    });
   });
 }

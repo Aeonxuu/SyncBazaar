@@ -1,6 +1,24 @@
 # Plan: automatic QR payment with PayMongo
 
-**Status:** not started, waiting on backend endpoints (simpler flow chosen 2026-09-12)
+**Status:** done and working against the hosted backend. All eight steps are built and merged into
+`Lala`.
+
+Verified by Lala on 2026-09-12 against Render with a real test key: checkout routes to the right
+flow for each method (`QR PH` to the gateway, `GCASH` to the saved code, `CASH` to neither), a full
+paid sale end to end, the receipt, losing the connection mid-wait, entering a reference by hand, and
+cancelling.
+
+That leaves two of the dialog's states unexercised, and both for reasons recorded below rather than
+oversight: expiry needs thirty minutes of waiting, and the failed state has nothing that triggers it
+because PayMongo never sends the words the backend maps to it.
+
+Not yet done: the tablet against the hosted backend. Everything above was run on the Mac.
+
+The known limitations under **Changes** still stand and are worth a sentence in the write-up rather
+than a fix: no webhook, so a payment completing after the tablet closes is never recorded; no cancel
+endpoint, so a closed dialog leaves a pending intent on the server; and the automatic-or-manual mark
+stays on the device, because `Payment` has nowhere to put it.
+
 **Opened:** 2026-09-12
 **Why:** advisers asked that cashiers stop typing reference numbers by hand
 
@@ -296,6 +314,120 @@ work finished on 10 September exists precisely for it.
 ---
 
 ## Changes
+
+**2026-09-12 — Working end to end against the hosted backend.** Amrei deployed the QR endpoints to
+Render and merged `vendor-owned-venues`; Lala added the `QR PH` payment method there by hand rather
+than reseeding. The full check passes against Render: routing, the paid path, the receipt, the
+connection drop, manual entry and cancel.
+
+This is the point the feature stops depending on a laptop. Everything before this entry was run
+against a local Django server.
+
+Still on the Mac only. The tablet has not been run against the hosted backend yet, and that is the
+one gap between this and a demo.
+
+**2026-09-12 — Test mode is what the adviser expects. Closes open question 6.** The feature has to
+work for testing; no real payment is required.
+
+**What this settles.** The scope is a working integration in test mode, which is what is built. No
+live key, no real money, and no commitment to handling either. Question 7, whose account PayMongo
+would settle to, stops being a blocker for the same reason: there is no account to settle to in test
+mode. It comes back the moment anyone talks about going live, so it is narrowed rather than closed.
+
+**What this does not change, and the first one matters most.**
+
+- **Never scan a test QR with a real wallet.** Test mode still issues real QR codes, and scanning
+  one moves real money out of a real account. "Test mode only" makes this more likely to be
+  forgotten, not less: nothing on screen looks dangerous. Pay through the `test_url` instead, which
+  the dialog now copies to the clipboard for you.
+- **The missing webhook and cancel endpoint stay missing.** They matter less with no real money at
+  stake, so they are no longer worth blocking on, but the behaviour they cause is still there: a
+  payment completed after the tablet closes is never recorded, and a cancelled code sits pending on
+  the server for good. Both are worth a sentence in the write-up rather than a fix.
+- **The demo has to be honest about which it is.** A designed-and-working test integration is a
+  reasonable thing to show. Describing it as taking real payments would not be.
+
+**2026-09-12 — Steps 6, 7 and 8 built (commits `466b32d` and `66a0b52`).** Finish now offers the
+gateway's code, waits for payment, and writes the confirmed reference into the field a cashier used
+to type. The manual path stays reachable throughout and shows the stall's saved code beside the
+reference box. Each sale records whether its reference was confirmed or typed, and carries that into
+the orders export.
+
+Two decisions worth keeping. Which methods go through the gateway is a name match (`QR PH`,
+`PAYMONGO`, however spelled), because a stall's saved GCash code pays the stall and a gateway code
+pays the gateway's account; treating every non-cash method as automatic would quietly redirect a
+customer's money. And the reference source stays on the device, because `Payment` has nowhere to put
+it and the batch endpoint drops fields it does not know, so sending it would look recorded while
+being discarded. A column on `Payment` is the ask for Amrei.
+
+First run found two things, both fixed in `66a0b52`: a gateway method with no picture uploaded asked
+for a reference that cannot exist yet and refused to finish the sale without one, and the payment
+method list was loaded once at sign-in and never refreshed, so a method added on the server needed an
+app restart to appear. Sync now refreshes venues and payment methods too.
+
+**2026-09-12 — `qr_image` is base64, not a URL (fixed in commit `04799f7`).** Found by Lala running
+the dialog against a real key: the QR panel showed "The code could not be loaded" while everything
+else worked.
+
+**What it actually sends.** `qr_image` carries a data URI, `data:image/png;base64,iVBORw0...`, not
+an address. The backend is not doing anything unusual here: `services_paymongo.py` forwards
+PayMongo's `next_action.code.image_url` untouched, and PayMongo puts the picture itself in that
+field despite the name. So there is nothing for Amrei to change, and this is not a mismatch to raise
+with them.
+
+**Two entries below are wrong and stay as written.** The `a4b1801` entry says "the value is a URL
+rather than base64", and mismatch 5 in the `3a02dc4` entry says "The QR is a URL, not base64". Both
+were read off the field name rather than a real response, and both are wrong. The original
+assumption further up this file, "the QR comes back as base64 so the app can show it without another
+fetch", was right all along.
+
+**What the app does now.** A value starting with `data:image` is decoded once, when the code
+arrives, and drawn from memory. Anything else is fetched over the network as before, so a gateway
+that does send an address keeps working. A payload that will not decode gives the same "could not be
+loaded" panel with the manual fallback beside it, rather than throwing in the middle of a sale.
+
+The field is called `qrImage` rather than `qrImageUrl` now. The old name carried the assumption that
+caused this.
+
+**2026-09-12 — Backend caught up (commit `7635aea`). Three of the five open items fixed, one partly
+fixed, one still open.** Re-checked against the backend clone while writing the local test guide.
+
+**Fixed: the amount unit, and the whole-pesos limit with it.**
+`QrPaymentIntentCreateSerializer.amount` is now a `DecimalField(max_digits=10, decimal_places=2,
+min_value=Decimal("1.00"))`, and the view converts to centavos itself with `int(amount_pesos * 100)`
+before calling PayMongo. The model comment now reads "app sends pesos; stored here as centavos"
+rather than contradicting the code. This closes the hundredfold risk and the `IntegerField` problem
+together: PHP 2,300.50 sends fine, and the floor is 1 peso rather than 100. The client sends a
+decimal string, as agreed.
+
+Worth remembering when reading the database: the request is in pesos and the stored `amount` is in
+centavos, so a PHP 2,300.50 sale shows as `230050` in Django admin. Both are right, they are just
+different units.
+
+**Fixed: the intent leak.** The model gained a `created_by` field (migration `0017`) and the status
+view gained `_accessible_queryset`: a superuser sees every intent, an owner or admin sees their own
+vendor's, and everyone else sees only their own. Another stall's intent id now returns 404 instead
+of its amount and reference number. Note that both views still list only `[IsAuthenticated]`, so the
+scoping lives in the queryset rather than in a permission class. The hole is closed either way, but
+it is not the `IsAdminOrEventVendor` shape the rest of the API uses.
+
+**Partly fixed: expired and failed.** `PAYMONGO_STATUS_MAP` gained `"failed" -> FL` and
+`"expired" -> EX`, and the status view now marks an intent expired on its own after
+`QR_EXPIRATION = 30 minutes`. The local timer is the part that will actually fire. PayMongo's
+payment intent statuses are `awaiting_payment_method`, `awaiting_next_action`, `processing`,
+`succeeded` and `cancelled`, so neither new key matches anything PayMongo sends, and `cancelled` is
+unmapped. Expect `EX` after thirty minutes of waiting, and `FL` essentially never. The app's failed
+state is built and tested, it simply has nothing to trigger it yet.
+
+**Still open, both with Amrei.**
+
+- **No cancel endpoint.** Closing the dialog only stops the app asking. The intent stays pending on
+  the server for good, so a count of pending payments counts nothing real.
+- **No webhook.** Polling remains the only thing that updates status, so a payment that completes
+  after the tablet closes is never recorded and no sale exists for it.
+
+**Testing this locally:** `notes/TEST_paymongo_local.md` covers running the backend on a Mac,
+pointing the app at it, and reaching the dialog before it is wired into Finish.
 
 **2026-09-12 — Sale-scoping removed (commit `a4b1801`). Three of the six mismatches fixed, two
 remain, three new ones introduced.** Re-checked against the backend repo.

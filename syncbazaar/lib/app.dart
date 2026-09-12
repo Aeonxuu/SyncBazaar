@@ -131,6 +131,7 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
       eventRepository: _eventRepository,
       productRepository: _productRepository,
       notificationService: _notificationService,
+      settingsRepository: _settingsRepository,
       // Null without a session, which is the in-memory build: there is nowhere
       // to push to, and sync says so rather than pretending.
       saleUploader: _saleUploader,
