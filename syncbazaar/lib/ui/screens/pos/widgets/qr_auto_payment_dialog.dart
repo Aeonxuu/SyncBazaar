@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
@@ -78,6 +79,10 @@ class _QrAutoPaymentDialogState extends State<_QrAutoPaymentDialog> {
 
   _Phase _phase = _Phase.preparing;
   QrPaymentIntent? _intent;
+
+  /// The decoded picture, when the gateway sent one inline. Decoded once here
+  /// rather than in `build`, which runs again on every poll.
+  Uint8List? _qrBytes;
   String? _message;
 
   /// True while the connection is down but the code is still up. The customer
@@ -123,6 +128,7 @@ class _QrAutoPaymentDialogState extends State<_QrAutoPaymentDialog> {
       }
       setState(() {
         _intent = intent;
+        _qrBytes = intent.qrImageBytes;
         _phase = _Phase.waiting;
       });
       _startPolling();
@@ -275,9 +281,10 @@ class _QrAutoPaymentDialogState extends State<_QrAutoPaymentDialog> {
   Widget _header(ThemeData theme) {
     final subtitle = switch (_phase) {
       _Phase.preparing => 'Preparing the code',
-      _Phase.waiting => _reconnecting
-          ? 'Reconnecting. The code is still valid.'
-          : 'Ask the customer to scan this code',
+      _Phase.waiting =>
+        _reconnecting
+            ? 'Reconnecting. The code is still valid.'
+            : 'Ask the customer to scan this code',
       _Phase.paid => 'Payment received',
       _Phase.expired => 'This code has expired',
       _Phase.failed => 'Payment could not be completed',
@@ -370,29 +377,44 @@ class _QrAutoPaymentDialogState extends State<_QrAutoPaymentDialog> {
         child: SizedBox(
           width: 236,
           height: 236,
-          child: intent == null
-              ? const SizedBox.shrink()
-              : Image.network(
-                  intent.qrImageUrl,
-                  fit: BoxFit.contain,
-                  filterQuality: FilterQuality.none,
-                  loadingBuilder: (context, child, progress) => progress == null
-                      ? child
-                      : const Center(
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                  errorBuilder: (_, _, _) => const Center(
-                    child: Text(
-                      'The code could not be loaded.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.black54),
-                    ),
-                  ),
-                ),
+          child: intent == null ? const SizedBox.shrink() : _qrImage(intent),
         ),
       ),
     );
   }
+
+  /// The code itself, fetched or decoded depending on how it was sent.
+  ///
+  /// `filterQuality: none` on both: a QR is hard pixel edges, and smoothing
+  /// them is what makes a scanner hesitate.
+  Widget _qrImage(QrPaymentIntent intent) {
+    final bytes = _qrBytes;
+    if (bytes != null) {
+      return Image.memory(
+        bytes,
+        fit: BoxFit.contain,
+        filterQuality: FilterQuality.none,
+        errorBuilder: (_, _, _) => _qrUnavailable,
+      );
+    }
+    return Image.network(
+      intent.qrImage,
+      fit: BoxFit.contain,
+      filterQuality: FilterQuality.none,
+      loadingBuilder: (context, child, progress) => progress == null
+          ? child
+          : const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      errorBuilder: (_, _, _) => _qrUnavailable,
+    );
+  }
+
+  static const Widget _qrUnavailable = Center(
+    child: Text(
+      'The code could not be loaded.',
+      textAlign: TextAlign.center,
+      style: TextStyle(color: Colors.black54),
+    ),
+  );
 
   Widget _problem(ThemeData theme) {
     return Container(
@@ -479,8 +501,7 @@ class _QrAutoPaymentDialogState extends State<_QrAutoPaymentDialog> {
   Widget _footer(ThemeData theme) {
     final testUrl = _intent?.testUrl;
     final manualIsBlocked =
-        widget.extraFieldLabel != null &&
-        _manualReference.text.trim().isEmpty;
+        widget.extraFieldLabel != null && _manualReference.text.trim().isEmpty;
     final showManual = _phase != _Phase.paid && _phase != _Phase.manual;
 
     return Padding(

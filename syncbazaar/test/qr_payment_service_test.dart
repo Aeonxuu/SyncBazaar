@@ -46,6 +46,60 @@ void main() {
     'amount': '2300.50',
   };
 
+  group('reading the picture', () {
+    // A 1x1 PNG. Real enough to prove the bytes survive the round trip.
+    const pngBase64 =
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8'
+        'z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+    test('a data URI comes back as bytes', () {
+      // What PayMongo actually sends, in a field it calls image_url.
+      final bytes = decodeDataUriImage('data:image/png;base64,$pngBase64');
+
+      expect(bytes, isNotNull);
+      // The PNG magic number, so this is the real picture and not a prefix
+      // that happened to decode.
+      expect(bytes!.take(4), [0x89, 0x50, 0x4E, 0x47]);
+    });
+
+    test('an ordinary address is left alone', () {
+      // Null is the caller's signal to fetch it over the network instead.
+      expect(decodeDataUriImage('https://cdn.example/qr.png'), isNull);
+    });
+
+    test('a payload wrapped across lines still decodes', () {
+      final wrapped =
+          'data:image/png;base64,${pngBase64.substring(0, 20)}\n'
+          '${pngBase64.substring(20)}';
+
+      expect(decodeDataUriImage(wrapped), isNotNull);
+    });
+
+    test('a damaged payload gives up quietly rather than throwing', () {
+      // Mid-sale is the worst possible moment for an uncaught exception. The
+      // cashier should see the fallback message and the manual button.
+      expect(
+        decodeDataUriImage('data:image/png;base64,not valid base64!!'),
+        isNull,
+      );
+    });
+
+    test('a data URI that is not base64 is refused', () {
+      // Percent-encoded text, which would decode to nonsense as base64.
+      expect(decodeDataUriImage('data:image/svg+xml,%3Csvg%3E'), isNull);
+    });
+
+    test('the intent exposes the same decoding', () {
+      const intent = QrPaymentIntent(
+        intentId: 'pi_abc',
+        qrImage: 'data:image/png;base64,$pngBase64',
+        status: QrPaymentStatus.pending,
+      );
+
+      expect(intent.qrImageBytes, isNotNull);
+    });
+  });
+
   group('asking for a code', () {
     test('sends the amount as a decimal string in pesos', () async {
       Map<String, dynamic>? sent;
@@ -77,7 +131,7 @@ void main() {
       final intent = await serviceReplying(created).create(amount: 2300.5);
 
       expect(intent.intentId, 'pi_abc');
-      expect(intent.qrImageUrl, 'https://cdn.example/qr.png');
+      expect(intent.qrImage, 'https://cdn.example/qr.png');
       expect(intent.testUrl, 'https://test.example/simulate');
       expect(intent.status, QrPaymentStatus.pending);
     });
@@ -179,9 +233,7 @@ void main() {
           );
         }),
       );
-      final service = QrPaymentService(
-        auth: AuthRepository(apiClient: client),
-      );
+      final service = QrPaymentService(auth: AuthRepository(apiClient: client));
 
       await service.statusOf('pi_abc');
       online = false;

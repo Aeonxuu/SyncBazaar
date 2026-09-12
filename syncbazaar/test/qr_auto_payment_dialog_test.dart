@@ -15,7 +15,8 @@ void main() {
   // test surface is shorter than the dialog, so the footer lands under the
   // barrier and its buttons cannot be tapped.
   setUp(() {
-    final view = TestWidgetsFlutterBinding.ensureInitialized().platformDispatcher
+    final view = TestWidgetsFlutterBinding.ensureInitialized()
+        .platformDispatcher
         .views
         .first;
     view.physicalSize = const Size(1600, 1000);
@@ -23,7 +24,8 @@ void main() {
   });
 
   tearDown(() {
-    final view = TestWidgetsFlutterBinding.ensureInitialized().platformDispatcher
+    final view = TestWidgetsFlutterBinding.ensureInitialized()
+        .platformDispatcher
         .views
         .first;
     view.resetPhysicalSize();
@@ -127,6 +129,40 @@ void main() {
     });
   });
 
+  group('showing the code', () {
+    // A 1x1 PNG, which is what the gateway sends inline.
+    const dataUri =
+        'data:image/png;base64,'
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8'
+        'z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+    testWidgets('an inline code is drawn from memory, not fetched', (
+      tester,
+    ) async {
+      await open(tester, _FakeService(qrImage: dataUri));
+
+      // Image.network in a test renders nothing and the till showed "the code
+      // could not be loaded", which is how this was found in the first place.
+      expect(find.byType(Image), findsOneWidget);
+      expect(
+        (tester.widget<Image>(find.byType(Image)).image),
+        isA<MemoryImage>(),
+      );
+      expect(find.text('The code could not be loaded.'), findsNothing);
+    });
+
+    testWidgets('an addressed code is still fetched', (tester) async {
+      // The other form has to keep working: it is what the field name claims,
+      // and what a different gateway would send.
+      await open(tester, _FakeService());
+
+      expect(
+        (tester.widget<Image>(find.byType(Image)).image),
+        isA<NetworkImage>(),
+      );
+    });
+  });
+
   group('when things go wrong', () {
     testWidgets('a lost connection keeps the code up and says so', (
       tester,
@@ -185,9 +221,7 @@ void main() {
 
       await tester.enterText(find.byType(TextField), '  9988776655  ');
       await tester.pump();
-      await tester.tap(
-        find.widgetWithText(ElevatedButton, 'Payment Received'),
-      );
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Payment Received'));
       await tester.pumpAndSettle();
 
       expect(result!.reference, '9988776655');
@@ -235,7 +269,12 @@ class _FakeService implements QrPaymentService {
     this.expiredAfterPolls,
     this.offlineAfterPolls,
     this.failToCreate = false,
+    this.qrImage = 'https://cdn.example/qr.png',
   });
+
+  /// What the gateway put in the picture field. PayMongo sends a base64 data
+  /// URI here despite calling it `image_url`.
+  final String qrImage;
 
   final int? paidAfterPolls;
   final int? expiredAfterPolls;
@@ -252,9 +291,9 @@ class _FakeService implements QrPaymentService {
         'The payment code could not be prepared. Try again.',
       );
     }
-    return const QrPaymentIntent(
+    return QrPaymentIntent(
       intentId: 'pi_abc',
-      qrImageUrl: 'https://cdn.example/qr.png',
+      qrImage: qrImage,
       status: QrPaymentStatus.pending,
       testUrl: 'https://test.example/simulate',
     );

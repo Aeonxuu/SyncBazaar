@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import '../data/remote/api_client.dart';
 import '../data/repositories/auth_repository.dart';
 
@@ -23,19 +26,61 @@ enum QrPaymentStatus {
   bool get isSettled => this != QrPaymentStatus.pending;
 }
 
+/// The bytes inside a `data:image/...;base64,...` value.
+///
+/// Returns null for anything else, including an ordinary `https://` address,
+/// which is the caller's signal to fetch it over the network instead.
+///
+/// Also returns null for a data URI whose payload will not decode, rather than
+/// throwing: a damaged picture should leave the cashier looking at "the code
+/// could not be loaded" with the manual fallback beside it, not at a crash in
+/// the middle of taking payment.
+Uint8List? decodeDataUriImage(String value) {
+  if (!value.startsWith('data:image')) {
+    return null;
+  }
+  final comma = value.indexOf(',');
+  if (comma == -1) {
+    return null;
+  }
+  // Only base64 payloads. A data URI can also carry percent-encoded text, and
+  // decoding one of those as base64 would produce nonsense bytes.
+  if (!value.substring(0, comma).contains(';base64')) {
+    return null;
+  }
+  try {
+    // Whitespace is legal inside a base64 payload and common when one has been
+    // wrapped across lines, but `base64Decode` rejects it.
+    return base64Decode(
+      value.substring(comma + 1).replaceAll(RegExp(r'\s'), ''),
+    );
+  } on FormatException {
+    return null;
+  }
+}
+
 /// A QR the customer can scan, and what it takes to follow it up.
 class QrPaymentIntent {
   const QrPaymentIntent({
     required this.intentId,
-    required this.qrImageUrl,
+    required this.qrImage,
     required this.status,
     this.testUrl,
   });
 
   final String intentId;
 
-  /// A URL, not image bytes. Shown with `Image.network`.
-  final String qrImageUrl;
+  /// The QR picture, in whichever of the two forms the gateway sent.
+  ///
+  /// PayMongo calls this field `image_url` and then puts a
+  /// `data:image/png;base64,...` value in it, which our backend passes through
+  /// untouched. Treating it as an address is what made the till say the code
+  /// could not be loaded. Both forms are handled: see [qrImageBytes].
+  final String qrImage;
+
+  /// [qrImage] decoded, when it arrived as a data URI, and null when it is a
+  /// plain address to be fetched instead.
+  Uint8List? get qrImageBytes => decodeDataUriImage(qrImage);
 
   final QrPaymentStatus status;
 
@@ -88,7 +133,10 @@ class QrPaymentService {
 
     final image = body['qr_image'] as String?;
     final intentId = body['intent_id'] as String?;
-    if (image == null || image.isEmpty || intentId == null || intentId.isEmpty) {
+    if (image == null ||
+        image.isEmpty ||
+        intentId == null ||
+        intentId.isEmpty) {
       // Without a code there is nothing for the customer to scan, and without
       // an id there is no way to ask whether it was paid. Either one missing
       // is a failure however well-formed the rest of the response is, and it
@@ -102,7 +150,7 @@ class QrPaymentService {
 
     return QrPaymentIntent(
       intentId: intentId,
-      qrImageUrl: image,
+      qrImage: image,
       status: QrPaymentStatus.fromCode(body['status'] as String?),
       testUrl: body['test_url'] as String?,
     );
