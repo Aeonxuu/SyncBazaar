@@ -322,8 +322,11 @@ means the app is pointed at the wrong address, so check the `API_BASE_URL` in yo
 **You should see:** a QR code, the amount, and wording asking the customer to scan. Below it, an
 **Enter reference manually** button and a **Cancel**.
 
-**If you get a broken image icon instead:** the picture is downloaded from PayMongo's servers, so
-this is your internet, not the local server.
+**If you see "The code could not be loaded" instead:** the picture arrives inside the response as
+base64 rather than as an address, so this is not your internet. That exact failure was the bug fixed
+in commit `04799f7`; seeing it again means something is sending the picture in a third form nobody
+has handled yet. Check what `qr_image` actually contains using the `curl` command from part 1
+step 7.
 
 **In the server terminal you should see:** a `GET /api/bazaar/qr-intent/.../status/` line appearing
 every three seconds. That is the app checking whether the money arrived. If those lines are not

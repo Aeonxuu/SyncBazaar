@@ -1,11 +1,12 @@
 # Plan: automatic QR payment with PayMongo
 
-**Status:** part built. Steps 3 (payment service) and 4 (dialog states) are done and committed on
-`feature/paymongo-qr` (commit `b1acb36`), covered by 23 tests against a fake server. Neither has yet
-been run against a real one; `notes/TEST_paymongo_local.md` is how to do that. Waiting on two
-things: the QR endpoints reaching the hosted backend on Render, and step 6, wiring the dialog into
-Finish.
-Steps 7 and 8 (manual fallback selection, marking a reference automatic or manual) follow that.
+**Status:** part built, and it has drawn a real QR. Steps 3 (payment service) and 4 (dialog states)
+are done and committed on `feature/paymongo-qr`, covered by 31 tests against a fake server. The
+first run against a real PayMongo test key got a real code back and then failed to draw it, which
+is how the base64 picture was found; fixed in `04799f7`. Nothing has yet been watched through to a completed payment.
+`notes/TEST_paymongo_local.md` is how to run it. Waiting on two things: the QR endpoints reaching
+the hosted backend on Render, and step 6, wiring the dialog into Finish. Steps 7 and 8 (manual
+fallback selection, marking a reference automatic or manual) follow that.
 **Opened:** 2026-09-12
 **Why:** advisers asked that cashiers stop typing reference numbers by hand
 
@@ -301,6 +302,30 @@ work finished on 10 September exists precisely for it.
 ---
 
 ## Changes
+
+**2026-09-12 — `qr_image` is base64, not a URL (fixed in commit `04799f7`).** Found by Lala running
+the dialog against a real key: the QR panel showed "The code could not be loaded" while everything
+else worked.
+
+**What it actually sends.** `qr_image` carries a data URI, `data:image/png;base64,iVBORw0...`, not
+an address. The backend is not doing anything unusual here: `services_paymongo.py` forwards
+PayMongo's `next_action.code.image_url` untouched, and PayMongo puts the picture itself in that
+field despite the name. So there is nothing for Amrei to change, and this is not a mismatch to raise
+with them.
+
+**Two entries below are wrong and stay as written.** The `a4b1801` entry says "the value is a URL
+rather than base64", and mismatch 5 in the `3a02dc4` entry says "The QR is a URL, not base64". Both
+were read off the field name rather than a real response, and both are wrong. The original
+assumption further up this file, "the QR comes back as base64 so the app can show it without another
+fetch", was right all along.
+
+**What the app does now.** A value starting with `data:image` is decoded once, when the code
+arrives, and drawn from memory. Anything else is fetched over the network as before, so a gateway
+that does send an address keeps working. A payload that will not decode gives the same "could not be
+loaded" panel with the manual fallback beside it, rather than throwing in the middle of a sale.
+
+The field is called `qrImage` rather than `qrImageUrl` now. The old name carried the assumption that
+caused this.
 
 **2026-09-12 — Backend caught up (commit `7635aea`). Three of the five open items fixed, one partly
 fixed, one still open.** Re-checked against the backend clone while writing the local test guide.
