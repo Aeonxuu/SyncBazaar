@@ -5,6 +5,38 @@ import '../data/repositories/product_repository.dart';
 import '../data/repositories/sales_repository.dart';
 import '../models/sale.dart';
 
+/// One sale as the batch endpoint expects it.
+///
+/// Pulled out of the upload loop so the shape can be tested directly. The
+/// service around it cannot reach a successful POST in a test without a server
+/// issuing stock row ids, which left the actual JSON — the part a backend
+/// rejects or silently drops — as the one thing never checked.
+Map<String, dynamic> saleUploadPayload({
+  required Sale sale,
+  required int stockId,
+  required Map<String, int> methodIds,
+}) {
+  final reference = sale.employeeId.trim();
+  final source = sale.referenceSource;
+  return {
+    'client_uuid': sale.clientUuid,
+    'event_stock': stockId,
+    'customer_name': sale.customerName,
+    'quantity': sale.qty,
+    'order_status': 'CM',
+    'synced': true,
+    if (methodIds[sale.paymentMethod.trim().toUpperCase()] != null)
+      'payment_method': methodIds[sale.paymentMethod.trim().toUpperCase()],
+    if (reference.isNotEmpty) 'required_information': reference,
+    // Only alongside a reference it can describe, and only when one was
+    // actually recorded. A sale queued before the app tracked this has no
+    // answer, and the column is nullable precisely so that unknown stays
+    // unknown rather than being filled in with a guess.
+    if (reference.isNotEmpty && source != null)
+      'required_information_source': source.wireCode,
+  };
+}
+
 /// Sends completed sales to the server.
 ///
 /// Sales are written locally first and pushed afterwards, never the other way
@@ -132,18 +164,9 @@ class SaleUploadService {
         continue;
       }
 
-      payload.add({
-        'client_uuid': sale.clientUuid,
-        'event_stock': stockId,
-        'customer_name': sale.customerName,
-        'quantity': sale.qty,
-        'order_status': 'CM',
-        'synced': true,
-        if (methodIds[sale.paymentMethod.trim().toUpperCase()] != null)
-          'payment_method': methodIds[sale.paymentMethod.trim().toUpperCase()],
-        if (sale.employeeId.trim().isNotEmpty)
-          'required_information': sale.employeeId.trim(),
-      });
+      payload.add(
+        saleUploadPayload(sale: sale, stockId: stockId, methodIds: methodIds),
+      );
       sent.add(sale.clientUuid);
     }
 

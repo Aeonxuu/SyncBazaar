@@ -28,6 +28,18 @@ enum ReferenceSource {
     ReferenceSource.automatic => 'Automatic',
     ReferenceSource.manual => 'Manual',
   };
+
+  /// What the server stores, from `Payment.required_information_source`.
+  ///
+  /// Kept apart from [label] rather than derived from it, because they answer
+  /// to different owners: the label is ours to reword whenever the export reads
+  /// better a different way, and this is the backend's, where the column is two
+  /// characters wide and rejects anything else. Deriving one from the other
+  /// means the day somebody improves the wording, uploads start failing.
+  String get wireCode => switch (this) {
+    ReferenceSource.automatic => 'AU',
+    ReferenceSource.manual => 'MA',
+  };
 }
 
 /// What to call a customer who did not give a name.
