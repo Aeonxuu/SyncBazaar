@@ -358,7 +358,13 @@ class DevMockDataSeeder {
         total: total,
         timestamp: timestamp,
         orderStatus: OrderStatus.completed,
-        synced: false,
+        // Nothing here is waiting to be uploaded, which is what this flag
+        // means. These 244 sales are invented by the fixture, and marking them
+        // unsent queued every one of them for upload: run the demo build once,
+        // then point the app at a real backend, and it offers the server 244
+        // sales that never happened. The comment above already said they count
+        // as being on the server; the flag disagreed with it.
+        synced: true,
       );
       await salesRepository.addSale(sale);
 
