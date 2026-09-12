@@ -8,6 +8,28 @@
 /// and the `SaleReturn` it records.
 enum OrderStatus { completed, returned }
 
+/// How a payment reference reached a sale.
+///
+/// "The gateway confirmed this" and "someone read it off a phone and typed it"
+/// are different kinds of evidence, and the difference only matters later, when
+/// a figure is questioned and the sale is months old. Recording it at the till
+/// is the only moment it is free.
+///
+/// Null on a sale with no reference at all, which is every cash sale.
+enum ReferenceSource {
+  /// Read back from the payment gateway, which had already seen the money.
+  automatic,
+
+  /// Typed by whoever was at the till.
+  manual;
+
+  /// For the orders export, where a human reads it.
+  String get label => switch (this) {
+    ReferenceSource.automatic => 'Automatic',
+    ReferenceSource.manual => 'Manual',
+  };
+}
+
 /// What to call a customer who did not give a name.
 const String kWalkInCustomer = 'Walk-in';
 
@@ -38,6 +60,7 @@ class Sale {
     required this.customerName,
     this.soldById = 0,
     required this.employeeId,
+    this.referenceSource,
     required this.paymentMethod,
     required this.qty,
     required this.total,
@@ -74,6 +97,11 @@ class Sale {
   final int soldById;
 
   final String employeeId;
+
+  /// How [employeeId] was obtained. Null when there is no reference, and on
+  /// every sale recorded before this was tracked.
+  final ReferenceSource? referenceSource;
+
   final String paymentMethod;
   final int qty;
   final double total;
@@ -97,6 +125,7 @@ class Sale {
     'customer_name': customerName,
     'sold_by_id': soldById,
     'employee_id': employeeId,
+    'reference_source': referenceSource?.name,
     'payment_method': paymentMethod,
     'qty': qty,
     'total': total,
@@ -119,6 +148,11 @@ class Sale {
     customerName: json['customer_name'] as String? ?? kWalkInCustomer,
     soldById: (json['sold_by_id'] as num?)?.toInt() ?? 0,
     employeeId: json['employee_id'] as String? ?? '',
+    // Unknown rather than guessed for a sale queued before this existed:
+    // calling an old typed reference "automatic" would be inventing evidence.
+    referenceSource: ReferenceSource.values
+        .where((source) => source.name == json['reference_source'])
+        .firstOrNull,
     paymentMethod: json['payment_method'] as String? ?? 'CASH',
     qty: (json['qty'] as num).toInt(),
     total: (json['total'] as num).toDouble(),
@@ -144,6 +178,7 @@ class Sale {
       customerName: customerName,
       soldById: soldById,
       employeeId: employeeId,
+      referenceSource: referenceSource,
       paymentMethod: paymentMethod,
       qty: qty,
       total: total,

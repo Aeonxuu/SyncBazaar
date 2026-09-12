@@ -2,6 +2,8 @@ import 'dart:typed_data';
 
 import 'package:excel/excel.dart';
 
+import '../models/sale.dart' show ReferenceSource;
+
 /// One line of a bazaar's order list: a single product on a single sale.
 ///
 /// Flat on purpose. A [Sale] in this app is already one cart line rather than a
@@ -14,6 +16,7 @@ class OrderLine {
     required this.product,
     required this.paymentMethod,
     required this.reference,
+    this.referenceSource,
     required this.quantity,
     required this.total,
     required this.returned,
@@ -27,6 +30,10 @@ class OrderLine {
 
   /// Names the sheet this line lands on.
   final String paymentMethod;
+
+  /// How [reference] arrived. Null on a sale that has none, and on any sale
+  /// rung up before this was recorded.
+  final ReferenceSource? referenceSource;
 
   /// Whatever the method's extra field asked for — a GCash reference number,
   /// a bank slip number. Empty for methods that ask for nothing, such as cash.
@@ -65,6 +72,9 @@ class OrdersWorkbook {
     'Customer Name',
     'Product',
   ];
+  /// Header for the column qualifying the reference beside it.
+  static const String referenceSourceColumn = 'Reference From';
+
   static const List<String> _trailingColumns = [
     'Unit Price',
     'Quantity',
@@ -109,6 +119,11 @@ class OrdersWorkbook {
       final headers = [
         ..._leadingColumns,
         if (hasExtra) extraLabel,
+        // Beside the reference rather than at the end, because it qualifies
+        // that column and nothing else. A gateway-confirmed reference and a
+        // hand-typed one are worth different amounts as evidence, and by the
+        // time anyone asks, the sale is months old and nobody remembers.
+        if (hasExtra) referenceSourceColumn,
         ..._trailingColumns,
       ];
       final sheet = excel[sheetName];
@@ -121,6 +136,8 @@ class OrdersWorkbook {
           TextCellValue(line.customerName),
           TextCellValue(line.product),
           if (hasExtra) TextCellValue(line.reference),
+          // Blank rather than a guess where nothing was recorded.
+          if (hasExtra) TextCellValue(line.referenceSource?.label ?? ''),
           DoubleCellValue(_round(line.unitPrice)),
           IntCellValue(line.quantity),
           DoubleCellValue(_round(line.total)),
@@ -163,9 +180,11 @@ class OrdersWorkbook {
     sheet.setColumnWidth(1, 22); // Customer Name
     sheet.setColumnWidth(2, 38); // Product, the longest by far
     if (hasExtra) {
-      sheet.setColumnWidth(3, 24);
+      sheet.setColumnWidth(3, 24); // The reference itself
+      sheet.setColumnWidth(4, 16); // Reference From
     }
-    final money = hasExtra ? 4 : 3;
+    // Two extra columns when a method has a reference, not one.
+    final money = hasExtra ? 5 : 3;
     sheet.setColumnWidth(money, 12); // Unit Price
     sheet.setColumnWidth(money + 1, 10); // Quantity
     sheet.setColumnWidth(money + 2, 14); // Total

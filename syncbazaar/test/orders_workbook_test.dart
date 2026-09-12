@@ -1,5 +1,6 @@
 import 'package:excel/excel.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:syncbazaar/models/sale.dart' show ReferenceSource;
 import 'package:syncbazaar/services/orders_workbook.dart';
 
 /// The order list is what a venue reconciles its cut against, so the shape of
@@ -12,6 +13,7 @@ void main() {
     String product = 'Nike Air Max SC (Color Black, Size 42)',
     String method = 'CASH',
     String reference = '',
+    ReferenceSource? referenceSource,
     int quantity = 1,
     double total = 3500,
     bool returned = false,
@@ -21,6 +23,7 @@ void main() {
     product: product,
     paymentMethod: method,
     reference: reference,
+    referenceSource: referenceSource,
     quantity: quantity,
     total: total,
     returned: returned,
@@ -96,11 +99,45 @@ void main() {
       'Customer Name',
       'Product',
       'Reference Number',
+      // Qualifies the reference, so it sits beside it rather than at the end.
+      'Reference From',
       'Unit Price',
       'Quantity',
       'Total',
       'Status',
     ]);
+  });
+
+  test('says whether a reference was confirmed or typed', () {
+    final book = build(
+      lines: [
+        line(
+          method: 'QR PH',
+          reference: 'pay_abc',
+          referenceSource: ReferenceSource.automatic,
+        ),
+        line(
+          method: 'QR PH',
+          reference: 'typed-by-hand',
+          referenceSource: ReferenceSource.manual,
+        ),
+      ],
+      labels: {'QR PH': 'Reference Number'},
+    );
+
+    expect(rowOf(book, 'QR PH', 1)[4], 'Automatic');
+    expect(rowOf(book, 'QR PH', 2)[4], 'Manual');
+  });
+
+  test('a sale from before this was recorded leaves the column blank', () {
+    // Every sale already queued on a tablet. Guessing a source for one would
+    // be inventing the very evidence the column exists to provide.
+    final book = build(
+      lines: [line(method: 'GCASH', reference: 'REF-001')],
+      labels: {'GCASH': 'Reference Number'},
+    );
+
+    expect(rowOf(book, 'GCASH', 1)[4], '');
   });
 
   test('a method with a blank label carries no empty column', () {

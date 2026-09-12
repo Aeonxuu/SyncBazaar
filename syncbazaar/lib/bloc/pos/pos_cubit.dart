@@ -71,6 +71,7 @@ class PosState {
     this.selectedPaymentMethod = 'CASH',
     this.customerName = '',
     this.paymentExtraFieldValue = '',
+    this.referenceSource,
     this.cashTendered = '',
     this.allocations = const {},
     this.eventIdsWithSales = const {},
@@ -96,6 +97,10 @@ class PosState {
   final String selectedPaymentMethod;
   final String customerName;
   final String paymentExtraFieldValue;
+
+  /// How [paymentExtraFieldValue] arrived, carried onto every sale in the
+  /// basket. Null until there is a reference.
+  final ReferenceSource? referenceSource;
 
   /// Raw text of the "Cash received" field, kept as typed so a half-entered
   /// amount does not get rounded or reformatted under the cashier's cursor.
@@ -173,6 +178,25 @@ class PosState {
   /// makes the till present it, with nothing to change here.
   bool get requiresQrPresentment => selectedPaymentQr != null;
 
+  /// Whether this method is paid through the gateway rather than the stall's
+  /// own saved code.
+  ///
+  /// This *is* a registry of names, which [requiresQrPresentment] deliberately
+  /// avoided being, and the reason is where the money lands. A stall's saved
+  /// GCash code pays the stall directly; a gateway code pays the gateway's
+  /// account. Treating every non-cash method as automatic would quietly
+  /// redirect a customer's money away from the stall that set the method up,
+  /// and in test mode nobody would notice until it was real.
+  bool get supportsAutomaticQr =>
+      _automaticQrMethods.contains(_squash(selectedPaymentMethod));
+
+  /// Ignores spacing and punctuation, so "QR Ph", "qr-ph" and "QRPH" are one
+  /// method rather than three ways to miss the match.
+  static String _squash(String name) =>
+      name.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
+
+  static const Set<String> _automaticQrMethods = {'QRPH', 'PAYMONGO'};
+
   /// Null when the field is empty or not a number — i.e. not yet valid.
   double? get cashTenderedValue {
     final parsed = double.tryParse(cashTendered.trim());
@@ -210,6 +234,8 @@ class PosState {
     String? selectedPaymentMethod,
     String? customerName,
     String? paymentExtraFieldValue,
+    ReferenceSource? referenceSource,
+    bool clearReferenceSource = false,
     String? cashTendered,
     Map<String, int>? allocations,
     Set<int>? eventIdsWithSales,
@@ -228,6 +254,9 @@ class PosState {
       customerName: customerName ?? this.customerName,
       paymentExtraFieldValue:
           paymentExtraFieldValue ?? this.paymentExtraFieldValue,
+      referenceSource: clearReferenceSource
+          ? null
+          : (referenceSource ?? this.referenceSource),
       cashTendered: cashTendered ?? this.cashTendered,
       eventIdsWithSales: eventIdsWithSales ?? this.eventIdsWithSales,
       // Dropped along with the event: allocations belong to one bazaar, and
@@ -382,12 +411,28 @@ class PosCubit extends Cubit<PosState> {
       selectedPaymentMethod: value,
       paymentExtraFieldValue: '',
       cashTendered: '',
+      clearReferenceSource: true,
     ),
   );
   void updateCustomerName(String value) =>
       emit(state.copyWith(customerName: value));
-  void updatePaymentExtraFieldValue(String value) =>
-      emit(state.copyWith(paymentExtraFieldValue: value));
+  /// The typed path. Anything arriving through the keyboard is manual by
+  /// definition, including a reference typed into the QR dialog's fallback.
+  void updatePaymentExtraFieldValue(String value) => emit(
+    state.copyWith(
+      paymentExtraFieldValue: value,
+      referenceSource: ReferenceSource.manual,
+    ),
+  );
+
+  /// The gateway path: a reference the server read back off a payment it had
+  /// already seen, rather than one anybody at the till transcribed.
+  void recordAutomaticReference(String value) => emit(
+    state.copyWith(
+      paymentExtraFieldValue: value,
+      referenceSource: ReferenceSource.automatic,
+    ),
+  );
   void updateCashTendered(String value) =>
       emit(state.copyWith(cashTendered: value));
 
@@ -536,6 +581,7 @@ class PosCubit extends Cubit<PosState> {
         cart: const [],
         customerName: '',
         paymentExtraFieldValue: '',
+        clearReferenceSource: true,
         cashTendered: '',
         selectedPaymentMethod: state.paymentMethods.isEmpty
             ? 'CASH'
@@ -671,6 +717,11 @@ class PosCubit extends Cubit<PosState> {
         customerName: normalizeCustomerName(state.customerName),
         soldById: user.id,
         employeeId: state.paymentExtraFieldValue,
+        // Only where there is a reference to describe. A cash sale has none,
+        // and marking one "manual" would suggest somebody typed something.
+        referenceSource: state.paymentExtraFieldValue.trim().isEmpty
+            ? null
+            : state.referenceSource,
         paymentMethod: state.selectedPaymentMethod,
         qty: item.quantity,
         total: item.lineTotal * ratio,
@@ -732,6 +783,7 @@ class PosCubit extends Cubit<PosState> {
         cart: const [],
         customerName: '',
         paymentExtraFieldValue: '',
+        clearReferenceSource: true,
         cashTendered: '',
         selectedPaymentMethod: state.paymentMethods.isEmpty
             ? 'CASH'

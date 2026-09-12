@@ -12,6 +12,7 @@ import '../../../core/constants/colors.dart';
 import '../../../core/constants/motion.dart';
 import '../../../models/bazaar_event.dart';
 import '../../../models/product.dart';
+import '../../../models/sale.dart' show ReferenceSource;
 import '../../../models/product_variant.dart';
 import '../../../models/user.dart';
 import '../../../data/repositories/product_repository.dart';
@@ -24,6 +25,7 @@ import '../../../bloc/staff/staff_cubit.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../data/repositories/event_repository.dart';
 import '../../../data/repositories/settings_repository.dart';
+import '../../../services/qr_payment_service.dart';
 import '../../../services/staff_scheduling.dart';
 import '../../widgets/app_dropdown.dart';
 import '../../widgets/bazaar_search_field.dart';
@@ -34,6 +36,7 @@ import '../../widgets/selectable_option_button.dart';
 import 'widgets/pos_product_card.dart';
 import '../../../core/utils/formatters.dart';
 import 'widgets/confirm_sale_dialog.dart';
+import 'widgets/qr_auto_payment_dialog.dart';
 import 'widgets/qr_payment_dialog.dart';
 import 'widgets/receipt_print_dialog.dart';
 
@@ -804,7 +807,40 @@ class _PosScreenState extends State<PosScreen> {
                           // confirm. Cancelling here commits nothing: an
                           // e-wallet payment that never arrived is the ordinary
                           // reason for backing out at this point.
-                          if (state.requiresQrPresentment) {
+                          //
+                          // Two ways to present a code. The gateway generates
+                          // one per sale and tells us when it is paid; the
+                          // stall's own saved code cannot be checked, so the
+                          // reference has to be read off the customer's phone.
+                          // Which one applies is the payment method's, not the
+                          // connection's: see `supportsAutomaticQr`.
+                          if (state.supportsAutomaticQr &&
+                              context.read<AuthRepository>().vendorId != null) {
+                            final result = await showQrAutoPaymentDialog(
+                              context: context,
+                              paymentMethod: state.selectedPaymentMethod,
+                              amount: state.total,
+                              service: QrPaymentService(
+                                auth: context.read<AuthRepository>(),
+                              ),
+                              extraFieldLabel: state.selectedExtraFieldLabel,
+                              // For the fallback, so a cashier who loses the
+                              // connection mid-sale still has something to show
+                              // the customer.
+                              savedQrBytes: state.selectedPaymentQr,
+                            );
+                            if (result == null) return;
+                            switch (result.source) {
+                              case ReferenceSource.automatic:
+                                posCubit.recordAutomaticReference(
+                                  result.reference,
+                                );
+                              case ReferenceSource.manual:
+                                posCubit.updatePaymentExtraFieldValue(
+                                  result.reference,
+                                );
+                            }
+                          } else if (state.requiresQrPresentment) {
                             final reference = await showQrPaymentDialog(
                               context: context,
                               paymentMethod: state.selectedPaymentMethod,

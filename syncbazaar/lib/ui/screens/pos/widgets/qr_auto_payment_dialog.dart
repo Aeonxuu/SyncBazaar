@@ -7,13 +7,8 @@ import '../../../../core/constants/colors.dart';
 import '../../../../core/constants/motion.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../data/remote/api_client.dart';
+import '../../../../models/sale.dart' show ReferenceSource;
 import '../../../../services/qr_payment_service.dart';
-
-/// How a reference number reached the sale.
-///
-/// Recorded because "the gateway confirmed this" and "somebody typed this" are
-/// different kinds of evidence when a figure is questioned later.
-enum ReferenceSource { automatic, manual }
 
 /// What the cashier ended up with.
 class QrPaymentResult {
@@ -37,6 +32,7 @@ Future<QrPaymentResult?> showQrAutoPaymentDialog({
   required double amount,
   required QrPaymentService service,
   String? extraFieldLabel,
+  Uint8List? savedQrBytes,
 }) {
   return showDialog<QrPaymentResult>(
     context: context,
@@ -48,6 +44,7 @@ Future<QrPaymentResult?> showQrAutoPaymentDialog({
       amount: amount,
       service: service,
       extraFieldLabel: extraFieldLabel,
+      savedQrBytes: savedQrBytes,
     ),
   );
 }
@@ -60,12 +57,18 @@ class _QrAutoPaymentDialog extends StatefulWidget {
     required this.amount,
     required this.service,
     this.extraFieldLabel,
+    this.savedQrBytes,
   });
 
   final String paymentMethod;
   final double amount;
   final QrPaymentService service;
   final String? extraFieldLabel;
+
+  /// The stall's own code from Venues & Terms, shown in the manual fallback so
+  /// a cashier with no signal has something for the customer to scan. Null when
+  /// the method has none saved.
+  final Uint8List? savedQrBytes;
 
   @override
   State<_QrAutoPaymentDialog> createState() => _QrAutoPaymentDialogState();
@@ -450,10 +453,36 @@ class _QrAutoPaymentDialogState extends State<_QrAutoPaymentDialog> {
   }
 
   Widget _manualField(ThemeData theme) {
+    final saved = widget.savedQrBytes;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
+        // The stall's own code, when it has one. Falling back to typing a
+        // reference with nothing on screen leaves the customer no way to pay
+        // at all, which is the situation this fallback exists to rescue.
+        if (saved != null) ...[
+          Center(
+            child: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: SizedBox(
+                width: 150,
+                height: 150,
+                child: Image.memory(
+                  saved,
+                  fit: BoxFit.contain,
+                  filterQuality: FilterQuality.none,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
         Text(
           widget.extraFieldLabel ?? 'Reference number',
           style: theme.textTheme.bodySmall?.copyWith(color: Colors.black45),

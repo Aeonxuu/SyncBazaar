@@ -182,6 +182,7 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
           // Named `employeeId` on the model, which it has never held: the
           // POS writes the payment method's extra field into it.
           reference: sale.employeeId,
+          referenceSource: sale.referenceSource,
           quantity: sale.qty,
           total: sale.total,
           returned: sale.orderStatus == OrderStatus.returned,

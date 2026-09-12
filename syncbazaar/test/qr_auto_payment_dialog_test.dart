@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:syncbazaar/core/theme/app_theme.dart';
 import 'package:syncbazaar/data/remote/api_client.dart';
+import 'package:syncbazaar/models/sale.dart' show ReferenceSource;
 import 'package:syncbazaar/services/qr_payment_service.dart';
 import 'package:syncbazaar/ui/screens/pos/widgets/qr_auto_payment_dialog.dart';
 
