@@ -105,17 +105,20 @@ class SettingsRepository {
       await existing;
       return;
     }
-    final load = _loadFromApi(auth).then((_) => _loadedVendorId = vendorId);
+    final load = _loadFromApi(
+      auth,
+      vendorId,
+    ).then((_) => _loadedVendorId = vendorId);
     _load = load.whenComplete(() => _load = null);
     await _load;
   }
 
-  Future<void> _loadFromApi(AuthRepository auth) async {
+  Future<void> _loadFromApi(AuthRepository auth, int vendorId) async {
     _methodsById = mapPaymentMethodsById(
       await auth.api.get('/api/core/mode-of-payment/') as List,
     );
     final bundle = mapEstablishmentsResponse(
-      await auth.api.get('/api/core/establishment/') as List,
+      await auth.api.get(establishmentsPath(vendorId)) as List,
       methodsById: _methodsById,
     );
 
@@ -172,7 +175,8 @@ class SettingsRepository {
   /// unnoticed until a receipt came out with the old address on it.
   Future<void> _saveCompanyToServer(Company company) async {
     final auth = _auth;
-    if (auth == null || auth.vendorId == null) {
+    final vendorId = auth?.vendorId;
+    if (auth == null || vendorId == null) {
       return;
     }
     // Only for venues the server knows. A locally created one is created
@@ -181,7 +185,7 @@ class SettingsRepository {
       return;
     }
     await auth.api.put(
-      '/api/core/establishment/${company.id}/',
+      establishmentPath(vendorId, company.id),
       body: establishmentBody(
         company: company,
         acceptedPaymentMethodIds: _methodIdsFor(company.id),
@@ -228,10 +232,11 @@ class SettingsRepository {
     // held there, and that bazaar's id belongs to the server — so the two
     // would point at different places the moment the app restarted.
     final auth = _auth;
-    if (auth != null && auth.vendorId != null) {
+    final vendorId = auth?.vendorId;
+    if (auth != null && vendorId != null) {
       final row =
           await auth.api.post(
-                '/api/core/establishment/',
+                establishmentsPath(vendorId),
                 body: establishmentBody(
                   company: created,
                   // Everything on offer, since a new venue has not been

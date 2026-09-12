@@ -1,7 +1,26 @@
 import '../../models/company.dart';
 import '../repositories/settings_repository.dart';
 
-/// Everything one `GET /api/core/establishment/` gives the settings layer.
+/// Where a store's venues live.
+///
+/// Venues used to be one shared list at `/api/core/establishment/`, which meant
+/// a venue one store negotiated -- its incentive and buffer included -- was
+/// visible to every other store. They now belong to a vendor, and the old path
+/// is gone: calling it returns 404.
+///
+/// The id in the path is not what selects the rows. The server reads those from
+/// whoever is signed in, and uses the id in the path to decide whether to answer
+/// at all: one that does not match the caller's own store is a 403, not someone
+/// else's venues. So it has to be right, but it is a key at the door rather than
+/// a search term.
+String establishmentsPath(int vendorId) =>
+    '/api/core/vendor/$vendorId/establishment/';
+
+/// One venue of [vendorId]'s, for reading back or writing to.
+String establishmentPath(int vendorId, int establishmentId) =>
+    '/api/core/vendor/$vendorId/establishment/$establishmentId/';
+
+/// Everything one venue-list call gives the settings layer.
 class ApiEstablishmentBundle {
   const ApiEstablishmentBundle({
     required this.companies,
