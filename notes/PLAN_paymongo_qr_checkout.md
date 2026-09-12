@@ -1,12 +1,21 @@
 # Plan: automatic QR payment with PayMongo
 
-**Status:** all eight steps built on `feature/paymongo-qr`, and partly verified. The payment
-service, dialog and polling were run against a local backend and a real test key, and passed. The
-checkout wiring, the manual fallback and the automatic-or-manual mark came after that run, and the
-two bugs the first attempt at them turned up (`66a0b52`) have not been re-run locally since. So:
-built, and unverified from Finish onwards. `notes/TEST_paymongo_local.md` is how to run it. Also
-waiting on the QR endpoints reaching the hosted backend on Render, so the tablet can be tested
+**Status:** all eight steps built on `feature/paymongo-qr` and verified on the happy path, against
+a local backend and a real test key.
+
+Re-run and passing after the fixes in `66a0b52`: checkout routes to the right flow for each method
+(`QR PH` to the gateway, `GCASH` to the saved code, `CASH` to neither), and a full paid sale end to
+end.
+
+Not re-run since those fixes: losing the connection mid-wait, entering a reference by hand, and
+cancelling. All three passed before the checkout wiring existed. Connection-drop and cancel were not
+changed by it; **manual entry was**, since step 7 put the stall's saved code beside the reference
+box, so that one is the least safe to assume. Worth running all three before the demo.
+`notes/TEST_paymongo_local.md` is how.
+
+Also waiting on the QR endpoints reaching the hosted backend on Render, so the tablet can be tested
 against it.
+
 **Opened:** 2026-09-12
 **Why:** advisers asked that cashiers stop typing reference numbers by hand
 
