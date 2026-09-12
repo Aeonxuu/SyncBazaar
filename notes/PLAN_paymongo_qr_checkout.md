@@ -1,20 +1,23 @@
 # Plan: automatic QR payment with PayMongo
 
-**Status:** all eight steps built on `feature/paymongo-qr` and verified on the happy path, against
-a local backend and a real test key.
+**Status:** done and working against the hosted backend. All eight steps are built and merged into
+`Lala`.
 
-Re-run and passing after the fixes in `66a0b52`: checkout routes to the right flow for each method
-(`QR PH` to the gateway, `GCASH` to the saved code, `CASH` to neither), and a full paid sale end to
-end.
+Verified by Lala on 2026-09-12 against Render with a real test key: checkout routes to the right
+flow for each method (`QR PH` to the gateway, `GCASH` to the saved code, `CASH` to neither), a full
+paid sale end to end, the receipt, losing the connection mid-wait, entering a reference by hand, and
+cancelling.
 
-Not re-run since those fixes: losing the connection mid-wait, entering a reference by hand, and
-cancelling. All three passed before the checkout wiring existed. Connection-drop and cancel were not
-changed by it; **manual entry was**, since step 7 put the stall's saved code beside the reference
-box, so that one is the least safe to assume. Worth running all three before the demo.
-`notes/TEST_paymongo_local.md` is how.
+That leaves two of the dialog's states unexercised, and both for reasons recorded below rather than
+oversight: expiry needs thirty minutes of waiting, and the failed state has nothing that triggers it
+because PayMongo never sends the words the backend maps to it.
 
-Also waiting on the QR endpoints reaching the hosted backend on Render, so the tablet can be tested
-against it.
+Not yet done: the tablet against the hosted backend. Everything above was run on the Mac.
+
+The known limitations under **Changes** still stand and are worth a sentence in the write-up rather
+than a fix: no webhook, so a payment completing after the tablet closes is never recorded; no cancel
+endpoint, so a closed dialog leaves a pending intent on the server; and the automatic-or-manual mark
+stays on the device, because `Payment` has nowhere to put it.
 
 **Opened:** 2026-09-12
 **Why:** advisers asked that cashiers stop typing reference numbers by hand
@@ -311,6 +314,17 @@ work finished on 10 September exists precisely for it.
 ---
 
 ## Changes
+
+**2026-09-12 — Working end to end against the hosted backend.** Amrei deployed the QR endpoints to
+Render and merged `vendor-owned-venues`; Lala added the `QR PH` payment method there by hand rather
+than reseeding. The full check passes against Render: routing, the paid path, the receipt, the
+connection drop, manual entry and cancel.
+
+This is the point the feature stops depending on a laptop. Everything before this entry was run
+against a local Django server.
+
+Still on the Mac only. The tablet has not been run against the hosted backend yet, and that is the
+one gap between this and a demo.
 
 **2026-09-12 — Test mode is what the adviser expects. Closes open question 6.** The feature has to
 work for testing; no real payment is required.
