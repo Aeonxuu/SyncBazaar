@@ -1,6 +1,7 @@
 import '../../models/bazaar_event.dart';
 import '../../models/user.dart';
 import '../remote/api_client.dart';
+import '../remote/establishment_api_mapper.dart';
 import '../remote/event_api_mapper.dart';
 import 'auth_repository.dart';
 import 'product_repository.dart';
@@ -391,7 +392,11 @@ class EventRepository {
                 // user's vendor; the serializer declares it without
                 // read_only.
                 'vendor': vendorId,
-                'address': await _addressForEstablishment(auth, companyId),
+                'address': await _addressForEstablishment(
+                  auth,
+                  vendorId,
+                  companyId,
+                ),
                 'start_date': startDate.toUtc().toIso8601String(),
                 'end_date': endDate.toUtc().toIso8601String(),
                 // An owner creating a bazaar directly has nobody to ask, so
@@ -452,10 +457,11 @@ class EventRepository {
   /// created.
   Future<String> _addressForEstablishment(
     AuthRepository auth,
+    int vendorId,
     int establishmentId,
   ) async {
     try {
-      final payload = await auth.api.get('/api/core/establishment/') as List;
+      final payload = await auth.api.get(establishmentsPath(vendorId)) as List;
       for (final entry in payload) {
         final map = entry as Map<String, dynamic>;
         if ((map['id'] as num?)?.toInt() == establishmentId) {
