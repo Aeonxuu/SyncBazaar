@@ -178,6 +178,24 @@ class PosState {
   /// makes the till present it, with nothing to change here.
   bool get requiresQrPresentment => selectedPaymentQr != null;
 
+  /// Whether the reference is collected during checkout rather than typed into
+  /// the cart panel beforehand.
+  ///
+  /// Both ways of presenting a code collect it at checkout, and for different
+  /// reasons: a saved code is shown in a dialog that asks for the reference
+  /// after the customer has paid, and a gateway code is confirmed by the
+  /// gateway itself. Neither has a reference to type at the moment the cashier
+  /// is looking at the cart.
+  ///
+  /// This used to be [requiresQrPresentment] at the call sites, which asks
+  /// whether a *picture* was uploaded. The two agree for a stall's saved code
+  /// and come apart for a gateway one, where the dialog collects the reference
+  /// with or without a picture. A gateway method with nothing uploaded showed a
+  /// reference box the cashier could not fill and refused to finish the sale
+  /// until they did.
+  bool get collectsReferenceAtCheckout =>
+      requiresQrPresentment || supportsAutomaticQr;
+
   /// Whether this method is paid through the gateway rather than the stall's
   /// own saved code.
   ///

@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:syncbazaar/bloc/pos/pos_cubit.dart';
@@ -59,6 +61,56 @@ void main() {
     test('a method that merely mentions the gateway is not one', () {
       // Matching loosely here would be the same mistake in a different shape.
       expect(automaticFor('GCASH VIA QR PH'), isFalse);
+    });
+  });
+
+  group('where the reference is collected', () {
+    PosState stateFor(String method, {bool withSavedQr = false}) => PosState(
+      selectedPaymentMethod: method,
+      paymentMethods: [
+        PaymentMethodMeta(
+          name: method,
+          extraFieldLabel: 'Reference Number',
+          qrImageBytes: withSavedQr
+              ? Uint8List.fromList(List.filled(8, 7))
+              : null,
+        ),
+      ],
+    );
+
+    test('a gateway method collects at checkout with nothing uploaded', () {
+      // The bug this replaced: the cart panel asked for a reference that does
+      // not exist until the customer has paid, and refused to finish the sale
+      // until one was typed. Uploading a dummy picture was the only way out.
+      final state = stateFor('QR PH');
+
+      expect(state.requiresQrPresentment, isFalse);
+      expect(state.collectsReferenceAtCheckout, isTrue);
+    });
+
+    test('an uploaded picture changes nothing for a gateway method', () {
+      // It is the manual fallback's code now, not what decides the flow.
+      expect(stateFor('QR PH', withSavedQr: true).supportsAutomaticQr, isTrue);
+      expect(
+        stateFor('QR PH', withSavedQr: true).collectsReferenceAtCheckout,
+        isTrue,
+      );
+    });
+
+    test('a stall code still collects at checkout', () {
+      expect(
+        stateFor('GCASH', withSavedQr: true).collectsReferenceAtCheckout,
+        isTrue,
+      );
+    });
+
+    test('a method with neither still asks in the cart panel', () {
+      // A bank transfer with a reference to type and no code to show. This is
+      // the case the cart panel's field exists for, and it has to keep working.
+      final state = stateFor('BANK TRANSFER');
+
+      expect(state.requiresPaymentExtraField, isTrue);
+      expect(state.collectsReferenceAtCheckout, isFalse);
     });
   });
 

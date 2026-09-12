@@ -417,11 +417,12 @@ class _PosScreenState extends State<PosScreen> {
   }
 
   Widget _cartPanel(BuildContext context, PosState state) {
-    // Not shown when the method presents a QR: the reference moves into the
-    // QR dialog at checkout, and asking for it in both places would have the
-    // cashier type it twice.
+    // Not shown when the reference is collected at checkout: asking for it in
+    // both places would have the cashier type it twice, and for a gateway
+    // method there is nothing to type here at all, since the number does not
+    // exist until the customer has paid.
     final requiresPaymentExtraField =
-        state.requiresPaymentExtraField && !state.requiresQrPresentment;
+        state.requiresPaymentExtraField && !state.collectsReferenceAtCheckout;
     final extraFieldLabel = state.selectedExtraFieldLabel;
     const subtleInputBg = Color(0xFFF5F1FB);
 
@@ -775,11 +776,11 @@ class _PosScreenState extends State<PosScreen> {
                           final posCubit = context.read<PosCubit>();
                           final dashboardCubit = context.read<DashboardCubit>();
                           final ordersCubit = context.read<OrdersCubit>();
-                          // Skipped for QR methods: their reference is typed
-                          // into the QR dialog below, after the customer has
+                          // Skipped when the reference is collected at
+                          // checkout: it arrives below, after the customer has
                           // actually paid, so demanding it here would block a
                           // sale on a number that cannot exist yet.
-                          if (!state.requiresQrPresentment &&
+                          if (!state.collectsReferenceAtCheckout &&
                               state.requiresPaymentExtraField &&
                               state.paymentExtraFieldValue.trim().isEmpty) {
                             messenger.showSnackBar(

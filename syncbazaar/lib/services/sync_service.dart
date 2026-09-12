@@ -1,6 +1,7 @@
 import '../data/repositories/event_repository.dart';
 import '../data/repositories/product_repository.dart';
 import '../data/repositories/sales_repository.dart';
+import '../data/repositories/settings_repository.dart';
 import 'notification_service.dart';
 import 'sale_upload_service.dart';
 
@@ -21,17 +22,20 @@ class SyncService {
     required EventRepository eventRepository,
     required ProductRepository productRepository,
     required NotificationService notificationService,
+    required SettingsRepository settingsRepository,
     SaleUploadService? saleUploader,
   }) : _salesRepository = salesRepository,
        _eventRepository = eventRepository,
        _productRepository = productRepository,
        _notificationService = notificationService,
+       _settingsRepository = settingsRepository,
        _saleUploader = saleUploader;
 
   final SalesRepository _salesRepository;
   final EventRepository _eventRepository;
   final ProductRepository _productRepository;
   final NotificationService _notificationService;
+  final SettingsRepository _settingsRepository;
 
   /// Absent in the in-memory build, where there is nowhere to upload to.
   final SaleUploadService? _saleUploader;
@@ -51,10 +55,17 @@ class SyncService {
     final pendingBefore = (await _salesRepository.listUnsyncedSales()).length;
     final upload = await uploader.uploadPending();
 
-    // Then down. Ordered by dependency, the same as a pull to refresh: the
-    // catalogue, then bazaars, then the sales recorded against their stock.
+    // Then down. Ordered by dependency, the same as a pull to refresh: venues
+    // and payment methods, then the catalogue, then bazaars, then the sales
+    // recorded against their stock.
+    //
+    // Venues first because bazaars point at them by id, and because this list
+    // was previously loaded once at sign-in and never again. A payment method
+    // added on the server did not reach the till until the app was restarted,
+    // which is exactly the kind of thing nobody thinks to try during a bazaar.
     var refreshed = false;
     try {
+      await _settingsRepository.refresh();
       await _productRepository.refresh();
       await _eventRepository.refresh();
       await _salesRepository.refresh();
