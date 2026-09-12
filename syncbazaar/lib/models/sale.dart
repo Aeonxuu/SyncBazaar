@@ -61,6 +61,7 @@ class Sale {
     this.soldById = 0,
     required this.employeeId,
     this.referenceSource,
+    this.originServer,
     required this.paymentMethod,
     required this.qty,
     required this.total,
@@ -102,6 +103,22 @@ class Sale {
   /// every sale recorded before this was tracked.
   final ReferenceSource? referenceSource;
 
+  /// The API this sale was rung up against, as a base URL.
+  ///
+  /// A sale names a bazaar and a product by id, and an id means nothing outside
+  /// the database that minted it. Pointing the app at a different server and
+  /// letting the queue drain into it offers that server sales describing rows
+  /// it has never heard of, and in the worst case rows it has, holding
+  /// something else entirely. The session already refuses to travel between
+  /// backends for the same reason; the queue did not.
+  ///
+  /// Null on a sale rung up with no server attached, which is the demo build,
+  /// and on anything queued before this was recorded. Null is treated as
+  /// unknown rather than foreign: a real sale queued offline before an upgrade
+  /// is the only copy of that money, and stranding it would be worse than the
+  /// problem this prevents.
+  final String? originServer;
+
   final String paymentMethod;
   final int qty;
   final double total;
@@ -126,6 +143,7 @@ class Sale {
     'sold_by_id': soldById,
     'employee_id': employeeId,
     'reference_source': referenceSource?.name,
+    'origin_server': originServer,
     'payment_method': paymentMethod,
     'qty': qty,
     'total': total,
@@ -153,6 +171,7 @@ class Sale {
     referenceSource: ReferenceSource.values
         .where((source) => source.name == json['reference_source'])
         .firstOrNull,
+    originServer: json['origin_server'] as String?,
     paymentMethod: json['payment_method'] as String? ?? 'CASH',
     qty: (json['qty'] as num).toInt(),
     total: (json['total'] as num).toDouble(),
@@ -164,7 +183,11 @@ class Sale {
     synced: json['synced'] as bool? ?? false,
   );
 
-  Sale copyWith({OrderStatus? orderStatus, bool? synced}) {
+  Sale copyWith({
+    OrderStatus? orderStatus,
+    bool? synced,
+    String? originServer,
+  }) {
     return Sale(
       id: id,
       // Deliberately carried through unchanged, and not exposed as a parameter:
@@ -179,6 +202,11 @@ class Sale {
       soldById: soldById,
       employeeId: employeeId,
       referenceSource: referenceSource,
+      // Set once and never changed, the same rule as `clientUuid` above and for
+      // the same kind of reason. A sale relabelled with whatever server is
+      // connected now is a sale that will upload into the wrong database, and
+      // the relabelling is exactly what restoring the queue would do.
+      originServer: this.originServer ?? originServer,
       paymentMethod: paymentMethod,
       qty: qty,
       total: total,

@@ -47,16 +47,42 @@ class SaleUploadService {
   /// state at a bazaar, not an error worth interrupting a queue of customers
   /// for. The unsynced flag is what remembers the work.
   Future<SaleUploadResult> uploadPending() async {
-    final pending = await _sales.listUnsyncedSales();
+    final queued = await _sales.listUnsyncedSales();
+    final here = _auth.api.baseUrl;
+
+    // A sale belongs to the database that issued the ids it names. Offering it
+    // to a different server is at best rejected and at worst accepted against
+    // whatever happens to share those numbers, which is a real sale recorded
+    // for the wrong product at the wrong bazaar.
+    //
+    // These are left in the queue rather than dropped. They are somebody's
+    // records, and this is not the code that decides they are worthless; point
+    // the app back at the server they came from and they upload as normal.
+    final pending = <Sale>[];
+    var elsewhere = 0;
+    for (final sale in queued) {
+      // Null means unknown, not foreign. See `Sale.originServer`: a real sale
+      // queued before this was recorded is the only copy of that money.
+      if (sale.originServer != null && sale.originServer != here) {
+        elsewhere++;
+        continue;
+      }
+      pending.add(sale);
+    }
+
     if (pending.isEmpty) {
-      return const SaleUploadResult(uploaded: 0, skipped: 0);
+      return SaleUploadResult(uploaded: 0, skipped: 0, elsewhere: elsewhere);
     }
 
     final Map<String, int> methodIds;
     try {
       methodIds = await _loadPaymentMethodIds();
     } on ApiException {
-      return SaleUploadResult(uploaded: 0, skipped: pending.length);
+      return SaleUploadResult(
+        uploaded: 0,
+        skipped: pending.length,
+        elsewhere: elsewhere,
+      );
     }
 
     final byEvent = <int, List<Sale>>{};
@@ -71,7 +97,11 @@ class SaleUploadService {
       uploaded += result.uploaded;
       skipped += result.skipped;
     }
-    return SaleUploadResult(uploaded: uploaded, skipped: skipped);
+    return SaleUploadResult(
+      uploaded: uploaded,
+      skipped: skipped,
+      elsewhere: elsewhere,
+    );
   }
 
   Future<SaleUploadResult> _uploadEvent(
@@ -159,7 +189,11 @@ class SaleUploadService {
 
 /// What one upload attempt achieved.
 class SaleUploadResult {
-  const SaleUploadResult({required this.uploaded, required this.skipped});
+  const SaleUploadResult({
+    required this.uploaded,
+    required this.skipped,
+    this.elsewhere = 0,
+  });
 
   /// Sales the server has confirmed it holds, including ones it recognised as
   /// duplicates of an earlier attempt.
@@ -167,6 +201,13 @@ class SaleUploadResult {
 
   /// Sales still waiting — no connection, or no stock row to record against.
   final int skipped;
+
+  /// Sales belonging to a different server, which this one was never offered.
+  ///
+  /// Counted apart from [skipped] deliberately. They are not waiting on
+  /// anything here, and reporting them as pending would leave a permanent
+  /// "still waiting" figure that no amount of syncing can ever clear.
+  final int elsewhere;
 
   bool get isComplete => skipped == 0;
 }

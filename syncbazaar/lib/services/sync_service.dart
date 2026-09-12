@@ -83,6 +83,7 @@ class SyncService {
       message: _describe(
         uploaded: upload.uploaded,
         stillWaiting: upload.skipped,
+        elsewhere: upload.elsewhere,
         refreshed: refreshed,
         pendingBefore: pendingBefore,
       ),
@@ -96,26 +97,35 @@ class SyncService {
   static String _describe({
     required int uploaded,
     required int stillWaiting,
+    required int elsewhere,
     required bool refreshed,
     required int pendingBefore,
   }) {
+    // Mentioned once, plainly, and never as "waiting": nothing here can send
+    // them and repeating a number that never goes down teaches a cashier to
+    // ignore this message. Said last so it never displaces what did happen.
+    final held = elsewhere > 0
+        ? ' $elsewhere sale(s) belong to a different server and were not sent.'
+        : '';
+
     if (stillWaiting > 0) {
       return uploaded > 0
           ? 'Sent $uploaded sale(s). $stillWaiting still waiting for a '
-                'connection.'
-          : 'Could not reach the server. $stillWaiting sale(s) still waiting.';
+                'connection.$held'
+          : 'Could not reach the server. '
+                '$stillWaiting sale(s) still waiting.$held';
     }
     if (uploaded > 0) {
       return refreshed
-          ? 'Sent $uploaded sale(s) and updated from the server.'
-          : 'Sent $uploaded sale(s), but could not refresh.';
+          ? 'Sent $uploaded sale(s) and updated from the server.$held'
+          : 'Sent $uploaded sale(s), but could not refresh.$held';
     }
     if (!refreshed) {
-      return 'Could not reach the server.';
+      return 'Could not reach the server.$held';
     }
     return pendingBefore == 0
-        ? 'Up to date.'
-        : 'Up to date. Everything was already sent.';
+        ? 'Up to date.$held'
+        : 'Up to date. Everything was already sent.$held';
   }
 }
 

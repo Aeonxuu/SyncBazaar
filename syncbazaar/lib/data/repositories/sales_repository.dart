@@ -39,7 +39,14 @@ class SalesRepository {
 
   Future<void> addSale(Sale sale) async {
     await _restoreQueue();
-    _sales.add(sale);
+    // Stamped here rather than at the till, which has no idea what it is
+    // connected to. One funnel, so there is no way to add a sale that forgets
+    // where it came from.
+    //
+    // A sale that already names a server keeps it: `copyWith` refuses to
+    // relabel one, which is what restoring the queue would otherwise do.
+    final origin = _auth?.api.baseUrl;
+    _sales.add(origin == null ? sale : sale.copyWith(originServer: origin));
     // Awaited, not fired and forgotten. The caller tells the cashier the sale
     // is done as soon as this returns, and a sale that is only in memory at
     // that moment is one a crash can take with the money already in the till.
@@ -217,10 +224,9 @@ class SalesRepository {
   Future<void> _persistQueue() async {
     final pending = _sales.where((sale) => !sale.synced).toList();
     try {
-      await _store.writeList(
-        _queueKey,
-        [for (final sale in pending) sale.toJson()],
-      );
+      await _store.writeList(_queueKey, [
+        for (final sale in pending) sale.toJson(),
+      ]);
     } catch (_) {
       // A sale is never refused because the device could not write it down.
       // The customer has already paid and the money is in the till; recording
