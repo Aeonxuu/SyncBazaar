@@ -14,10 +14,11 @@ because PayMongo never sends the words the backend maps to it.
 
 Not yet done: the tablet against the hosted backend. Everything above was run on the Mac.
 
-The known limitations under **Changes** still stand and are worth a sentence in the write-up rather
-than a fix: no webhook, so a payment completing after the tablet closes is never recorded; no cancel
-endpoint, so a closed dialog leaves a pending intent on the server; and the automatic-or-manual mark
-stays on the device, because `Payment` has nowhere to put it.
+The automatic-or-manual mark now reaches the server too, as of the entry below.
+
+Two known limitations remain and are worth a sentence in the write-up rather than a fix: no webhook,
+so a payment completing after the tablet closes is never recorded; and no cancel endpoint, so a
+closed dialog leaves a pending intent on the server.
 
 **Opened:** 2026-09-12
 **Why:** advisers asked that cashiers stop typing reference numbers by hand
@@ -314,6 +315,33 @@ work finished on 10 September exists precisely for it.
 ---
 
 ## Changes
+
+**2026-09-17 — The reference source reaches the server (commit `17d4a77` and after on the backend).**
+`Payment` gained `required_information_source`, and both sale-creating views now read it from the
+payload. The app sends it beside the reference. This closes the item the 2026-09-12 entry below
+records as staying on the device; that entry stands as written.
+
+**Two letters, not words.** `AU` and `MA`. The column is `CharField(max_length=2)` with those
+choices, so anything longer would not fit it. The app keeps this code separate from the "Automatic"
+/ "Manual" wording the orders export prints, so rewording the export can never change what gets
+uploaded.
+
+**Omitting the field does not store null, and that is deliberate.** The endpoint defaults a missing
+source to `MA`. Agreed between Amrei and Lala on 2026-09-13, and pinned by a backend test: the
+automatic path did not exist before September 2026, so a sale carrying a reference and no recorded
+source really was typed by somebody, and recording those as manual is accurate rather than a guess.
+
+The column is still nullable, so if "unknown" is ever needed as a distinct value, sending null
+explicitly is the way. The endpoint's default is simply not it.
+
+**One basket is still several payments.** `Payment.sale` is one-to-one and the till creates one sale
+per cart line, so a four-item basket is four payments carrying the same reference and the same
+source. The reference was already repeated this way; the source just joins it. A report counting
+payments counts cart lines, not customers. That follows from there being no basket record, which
+this plan cut from scope on 2026-09-12.
+
+**Also on the backend, and harmless to us:** `Sale` gained a nullable `unit_cost`, holding a
+variant's base price at the time of sale. The app does not send it, so ours are empty.
 
 **2026-09-12 — Working end to end against the hosted backend.** Amrei deployed the QR endpoints to
 Render and merged `vendor-owned-venues`; Lala added the `QR PH` payment method there by hand rather
