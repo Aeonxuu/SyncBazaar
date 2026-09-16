@@ -29,9 +29,16 @@ Map<String, dynamic> saleUploadPayload({
       'payment_method': methodIds[sale.paymentMethod.trim().toUpperCase()],
     if (reference.isNotEmpty) 'required_information': reference,
     // Only alongside a reference it can describe, and only when one was
-    // actually recorded. A sale queued before the app tracked this has no
-    // answer, and the column is nullable precisely so that unknown stays
-    // unknown rather than being filled in with a guess.
+    // actually recorded.
+    //
+    // Omitting it does not store null. The endpoint fills in MA, and that is
+    // the agreed behaviour rather than an accident: the automatic path did not
+    // exist until September 2026, so a sale carrying a reference and no source
+    // really was typed by somebody. Recording those as manual is accurate.
+    //
+    // It does mean this cannot be used to say "unknown" later, if that ever
+    // matters. Sending null explicitly would be the way, and the column allows
+    // it; the endpoint's default is simply not it.
     if (reference.isNotEmpty && source != null)
       'required_information_source': source.wireCode,
   };

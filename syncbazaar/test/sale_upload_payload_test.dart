@@ -57,15 +57,19 @@ void main() {
       expect(body['required_information_source'], 'MA');
     });
 
-    test('an unrecorded source is left out entirely', () {
-      // Every sale queued before the app tracked this. The column is nullable
-      // so unknown can stay unknown; sending a default would invent the
-      // evidence the field exists to provide.
-      final body = payloadFor(sale(reference: 'pay_abc'));
+    test(
+      'an unrecorded source is left out, and the server calls it manual',
+      () {
+        // Every sale queued before the app tracked this. Leaving the field out
+        // is not the same as storing null: the endpoint defaults it to MA, by
+        // agreement, because the automatic path did not exist until September
+        // 2026 and those references really were typed by somebody.
+        final body = payloadFor(sale(reference: 'pay_abc'));
 
-      expect(body.containsKey('required_information_source'), isFalse);
-      expect(body['required_information'], 'pay_abc');
-    });
+        expect(body.containsKey('required_information_source'), isFalse);
+        expect(body['required_information'], 'pay_abc');
+      },
+    );
 
     test('a cash sale sends neither', () {
       final body = payloadFor(sale(method: 'CASH'));
