@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:uuid/uuid.dart';
@@ -9,6 +8,7 @@ import '../../data/repositories/orders_repository.dart';
 import '../../data/repositories/product_repository.dart';
 import '../../data/repositories/sales_repository.dart';
 import '../../data/repositories/settings_repository.dart';
+import '../../data/repositories/vendor_payment_method_repository.dart';
 import '../../models/bazaar_event.dart';
 import '../../models/company.dart';
 import '../../models/order.dart';
@@ -168,13 +168,16 @@ class PosState {
 
   bool canDeleteEvent(BazaarEvent event) => deleteBlockedReason(event) == null;
 
-  /// The selected method's QR, if the seller attached one to it.
-  Uint8List? get selectedPaymentQr => selectedPaymentMethodMeta?.qrImageBytes;
+  /// The selected method's QR, if the vendor uploaded one for it.
+  ///
+  /// A URL, not bytes: the QR lives on the server as the only copy there is,
+  /// so there is nothing local to hand back until it has one.
+  String? get selectedPaymentQr => selectedPaymentMethodMeta?.qrImageUrl;
 
   /// Whether checkout should show the customer a QR to scan before confirming.
   ///
   /// Driven purely by whether a QR exists, deliberately not by a registry of
-  /// known method names: attaching a QR to a brand new wallet in Venues & Terms
+  /// known method names: uploading a QR for a new wallet in Payment Methods
   /// makes the till present it, with nothing to change here.
   bool get requiresQrPresentment => selectedPaymentQr != null;
 
@@ -293,7 +296,8 @@ class PosCubit extends Cubit<PosState> {
     this._productRepository,
     this._salesRepository,
     this._ordersRepository,
-    this._settingsRepository, {
+    this._settingsRepository,
+    this._vendorPaymentMethodRepository, {
     SaleUploadService? saleUploader,
   }) : _saleUploader = saleUploader,
        super(const PosState());
@@ -308,22 +312,30 @@ class PosCubit extends Cubit<PosState> {
   final SalesRepository _salesRepository;
   final OrdersRepository _ordersRepository;
   final SettingsRepository _settingsRepository;
+  final VendorPaymentMethodRepository _vendorPaymentMethodRepository;
   List<PaymentMethodMeta> _basePaymentMethods = const [];
-
-  /// Payment methods per venue, which is the only place a QR is attached.
-  ///
-  /// Needed separately from [_basePaymentMethods] because that list is the
-  /// union across every venue, matched by name. Taking a QR from it could hand
-  /// the till the GCash code belonging to a different bazaar, so the QR is
-  /// always resolved against the event's own venue.
-  Map<int, List<PaymentMethodMeta>> _methodsByCompanyId = const {};
 
   Future<void> load(AppUser user) async {
     final events = await _eventRepository.listVisibleForUser(user);
     final products = await _productRepository.listProducts();
-    final globalMethods = await _settingsRepository.paymentMethods();
+    // The vendor's own methods, one list shared by every venue and bazaar --
+    // there is no more "which venue" to resolve this against.
+    final vendorMethods = await _vendorPaymentMethodRepository.listMethods();
+    final globalMethods = [
+      for (final method in vendorMethods)
+        PaymentMethodMeta(
+          name: method.name,
+          extraFieldLabel: method.extraFieldLabel,
+          qrImageUrl: method.qrImageUrl,
+        ),
+    ];
+    if (globalMethods.isEmpty) {
+      // Nothing seeded yet for a fresh vendor. CASH is the one method that
+      // needs no setup, so checkout still works while the vendor is adding
+      // the rest in Payment Methods.
+      globalMethods.add(const PaymentMethodMeta(name: 'CASH'));
+    }
     _basePaymentMethods = globalMethods;
-    _methodsByCompanyId = await _settingsRepository.paymentMethodsByCompanyId();
     // Which bazaars have taken money, so the picker can say which ones are
     // safe to delete without asking the server one bazaar at a time.
     final sales = await _salesRepository.listSales();
@@ -434,6 +446,7 @@ class PosCubit extends Cubit<PosState> {
   );
   void updateCustomerName(String value) =>
       emit(state.copyWith(customerName: value));
+
   /// The typed path. Anything arriving through the keyboard is manual by
   /// definition, including a reference typed into the QR dialog's fallback.
   void updatePaymentExtraFieldValue(String value) => emit(
@@ -884,34 +897,6 @@ class PosCubit extends Cubit<PosState> {
     return parts.join(', ');
   }
 
-  /// Attaches each method's QR, taken from the venue hosting [event].
-  ///
-  /// Name-matched case-insensitively, the same way the rest of the merge works,
-  /// because method names are free text.
-  List<PaymentMethodMeta> _withVenueQr(
-    BazaarEvent event,
-    List<PaymentMethodMeta> methods,
-  ) {
-    final venueMethods = _methodsByCompanyId[event.companyId];
-    if (venueMethods == null || venueMethods.isEmpty) {
-      return methods;
-    }
-    final qrByName = <String, Uint8List>{};
-    for (final method in venueMethods) {
-      final bytes = method.qrImageBytes;
-      if (bytes != null) {
-        qrByName[method.name.trim().toUpperCase()] = bytes;
-      }
-    }
-    if (qrByName.isEmpty) {
-      return methods;
-    }
-    return [
-      for (final method in methods)
-        method.copyWith(qrImageBytes: qrByName[method.name.trim().toUpperCase()]),
-    ];
-  }
-
   List<PaymentMethodMeta> _methodsForEvent(
     BazaarEvent? event,
     List<PaymentMethodMeta> baseMethods,
@@ -936,6 +921,10 @@ class PosCubit extends Cubit<PosState> {
           PaymentMethodMeta(
             name: method.name,
             extraFieldLabel: custom?.extraFieldLabel ?? method.extraFieldLabel,
+            // Carried through directly now: the QR lives on the vendor's own
+            // method, not on a venue, so there is nothing left to resolve it
+            // against afterward.
+            qrImageUrl: method.qrImageUrl,
           ),
         );
       }
@@ -954,10 +943,6 @@ class PosCubit extends Cubit<PosState> {
       }
     }
 
-    if (result.isEmpty) {
-      return _withVenueQr(event, const [PaymentMethodMeta(name: 'CASH')]);
-    }
-
-    return _withVenueQr(event, result);
+    return result.isEmpty ? const [PaymentMethodMeta(name: 'CASH')] : result;
   }
 }

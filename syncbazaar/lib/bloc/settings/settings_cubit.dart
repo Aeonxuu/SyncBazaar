@@ -7,7 +7,6 @@ import '../../models/company.dart';
 class SettingsState {
   const SettingsState({
     this.companies = const [],
-    this.locationPaymentMethodsByCompanyId = const {},
     this.autoSync = true,
     this.storeName = '',
     this.storeNameIsVendor = false,
@@ -15,7 +14,6 @@ class SettingsState {
   });
 
   final List<Company> companies;
-  final Map<int, List<PaymentMethodMeta>> locationPaymentMethodsByCompanyId;
   final bool autoSync;
 
   /// The seller's name, printed as the receipt header.
@@ -32,7 +30,6 @@ class SettingsState {
 
   SettingsState copyWith({
     List<Company>? companies,
-    Map<int, List<PaymentMethodMeta>>? locationPaymentMethodsByCompanyId,
     bool? autoSync,
     String? storeName,
     bool? storeNameIsVendor,
@@ -41,9 +38,6 @@ class SettingsState {
   }) {
     return SettingsState(
       companies: companies ?? this.companies,
-      locationPaymentMethodsByCompanyId:
-          locationPaymentMethodsByCompanyId ??
-          this.locationPaymentMethodsByCompanyId,
       autoSync: autoSync ?? this.autoSync,
       storeName: storeName ?? this.storeName,
       storeNameIsVendor: storeNameIsVendor ?? this.storeNameIsVendor,
@@ -63,8 +57,6 @@ class SettingsCubit extends Cubit<SettingsState> {
     emit(
       state.copyWith(
         companies: await _settingsRepository.listCompanies(),
-        locationPaymentMethodsByCompanyId: await _settingsRepository
-            .paymentMethodsByCompanyId(),
         autoSync: await _settingsRepository.autoSyncEnabled(),
         storeName: await _settingsRepository.storeName(),
         storeNameIsVendor: _settingsRepository.storeNameIsVendor,
@@ -72,17 +64,13 @@ class SettingsCubit extends Cubit<SettingsState> {
     );
   }
 
-  Future<void> saveLocationConfiguration({
-    required Company company,
-    required List<PaymentMethodMeta> paymentMethods,
-  }) async {
-    await _settingsRepository.upsertCompanyConfiguration(
-      company: company,
-      paymentMethods: paymentMethods,
-      // From the venue editor, which loaded these methods with their QRs
-      // attached, so one arriving without means the seller removed it.
-      clearMissingQr: true,
-    );
+  /// Saves an existing venue's name, address, contact and rates.
+  ///
+  /// Payment methods are not a venue's to have any more -- see
+  /// `PaymentMethodsCubit` -- so this only ever writes the fields a `Company`
+  /// still carries.
+  Future<void> saveLocation({required Company company}) async {
+    await _settingsRepository.upsertCompany(company);
     await load();
   }
 
@@ -92,20 +80,13 @@ class SettingsCubit extends Cubit<SettingsState> {
     String contact = '',
     double incentivePercent = 0,
     double bufferPercent = 0,
-    List<PaymentMethodMeta>? paymentMethods,
   }) async {
-    final created = await _settingsRepository.createCompany(
+    await _settingsRepository.createCompany(
       name: name,
       address: address,
       contact: contact,
       incentivePercent: incentivePercent,
       bufferPercent: bufferPercent,
-    );
-    await _settingsRepository.upsertCompanyConfiguration(
-      company: created,
-      paymentMethods: paymentMethods ?? const [PaymentMethodMeta(name: 'CASH')],
-      // From the venue editor, so a method with no QR means one was removed.
-      clearMissingQr: true,
     );
     await load();
   }

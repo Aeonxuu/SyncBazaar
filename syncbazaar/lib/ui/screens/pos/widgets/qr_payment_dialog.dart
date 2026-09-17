@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 
 import '../../../../core/constants/colors.dart';
@@ -20,7 +18,7 @@ import '../../../../core/utils/formatters.dart';
 Future<String?> showQrPaymentDialog({
   required BuildContext context,
   required String paymentMethod,
-  required Uint8List qrBytes,
+  required String qrImageUrl,
   required double amount,
   String? extraFieldLabel,
 }) {
@@ -31,7 +29,7 @@ Future<String?> showQrPaymentDialog({
     barrierColor: Colors.black.withValues(alpha: 0.45),
     builder: (context) => _QrPaymentDialog(
       paymentMethod: paymentMethod,
-      qrBytes: qrBytes,
+      qrImageUrl: qrImageUrl,
       amount: amount,
       extraFieldLabel: extraFieldLabel,
     ),
@@ -41,13 +39,16 @@ Future<String?> showQrPaymentDialog({
 class _QrPaymentDialog extends StatefulWidget {
   const _QrPaymentDialog({
     required this.paymentMethod,
-    required this.qrBytes,
+    required this.qrImageUrl,
     required this.amount,
     this.extraFieldLabel,
   });
 
   final String paymentMethod;
-  final Uint8List qrBytes;
+
+  /// The vendor's own QR for this method -- a URL, not bytes, since the
+  /// server is now its only copy.
+  final String qrImageUrl;
   final double amount;
   final String? extraFieldLabel;
 
@@ -62,8 +63,7 @@ class _QrPaymentDialogState extends State<_QrPaymentDialog> {
       widget.extraFieldLabel != null &&
       widget.extraFieldLabel!.trim().isNotEmpty;
 
-  bool get _canConfirm =>
-      !_needsReference || _reference.text.trim().isNotEmpty;
+  bool get _canConfirm => !_needsReference || _reference.text.trim().isNotEmpty;
 
   @override
   void dispose() {
@@ -181,14 +181,23 @@ class _QrPaymentDialogState extends State<_QrPaymentDialog> {
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: AppColors.border),
         ),
-        child: Image.memory(
-          widget.qrBytes,
+        child: Image.network(
+          widget.qrImageUrl,
           width: 236,
           height: 236,
           // contain, never cover: cropping a QR to fill a box can cut the
           // quiet zone and stop it scanning.
           fit: BoxFit.contain,
           filterQuality: FilterQuality.none,
+          loadingBuilder: (context, child, progress) => progress == null
+              ? child
+              : const SizedBox(
+                  width: 236,
+                  height: 236,
+                  child: Center(
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
           errorBuilder: (_, _, _) => const SizedBox(
             width: 236,
             height: 236,

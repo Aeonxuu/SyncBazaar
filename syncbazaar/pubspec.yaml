@@ -41,6 +41,10 @@ dependencies:
   # interceptor, retry or multipart needs yet, and one less dependency is one
   # less thing to keep working on an offline tablet.
   http: ^1.2.0
+  # Only for building the multipart request in ApiClient.uploadFile — http
+  # already depends on it transitively, declared directly because the code
+  # imports it by name rather than getting it by luck of the dependency tree.
+  http_parser: ^4.1.2
   # Every sale carries a v4 uuid generated at the till, which is what lets a
   # failed upload be retried without recording the sale twice. Dart has no
   # built-in uuid, and one hand-rolled from Random is the kind of thing that is

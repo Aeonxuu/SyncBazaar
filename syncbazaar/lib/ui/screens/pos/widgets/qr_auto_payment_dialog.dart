@@ -32,7 +32,7 @@ Future<QrPaymentResult?> showQrAutoPaymentDialog({
   required double amount,
   required QrPaymentService service,
   String? extraFieldLabel,
-  Uint8List? savedQrBytes,
+  String? savedQrImageUrl,
 }) {
   return showDialog<QrPaymentResult>(
     context: context,
@@ -44,7 +44,7 @@ Future<QrPaymentResult?> showQrAutoPaymentDialog({
       amount: amount,
       service: service,
       extraFieldLabel: extraFieldLabel,
-      savedQrBytes: savedQrBytes,
+      savedQrImageUrl: savedQrImageUrl,
     ),
   );
 }
@@ -57,7 +57,7 @@ class _QrAutoPaymentDialog extends StatefulWidget {
     required this.amount,
     required this.service,
     this.extraFieldLabel,
-    this.savedQrBytes,
+    this.savedQrImageUrl,
   });
 
   final String paymentMethod;
@@ -68,7 +68,9 @@ class _QrAutoPaymentDialog extends StatefulWidget {
   /// The stall's own code from Venues & Terms, shown in the manual fallback so
   /// a cashier with no signal has something for the customer to scan. Null when
   /// the method has none saved.
-  final Uint8List? savedQrBytes;
+  /// The vendor's own QR for this method, for the manual fallback -- a URL,
+  /// since the server is its only copy now.
+  final String? savedQrImageUrl;
 
   @override
   State<_QrAutoPaymentDialog> createState() => _QrAutoPaymentDialogState();
@@ -453,7 +455,7 @@ class _QrAutoPaymentDialogState extends State<_QrAutoPaymentDialog> {
   }
 
   Widget _manualField(ThemeData theme) {
-    final saved = widget.savedQrBytes;
+    final saved = widget.savedQrImageUrl;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -473,10 +475,22 @@ class _QrAutoPaymentDialogState extends State<_QrAutoPaymentDialog> {
               child: SizedBox(
                 width: 150,
                 height: 150,
-                child: Image.memory(
+                child: Image.network(
                   saved,
                   fit: BoxFit.contain,
                   filterQuality: FilterQuality.none,
+                  loadingBuilder: (context, child, progress) => progress == null
+                      ? child
+                      : const Center(
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                  errorBuilder: (_, _, _) => const Center(
+                    child: Text(
+                      'The code could not be loaded.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.black54),
+                    ),
+                  ),
                 ),
               ),
             ),

@@ -9,5 +9,6 @@ enum AppSection {
   inventory,
   staff,
   venues,
+  paymentMethods,
   settings,
 }

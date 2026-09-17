@@ -9,6 +9,7 @@ import '../../../data/repositories/auth_repository.dart';
 import '../../../bloc/notifications/notifications_cubit.dart';
 import '../../../bloc/settings/settings_cubit.dart';
 import '../../../data/repositories/settings_repository.dart';
+import '../../../data/repositories/vendor_payment_method_repository.dart';
 import '../../../data/remote/api_client.dart';
 import '../../../services/orders_workbook.dart';
 import '../../../services/report_service.dart';
@@ -51,6 +52,8 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
     final productRepository = context.read<ProductRepository>();
     final eventRepository = context.read<EventRepository>();
     final settingsRepository = context.read<SettingsRepository>();
+    final vendorPaymentMethodRepository = context
+        .read<VendorPaymentMethodRepository>();
     // Read before the first await, with the other repositories: reaching for
     // the context after one is what the analyzer objects to, and rightly.
     final reportService = ReportService(auth: context.read<AuthRepository>());
@@ -101,10 +104,17 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
       }
     }
 
-    // Which methods a bazaar took, and what each one asked the cashier for --
-    // a GCash reference, a bank slip number. Resolved per bazaar because a
-    // venue can override a method's field for its own event.
-    final basePaymentMethods = await settingsRepository.paymentMethods();
+    // Which methods asked the cashier for what -- a GCash reference, a bank
+    // slip number. One list for every bazaar now: a method is the vendor's,
+    // not a venue's, so there is nothing left to resolve per bazaar.
+    final vendorMethods = await vendorPaymentMethodRepository.listMethods();
+    final basePaymentMethods = [
+      for (final method in vendorMethods)
+        PaymentMethodMeta(
+          name: method.name,
+          extraFieldLabel: method.extraFieldLabel,
+        ),
+    ];
     final extraFieldLabelsByEventId = {
       for (final event in events)
         event.id: _extraFieldLabels(event, basePaymentMethods),

@@ -16,6 +16,7 @@ import '../../../data/repositories/event_repository.dart';
 import '../../../services/staff_scheduling.dart';
 import '../../../data/repositories/product_repository.dart';
 import '../../../data/repositories/settings_repository.dart';
+import '../../../data/repositories/vendor_payment_method_repository.dart';
 import '../../../models/bazaar_event.dart';
 import '../../../models/company.dart';
 import '../../../models/user.dart';
@@ -55,8 +56,9 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
   final Map<String, ProductAllocationItem> _allocationMetaByKey = {};
   final Set<int> _assignedEmployeeIds = {};
   List<Company> _locations = const [];
-  Map<int, List<PaymentMethodMeta>> _locationPaymentMethodsByCompanyId =
-      const {};
+
+  /// The vendor's own methods -- one list, not one per venue any more.
+  List<PaymentMethodMeta> _vendorPaymentMethods = const [];
 
   @override
   void initState() {
@@ -83,12 +85,10 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
     super.dispose();
   }
 
-  List<PaymentMethodMeta> get _selectedLocationPaymentMethods {
-    if (_selectedCompanyId == null) {
-      return const [];
-    }
-    return _locationPaymentMethodsByCompanyId[_selectedCompanyId!] ?? const [];
-  }
+  /// What this bazaar can be rung up in, still a per-bazaar choice: a stall
+  /// can offer fewer methods at one event than it generally accepts.
+  List<PaymentMethodMeta> get _selectedLocationPaymentMethods =>
+      _vendorPaymentMethods;
 
   bool get _isBazaarInfoComplete {
     final eventNameOk = _eventName.text.trim().isNotEmpty;
@@ -134,9 +134,10 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
 
   Future<void> _syncLocationsFromRepository() async {
     final settingsRepository = context.read<SettingsRepository>();
+    final vendorPaymentMethodRepository = context
+        .read<VendorPaymentMethodRepository>();
     final locations = await settingsRepository.listCompanies();
-    final methodsByCompanyId = await settingsRepository
-        .paymentMethodsByCompanyId();
+    final vendorMethods = await vendorPaymentMethodRepository.listMethods();
 
     if (!mounted) {
       return;
@@ -144,7 +145,13 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
 
     setState(() {
       _locations = locations;
-      _locationPaymentMethodsByCompanyId = methodsByCompanyId;
+      _vendorPaymentMethods = [
+        for (final method in vendorMethods)
+          PaymentMethodMeta(
+            name: method.name,
+            extraFieldLabel: method.extraFieldLabel,
+          ),
+      ];
 
       if (_selectedCompanyId == null ||
           !_locations.any((location) => location.id == _selectedCompanyId)) {

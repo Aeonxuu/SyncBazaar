@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 
 import '../../core/config/api_config.dart';
 import 'api_cache.dart';
@@ -135,11 +136,7 @@ class ApiClient {
   /// against a payment that never happened.
   Future<dynamic> get(String path, {bool useCache = true}) async {
     try {
-      final body = await _send(
-        'GET',
-        path,
-        cachePath: useCache ? path : null,
-      );
+      final body = await _send('GET', path, cachePath: useCache ? path : null);
       _servingCacheFrom = null;
       return body;
     } on ApiException catch (error) {
@@ -188,6 +185,71 @@ class ApiClient {
       throw const ApiException(
         ApiErrorKind.timeout,
         'The server took too long to prepare the file.',
+      );
+    } on SocketException {
+      throw const ApiException(
+        ApiErrorKind.network,
+        'Cannot reach the server. Check your connection.',
+      );
+    } on http.ClientException {
+      throw const ApiException(
+        ApiErrorKind.network,
+        'Cannot reach the server. Check your connection.',
+      );
+    }
+  }
+
+  /// Sends one file as `multipart/form-data` and decodes the JSON reply.
+  ///
+  /// [field] is the form field the server expects the bytes under — every
+  /// upload endpoint here names its own (`image`, `qr_code_image`, ...), so
+  /// this takes it as a parameter rather than guessing.
+  ///
+  /// [method] defaults to PATCH because every use so far is "attach this file
+  /// to a row that already exists"; a future create-with-file endpoint can
+  /// pass POST.
+  Future<dynamic> uploadFile(
+    String path, {
+    required Uint8List bytes,
+    required String field,
+    required String filename,
+    String contentType = 'image/png',
+    String method = 'PATCH',
+  }) async {
+    final uri = Uri.parse('$_baseUrl$path');
+    final request = http.MultipartRequest(method, uri);
+    final token = this.token;
+    if (token != null) {
+      request.headers['Authorization'] = 'Token $token';
+    }
+    request.files.add(
+      http.MultipartFile.fromBytes(
+        field,
+        bytes,
+        filename: filename,
+        contentType: MediaType.parse(contentType),
+      ),
+    );
+
+    try {
+      final streamed = await _http.send(request).timeout(_fileTimeout);
+      final response = await http.Response.fromStream(streamed);
+      _lastReplyAt = DateTime.now();
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw ApiException(
+          _kindFor(response.statusCode),
+          _messageFor(response, response.statusCode),
+          statusCode: response.statusCode,
+        );
+      }
+      if (response.body.isEmpty) {
+        return null;
+      }
+      return jsonDecode(utf8.decode(response.bodyBytes));
+    } on TimeoutException {
+      throw const ApiException(
+        ApiErrorKind.timeout,
+        'The server took too long to save the image.',
       );
     } on SocketException {
       throw const ApiException(

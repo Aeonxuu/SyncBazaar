@@ -6,6 +6,7 @@ import 'package:syncbazaar/data/repositories/orders_repository.dart';
 import 'package:syncbazaar/data/repositories/product_repository.dart';
 import 'package:syncbazaar/data/repositories/sales_repository.dart';
 import 'package:syncbazaar/data/repositories/settings_repository.dart';
+import 'package:syncbazaar/data/repositories/vendor_payment_method_repository.dart';
 import 'package:syncbazaar/models/bazaar_event.dart';
 import 'package:syncbazaar/models/sale.dart';
 import 'package:syncbazaar/models/user.dart';
@@ -40,6 +41,7 @@ void main() {
       sales,
       OrdersRepository(),
       SettingsRepository(),
+      VendorPaymentMethodRepository(),
     );
   });
 

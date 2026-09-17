@@ -828,7 +828,7 @@ class _PosScreenState extends State<PosScreen> {
                               // For the fallback, so a cashier who loses the
                               // connection mid-sale still has something to show
                               // the customer.
-                              savedQrBytes: state.selectedPaymentQr,
+                              savedQrImageUrl: state.selectedPaymentQr,
                             );
                             if (result == null) return;
                             switch (result.source) {
@@ -845,7 +845,7 @@ class _PosScreenState extends State<PosScreen> {
                             final reference = await showQrPaymentDialog(
                               context: context,
                               paymentMethod: state.selectedPaymentMethod,
-                              qrBytes: state.selectedPaymentQr!,
+                              qrImageUrl: state.selectedPaymentQr!,
                               amount: state.total,
                               extraFieldLabel: state.selectedExtraFieldLabel,
                             );

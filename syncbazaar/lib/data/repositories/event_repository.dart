@@ -3,6 +3,7 @@ import '../../models/user.dart';
 import '../remote/api_client.dart';
 import '../remote/establishment_api_mapper.dart';
 import '../remote/event_api_mapper.dart';
+import '../remote/vendor_payment_method_api_mapper.dart';
 import 'auth_repository.dart';
 import 'product_repository.dart';
 
@@ -242,36 +243,44 @@ class EventRepository {
     }
   }
 
-  /// The vendor-wide payment methods, standing in for per-venue ones.
+  /// The vendor's own payment methods, standing in for a per-bazaar choice.
   ///
-  /// Which methods a bazaar accepts belongs to its `Establishment`, whose
-  /// endpoint currently 500s, so this falls back to the global list. Failing
-  /// soft rather than throwing: a wrong payment menu is recoverable, an event
-  /// list that will not load is not.
+  /// Which methods a bazaar accepts is not sent by the server at all, so
+  /// every event falls back to this: the vendor's whole list, over-offering
+  /// rather than under-offering. That used to mean the *global* catalog --
+  /// every vendor's methods, not just this one's, which is exactly how one
+  /// vendor's freshly-added method ended up on every other vendor's till.
+  /// Failing soft rather than throwing: a wrong payment menu is recoverable,
+  /// an event list that will not load is not.
   Future<(List<String>, List<BazaarPaymentMethod>)> _paymentMethods(
     AuthRepository auth,
   ) async {
+    final vendorId = auth.vendorId;
+    if (vendorId == null) {
+      return (const ['CASH'], const <BazaarPaymentMethod>[]);
+    }
     try {
-      final payload = await auth.api.get('/api/core/mode-of-payment/') as List;
-      final names = <String>[];
-      final custom = <BazaarPaymentMethod>[];
-      for (final entry in payload) {
-        final map = entry as Map<String, dynamic>;
-        final name = map['name'] as String? ?? '';
-        if (name.isEmpty) {
-          continue;
-        }
-        names.add(name.toUpperCase());
-        final label = map['required_information_name'] as String?;
-        if (label != null && label.trim().isNotEmpty) {
-          custom.add(
+      final catalogPayload =
+          await auth.api.get('/api/core/mode-of-payment/') as List;
+      final catalog = mapModeOfPaymentCatalog(catalogPayload);
+      final catalogById = {for (final entry in catalog) entry.id: entry};
+
+      final payload =
+          await auth.api.get(vendorPaymentMethodsPath(vendorId)) as List;
+      final methods = mapVendorPaymentMethods(
+        payload,
+        catalogById: catalogById,
+      );
+
+      final names = [for (final method in methods) method.name];
+      final custom = [
+        for (final method in methods)
+          if (method.extraFieldLabel != null)
             BazaarPaymentMethod(
-              name: name.toUpperCase(),
-              extraFieldLabel: label,
+              name: method.name,
+              extraFieldLabel: method.extraFieldLabel!,
             ),
-          );
-        }
-      }
+      ];
       return (names.isEmpty ? const ['CASH'] : names, custom);
     } on Object {
       return (const ['CASH'], const <BazaarPaymentMethod>[]);

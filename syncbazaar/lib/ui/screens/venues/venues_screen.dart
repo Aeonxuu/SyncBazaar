@@ -1,19 +1,12 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:image_picker/image_picker.dart';
 
 import '../../../bloc/settings/settings_cubit.dart';
 import '../../../core/constants/colors.dart';
-import '../../../core/constants/motion.dart';
 import '../../../data/remote/api_client.dart';
-import '../../../data/repositories/settings_repository.dart';
 import '../../../models/company.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/user.dart';
-import '../../../services/qr_crop_service.dart';
-import '../../widgets/confirmation_dialog.dart';
 
 /// Venues the bazaars are held at, and the commercial terms agreed with each.
 ///
@@ -163,19 +156,8 @@ class _VenuesScreenState extends State<VenuesScreen> {
                           final company = visible[index];
                           return _VenueCard(
                             company: company,
-                            methods:
-                                state.locationPaymentMethodsByCompanyId[company
-                                    .id] ??
-                                const [],
-                            onEdit: () => _openVenueEditor(
-                              context,
-                              existing: company,
-                              existingMethods:
-                                  state
-                                      .locationPaymentMethodsByCompanyId[company
-                                      .id] ??
-                                  const [],
-                            ),
+                            onEdit: () =>
+                                _openVenueEditor(context, existing: company),
                           );
                         },
                       ),
@@ -219,16 +201,12 @@ class _VenuesScreenState extends State<VenuesScreen> {
   Future<void> _openVenueEditor(
     BuildContext context, {
     Company? existing,
-    List<PaymentMethodMeta> existingMethods = const [],
   }) async {
     final cubit = context.read<SettingsCubit>();
     final messenger = ScaffoldMessenger.of(context);
     final result = await showDialog<_VenueDraft>(
       context: context,
-      builder: (_) => _VenueEditorDialog(
-        existing: existing,
-        existingMethods: existingMethods,
-      ),
+      builder: (_) => _VenueEditorDialog(existing: existing),
     );
     if (result == null) {
       return;
@@ -245,10 +223,9 @@ class _VenuesScreenState extends State<VenuesScreen> {
           contact: result.contact,
           incentivePercent: result.incentivePercent,
           bufferPercent: result.bufferPercent,
-          paymentMethods: result.methods,
         );
       } else {
-        await cubit.saveLocationConfiguration(
+        await cubit.saveLocation(
           company: existing.copyWith(
             name: result.name,
             address: result.address,
@@ -256,7 +233,6 @@ class _VenuesScreenState extends State<VenuesScreen> {
             incentivePercent: result.incentivePercent,
             bufferPercent: result.bufferPercent,
           ),
-          paymentMethods: result.methods,
         );
       }
     } on ApiException catch (error) {
@@ -281,7 +257,6 @@ class _VenueDraft {
     required this.contact,
     required this.incentivePercent,
     required this.bufferPercent,
-    required this.methods,
   });
 
   final String name;
@@ -289,11 +264,7 @@ class _VenueDraft {
   final String contact;
   final double incentivePercent;
   final double bufferPercent;
-  final List<PaymentMethodMeta> methods;
 }
-
-/// The hairline shared by every control on the add-a-method row.
-const Color _venueControlBorder = Color(0xFFDCDCE3);
 
 /// The filled style used by the stacked fields on the Details step, where a
 /// field sits alone on its line and has nothing beside it to match.
@@ -350,14 +321,9 @@ InputDecoration _venueFieldDecoration({required String hint}) =>
 /// subtitle -- "Incentive 10.0% • Buffer 5.0% • Methods 2" -- which buried the
 /// two numbers that matter mid-sentence and never showed the address at all.
 class _VenueCard extends StatelessWidget {
-  const _VenueCard({
-    required this.company,
-    required this.methods,
-    required this.onEdit,
-  });
+  const _VenueCard({required this.company, required this.onEdit});
 
   final Company company;
-  final List<PaymentMethodMeta> methods;
   final VoidCallback onEdit;
 
   @override
@@ -427,15 +393,6 @@ class _VenueCard extends StatelessWidget {
                   label: 'Buffer',
                   value: formatPercent(company.bufferPercent),
                   emphasise: true,
-                ),
-              ),
-              Expanded(
-                flex: 2,
-                child: _VenueFact(
-                  label: 'Takes',
-                  value: methods.isEmpty
-                      ? 'CASH'
-                      : methods.map((m) => m.name).join(' · '),
                 ),
               ),
             ],
@@ -529,13 +486,9 @@ class _VenueRowActionState extends State<_VenueRowAction> {
 /// and both rates could be *saved* but never seen or changed -- the controllers
 /// held the original values and wrote them back untouched.
 class _VenueEditorDialog extends StatefulWidget {
-  const _VenueEditorDialog({
-    required this.existing,
-    required this.existingMethods,
-  });
+  const _VenueEditorDialog({required this.existing});
 
   final Company? existing;
-  final List<PaymentMethodMeta> existingMethods;
 
   @override
   State<_VenueEditorDialog> createState() => _VenueEditorDialogState();
@@ -547,15 +500,9 @@ class _VenueEditorDialogState extends State<_VenueEditorDialog> {
   late final TextEditingController _contact;
   late final TextEditingController _incentive;
   late final TextEditingController _buffer;
-  final TextEditingController _methodName = TextEditingController();
-  final TextEditingController _methodField = TextEditingController();
-
-  late List<PaymentMethodMeta> _methods;
-  int _step = 0;
 
   String? _nameError;
   String? _ratesError;
-  String? _methodError;
 
   /// The example the rates are previewed against. A round number, so the
   /// arithmetic stays legible rather than becoming the thing being read.
@@ -563,15 +510,6 @@ class _VenueEditorDialogState extends State<_VenueEditorDialog> {
 
   /// Long enough to say "Reference Number", short enough to fit the field's
   /// label on a till.
-  static const int _fieldLabelMax = 28;
-
-  /// One height for every control on the add-a-method row.
-  ///
-  /// The button was pinned to 44 while the two fields took whatever their
-  /// decoration worked out to, so three controls meant to read as one row
-  /// stood at two different heights.
-  static const double _controlHeight = 44;
-
   bool get _isCreate => widget.existing == null;
 
   @override
@@ -587,12 +525,6 @@ class _VenueEditorDialogState extends State<_VenueEditorDialog> {
     _buffer = TextEditingController(
       text: existing == null ? '10' : _plain(existing.bufferPercent),
     );
-    _methods = [
-      if (widget.existingMethods.isNotEmpty)
-        ...widget.existingMethods
-      else
-        const PaymentMethodMeta(name: 'CASH'),
-    ];
   }
 
   static String _plain(double value) =>
@@ -605,8 +537,6 @@ class _VenueEditorDialogState extends State<_VenueEditorDialog> {
     _contact.dispose();
     _incentive.dispose();
     _buffer.dispose();
-    _methodName.dispose();
-    _methodField.dispose();
     super.dispose();
   }
 
@@ -630,83 +560,8 @@ class _VenueEditorDialogState extends State<_VenueEditorDialog> {
     return _nameError == null && _ratesError == null;
   }
 
-  /// Asks before dropping a payment method.
-  ///
-  /// Removing one is a bigger deal than it looks: the row sits next to a small
-  /// × and carries the venue's QR for that method, so a mis-tap can throw away
-  /// an uploaded payment code as well as the method itself. The QR is called
-  /// out by name in the message, because that is the part that costs real
-  /// effort to put back.
-  Future<void> _confirmRemoveMethod(int index) async {
-    if (index < 0 || index >= _methods.length) {
-      return;
-    }
-    final method = _methods[index];
-    final hasQr = method.qrImageBytes != null;
-    final confirmed = await showConfirmationDialog(
-      context: context,
-      title: 'Remove ${method.name.toUpperCase()}?',
-      message: hasQr
-          ? 'This venue will stop accepting ${method.name.toUpperCase()}, and '
-                'its uploaded QR code will be deleted. You would need to upload '
-                'the QR again to bring it back.'
-          : 'This venue will stop accepting ${method.name.toUpperCase()} at '
-                'checkout.',
-      confirmLabel: 'Remove',
-      tone: ConfirmationTone.destructive,
-      icon: Icons.delete_outline,
-    );
-    if (!confirmed || !mounted) {
-      return;
-    }
-    // Re-checked after the await: the list can have been edited while the
-    // dialog was open, and removing by a stale index would drop the wrong row.
-    final current = _methods.indexWhere((m) => m.name == method.name);
-    if (current == -1) {
-      return;
-    }
-    setState(() => _methods.removeAt(current));
-  }
-
-  void _addMethod() {
-    final name = _methodName.text.trim();
-    final field = _methodField.text.trim();
-    if (name.isEmpty) {
-      setState(() => _methodError = 'Give the method a name.');
-      return;
-    }
-    if (_methods.any((m) => m.name.toUpperCase() == name.toUpperCase())) {
-      setState(() => _methodError = '$name is already accepted here.');
-      return;
-    }
-    setState(() {
-      _methods.add(
-        PaymentMethodMeta(
-          name: name,
-          extraFieldLabel: field.isEmpty ? null : field,
-        ),
-      );
-      _methodName.clear();
-      _methodField.clear();
-      _methodError = null;
-    });
-  }
-
   void _submit() {
-    if (_step == 0) {
-      if (_validateDetails()) {
-        setState(() => _step = 1);
-      }
-      return;
-    }
-    // Details are validated on the way through, but an edit can land on step
-    // two directly, so they are checked again rather than trusted.
     if (!_validateDetails()) {
-      setState(() => _step = 0);
-      return;
-    }
-    if (_methods.isEmpty) {
-      setState(() => _methodError = 'A venue must accept at least one method.');
       return;
     }
     Navigator.pop(
@@ -717,7 +572,6 @@ class _VenueEditorDialogState extends State<_VenueEditorDialog> {
         contact: _contact.text.trim(),
         incentivePercent: _incentiveValue!,
         bufferPercent: _bufferValue!,
-        methods: _methods,
       ),
     );
   }
@@ -759,39 +613,12 @@ class _VenueEditorDialogState extends State<_VenueEditorDialog> {
                 ],
               ),
             ),
-            const SizedBox(height: 12),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              // A completed step is tappable to revisit; forward movement is
-              // what validation gates.
-              child: Row(
-                children: [
-                  _VenueStep(
-                    index: 1,
-                    label: 'Details',
-                    isCurrent: _step == 0,
-                    isDone: _step > 0,
-                    onTap: () => setState(() => _step = 0),
-                  ),
-                  const Expanded(
-                    child: Divider(color: Color(0xFFEDEDF1), height: 1),
-                  ),
-                  _VenueStep(
-                    index: 2,
-                    label: 'Payment methods',
-                    isCurrent: _step == 1,
-                    isDone: false,
-                    onTap: _step == 1 ? null : () => _submit(),
-                  ),
-                ],
-              ),
-            ),
             const SizedBox(height: 16),
             const Divider(height: 1, color: Color(0xFFEDEDF1)),
             Flexible(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-                child: _step == 0 ? _detailsStep(theme) : _methodsStep(theme),
+                child: _detailsStep(theme),
               ),
             ),
             const Divider(height: 1, color: Color(0xFFEDEDF1)),
@@ -799,12 +626,6 @@ class _VenueEditorDialogState extends State<_VenueEditorDialog> {
               padding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
               child: Row(
                 children: [
-                  if (_step == 1)
-                    TextButton.icon(
-                      onPressed: () => setState(() => _step = 0),
-                      icon: const Icon(Icons.arrow_back, size: 16),
-                      label: const Text('Back'),
-                    ),
                   const Spacer(),
                   TextButton(
                     onPressed: () => Navigator.pop(context),
@@ -825,7 +646,7 @@ class _VenueEditorDialogState extends State<_VenueEditorDialog> {
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
-                    child: Text(_step == 0 ? 'Continue' : 'Save venue'),
+                    child: Text(_isCreate ? 'Add venue' : 'Save venue'),
                   ),
                 ],
               ),
@@ -934,108 +755,7 @@ class _VenueEditorDialogState extends State<_VenueEditorDialog> {
       ],
     );
   }
-
-  Widget _methodsStep(ThemeData theme) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const _VenueSectionLabel('Accepted at this venue'),
-        const SizedBox(height: 4),
-        Text(
-          'What the till offers here. A method can ask the cashier for one '
-          'extra detail, such as a reference number.',
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: Colors.black45,
-            height: 1.4,
-          ),
-        ),
-        const SizedBox(height: 12),
-        for (var i = 0; i < _methods.length; i++)
-          _MethodRow(
-            // Keyed by the method it shows: without this, removing a row
-            // leaves the next one holding the removed row's controller and
-            // therefore its text.
-            key: ValueKey(_methods[i].name),
-            method: _methods[i],
-            // Cash is how a stall takes money when everything else fails, so
-            // it is not removable.
-            locked: _methods[i].name.toUpperCase() == 'CASH',
-            onFieldChanged: (label) => setState(() {
-              // copyWith, not a fresh PaymentMethodMeta: rebuilding it from
-              // name and label alone would drop an uploaded QR the moment
-              // someone edited the label next to it.
-              _methods[i] = _methods[i].copyWith(
-                extraFieldLabel: label.trim().isEmpty ? null : label.trim(),
-                clearQr: false,
-              );
-              if (label.trim().isEmpty) {
-                _methods[i] = PaymentMethodMeta(
-                  name: _methods[i].name,
-                  qrImageBytes: _methods[i].qrImageBytes,
-                );
-              }
-            }),
-            onQrChanged: (bytes) => setState(() {
-              _methods[i] = _methods[i].copyWith(
-                qrImageBytes: bytes,
-                clearQr: bytes == null,
-              );
-            }),
-            onRemove: () => _confirmRemoveMethod(i),
-            maxFieldLength: _fieldLabelMax,
-          ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              flex: 2,
-              child: _VenueRowField(
-                controller: _methodName,
-                hint: 'e.g. GCASH',
-                height: _controlHeight,
-                capitalize: true,
-                onChanged: () => setState(() => _methodError = null),
-                onSubmitted: _addMethod,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              flex: 3,
-              child: _VenueRowField(
-                controller: _methodField,
-                hint: 'Asks for… (optional)',
-                height: _controlHeight,
-                maxLength: _fieldLabelMax,
-                onSubmitted: _addMethod,
-              ),
-            ),
-            const SizedBox(width: 8),
-            // A plain box rather than an OutlinedButton. The button defaults
-            // to a padded tap target, so it lays out taller than whatever
-            // height it is given and cannot be matched to the fields beside
-            // it -- which is why pinning all three to one SizedBox did not
-            // make them equal.
-            _AddMethodButton(height: _controlHeight, onPressed: _addMethod),
-          ],
-        ),
-        if (_methodError != null) ...[
-          const SizedBox(height: 6),
-          Text(
-            _methodError!,
-            style: theme.textTheme.bodySmall?.copyWith(color: AppColors.error),
-          ),
-        ],
-      ],
-    );
-  }
 }
-
-Widget? _noCounter(
-  BuildContext context, {
-  required int currentLength,
-  required int? maxLength,
-  required bool isFocused,
-}) => null;
 
 class _VenueSectionLabel extends StatelessWidget {
   const _VenueSectionLabel(this.text);
@@ -1112,475 +832,6 @@ class _VenueField extends StatelessWidget {
             style: theme.textTheme.bodySmall?.copyWith(color: AppColors.error),
           ),
         ],
-      ],
-    );
-  }
-}
-
-class _VenueStep extends StatelessWidget {
-  const _VenueStep({
-    required this.index,
-    required this.label,
-    required this.isCurrent,
-    required this.isDone,
-    this.onTap,
-  });
-
-  final int index;
-  final String label;
-  final bool isCurrent;
-  final bool isDone;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final active = isCurrent || isDone;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 22,
-              height: 22,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: active ? AppColors.primary : const Color(0xFFEDEDF1),
-                shape: BoxShape.circle,
-              ),
-              child: isDone
-                  ? const Icon(Icons.check, size: 13, color: Colors.white)
-                  : Text(
-                      '$index',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: active ? Colors.white : Colors.black45,
-                      ),
-                    ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                fontWeight: FontWeight.w700,
-                color: active ? AppColors.primary : Colors.black38,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// One accepted payment method, with its extra field edited in place.
-///
-/// The label used to live behind a "Field" button opening a second dialog on
-/// top of this one, to change one string.
-class _MethodRow extends StatefulWidget {
-  const _MethodRow({
-    super.key,
-    required this.method,
-    required this.locked,
-    required this.onFieldChanged,
-    required this.onQrChanged,
-    required this.onRemove,
-    required this.maxFieldLength,
-  });
-
-  final PaymentMethodMeta method;
-  final bool locked;
-  final ValueChanged<String> onFieldChanged;
-
-  /// Null clears the code. Attaching one is what makes the till present a QR
-  /// for this method at checkout, so it needs no other setting.
-  final ValueChanged<Uint8List?> onQrChanged;
-  final VoidCallback onRemove;
-  final int maxFieldLength;
-
-  @override
-  State<_MethodRow> createState() => _MethodRowState();
-}
-
-class _MethodRowState extends State<_MethodRow> {
-  /// Owned by the row rather than rebuilt in `build`. A controller created
-  /// there is a new one every frame, so the cursor jumps to the start on each
-  /// keystroke and the field cannot be typed into.
-  late final TextEditingController _field;
-
-  @override
-  void initState() {
-    super.initState();
-    _field = TextEditingController(text: widget.method.extraFieldLabel ?? '');
-  }
-
-  @override
-  void dispose() {
-    _field.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final method = widget.method;
-    final locked = widget.locked;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFEDEDF1)),
-      ),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 90,
-            child: Text(
-              method.name.toUpperCase(),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          Expanded(
-            child: TextField(
-              controller: _field,
-              maxLength: widget.maxFieldLength,
-              buildCounter: _noCounter,
-              onChanged: widget.onFieldChanged,
-              style: theme.textTheme.bodySmall,
-              decoration: InputDecoration(
-                hintText: 'Asks for… (optional)',
-                hintStyle: const TextStyle(color: Colors.black38),
-                isDense: true,
-                filled: true,
-                // White inside a bordered row, so the two depths never read
-                // as the same surface.
-                fillColor: Colors.white,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 8,
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(6),
-                  borderSide: BorderSide.none,
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(6),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          _QrButton(
-            qrBytes: method.qrImageBytes,
-            methodName: method.name,
-            onChanged: widget.onQrChanged,
-          ),
-          IconButton(
-            onPressed: locked ? null : widget.onRemove,
-            tooltip: locked ? 'Cash cannot be removed' : 'Remove',
-            splashRadius: 16,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints.tightFor(width: 32, height: 32),
-            icon: Icon(
-              Icons.close_rounded,
-              size: 16,
-              color: locked ? Colors.black12 : Colors.black38,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// The Add control on the add-a-method row.
-///
-/// Built from a Container rather than an OutlinedButton so its height is
-/// exactly what it is given. A material button carries a padded tap target
-/// that lays out larger than any height set on it, which is what kept it
-/// from matching the fields beside it however they were sized.
-class _AddMethodButton extends StatefulWidget {
-  const _AddMethodButton({required this.height, required this.onPressed});
-
-  final double height;
-  final VoidCallback onPressed;
-
-  @override
-  State<_AddMethodButton> createState() => _AddMethodButtonState();
-}
-
-class _AddMethodButtonState extends State<_AddMethodButton> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: InkWell(
-        onTap: widget.onPressed,
-        borderRadius: BorderRadius.circular(8),
-        child: AnimatedContainer(
-          duration: AppMotion.feedback,
-          curve: AppMotion.easeOut,
-          height: widget.height,
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: _hovered ? const Color(0xFFF2ECFC) : Colors.white,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: _hovered ? AppColors.primary : _venueControlBorder,
-            ),
-          ),
-          child: Text(
-            'Add',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: AppColors.primary,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// A text field on the add-a-method row.
-///
-/// The border is painted by a Container here, and the field inside carries no
-/// decoration of its own. An InputDecorator sizes its outline from its content
-/// and padding by rules that do not simply obey a height -- three attempts to
-/// match it to the button beside it measured 44 in a headless test while
-/// rendering visibly shorter on screen. A Container is exactly the height it
-/// is given, which is the property this row needs.
-class _VenueRowField extends StatefulWidget {
-  const _VenueRowField({
-    required this.controller,
-    required this.hint,
-    required this.height,
-    this.maxLength,
-    this.capitalize = false,
-    this.onChanged,
-    this.onSubmitted,
-  });
-
-  final TextEditingController controller;
-  final String hint;
-  final double height;
-  final int? maxLength;
-  final bool capitalize;
-  final VoidCallback? onChanged;
-  final VoidCallback? onSubmitted;
-
-  @override
-  State<_VenueRowField> createState() => _VenueRowFieldState();
-}
-
-class _VenueRowFieldState extends State<_VenueRowField> {
-  late final FocusNode _focus;
-
-  @override
-  void initState() {
-    super.initState();
-    _focus = FocusNode()..addListener(() => setState(() {}));
-  }
-
-  @override
-  void dispose() {
-    _focus.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: widget.height,
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      alignment: Alignment.centerLeft,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: _focus.hasFocus ? AppColors.primary : _venueControlBorder,
-        ),
-      ),
-      child: TextField(
-        controller: widget.controller,
-        focusNode: _focus,
-        maxLength: widget.maxLength,
-        buildCounter: widget.maxLength == null ? null : _noCounter,
-        textCapitalization: widget.capitalize
-            ? TextCapitalization.characters
-            : TextCapitalization.none,
-        onChanged: widget.onChanged == null ? null : (_) => widget.onChanged!(),
-        onSubmitted: widget.onSubmitted == null
-            ? null
-            : (_) => widget.onSubmitted!(),
-        style: Theme.of(context).textTheme.bodyMedium,
-        // Stripped bare: every visible edge belongs to the Container above.
-        decoration: InputDecoration(
-          hintText: widget.hint,
-          hintStyle: const TextStyle(color: Colors.black38),
-          isDense: true,
-          filled: false,
-          contentPadding: EdgeInsets.zero,
-          border: InputBorder.none,
-          enabledBorder: InputBorder.none,
-          focusedBorder: InputBorder.none,
-        ),
-      ),
-    );
-  }
-}
-
-/// The per-method QR control: a thumbnail once one is set, a button before.
-///
-/// Lives on the payment-method row rather than on the venue as a whole because
-/// a stall accepting both GCash and Maya needs a different code for each, and a
-/// single venue-level QR would show the wrong one.
-class _QrButton extends StatefulWidget {
-  const _QrButton({
-    required this.qrBytes,
-    required this.methodName,
-    required this.onChanged,
-  });
-
-  final Uint8List? qrBytes;
-  final String methodName;
-  final ValueChanged<Uint8List?> onChanged;
-
-  @override
-  State<_QrButton> createState() => _QrButtonState();
-}
-
-class _QrButtonState extends State<_QrButton> {
-  bool _busy = false;
-  String? _error;
-
-  Future<void> _pick() async {
-    if (_busy) {
-      return;
-    }
-    final picker = ImagePicker();
-    // Capped in pixels but deliberately not re-encoded: `imageQuality` is a
-    // lossy JPEG pass, which is harmless on a product photo and a real risk on
-    // something that has to stay machine-readable.
-    final file = await picker.pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 2400,
-      maxHeight: 2400,
-    );
-    if (file == null) {
-      return;
-    }
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    // Bytes, never the path: on web `XFile.path` is a blob URL that no decoder
-    // can open, and dart:io does not exist there at all.
-    final source = await file.readAsBytes();
-    final result = await const QrCropService().cropToQr(source);
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _busy = false;
-      _error = result.found ? null : result.failureReason;
-    });
-    if (result.found) {
-      widget.onChanged(result.bytes);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final bytes = widget.qrBytes;
-    final hasQr = bytes != null && bytes.isNotEmpty;
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (_error != null)
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: Tooltip(
-              message: _error!,
-              child: const Icon(
-                Icons.error_outline,
-                size: 16,
-                color: AppColors.error,
-              ),
-            ),
-          ),
-        if (_busy)
-          const SizedBox(
-            width: 28,
-            height: 28,
-            child: Padding(
-              padding: EdgeInsets.all(6),
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-          )
-        else if (hasQr)
-          Tooltip(
-            message: 'Replace the ${widget.methodName} QR',
-            child: InkWell(
-              onTap: _pick,
-              borderRadius: BorderRadius.circular(6),
-              child: Container(
-                width: 28,
-                height: 28,
-                padding: const EdgeInsets.all(2),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: AppColors.border),
-                ),
-                // contain, so the code is never cropped in preview either.
-                child: Image.memory(bytes, fit: BoxFit.contain),
-              ),
-            ),
-          )
-        else
-          TextButton.icon(
-            onPressed: _pick,
-            style: TextButton.styleFrom(
-              foregroundColor: AppColors.primary,
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              minimumSize: const Size(0, 32),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            icon: const Icon(Icons.qr_code_2_rounded, size: 16),
-            label: const Text('QR'),
-          ),
-        if (hasQr && !_busy)
-          IconButton(
-            onPressed: () {
-              setState(() => _error = null);
-              widget.onChanged(null);
-            },
-            tooltip: 'Remove QR',
-            splashRadius: 16,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints.tightFor(width: 28, height: 32),
-            icon: const Icon(
-              Icons.close_rounded,
-              size: 13,
-              color: Colors.black38,
-            ),
-          ),
       ],
     );
   }

@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:syncbazaar/bloc/pos/pos_cubit.dart';
@@ -8,6 +6,7 @@ import 'package:syncbazaar/data/repositories/orders_repository.dart';
 import 'package:syncbazaar/data/repositories/product_repository.dart';
 import 'package:syncbazaar/data/repositories/sales_repository.dart';
 import 'package:syncbazaar/data/repositories/settings_repository.dart';
+import 'package:syncbazaar/data/repositories/vendor_payment_method_repository.dart';
 import 'package:syncbazaar/models/sale.dart';
 
 /// Which payment methods the gateway handles, and how a reference is marked.
@@ -30,6 +29,7 @@ void main() {
       SalesRepository(),
       OrdersRepository(),
       SettingsRepository(),
+      VendorPaymentMethodRepository(),
     );
   });
 
@@ -71,9 +71,7 @@ void main() {
         PaymentMethodMeta(
           name: method,
           extraFieldLabel: 'Reference Number',
-          qrImageBytes: withSavedQr
-              ? Uint8List.fromList(List.filled(8, 7))
-              : null,
+          qrImageUrl: withSavedQr ? 'https://cdn.example/qr.png' : null,
         ),
       ],
     );
