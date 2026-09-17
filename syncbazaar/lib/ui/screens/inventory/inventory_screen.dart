@@ -616,31 +616,41 @@ class _InventoryScreenState extends State<InventoryScreen> {
     if (!mounted) return;
     setState(_selectedKeys.clear);
 
-    // Said plainly either way. A refusal names the product and carries the
-    // server's reason, which for a 409 is that it has recorded sales; a
-    // partial run says how far it got, and the table already shows it.
-    final String message;
     if (outcome.isComplete) {
-      message = outcome.total == 1
-          ? 'Deleted ${namesById.values.single}.'
-          : 'Deleted ${outcome.total} products.';
-    } else {
-      final failure = outcome.failure!;
-      final why = failure.isOffline
-          ? 'Cannot reach the server.'
-          : failure.message;
-      message = outcome.deleted == 0
+      messenger.showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(milliseconds: 2600),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          content: Text(
+            outcome.total == 1
+                ? 'Deleted ${namesById.values.single}.'
+                : 'Deleted ${outcome.total} products.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    // A refusal is a dialog, not a SnackBar. It names the product and carries
+    // the server's reason, which for a 409 is that it has recorded sales, and
+    // a partial run says how far it got. On a tablet a SnackBar at the bottom
+    // is easy to miss and gone in four seconds, and "the delete looked like it
+    // worked" is the misread this exists to prevent. The table already shows
+    // the real state behind it.
+    final failure = outcome.failure!;
+    final why = failure.isOffline
+        ? 'Cannot reach the server.'
+        : failure.message;
+    if (!context.mounted) return;
+    await showNoticeDialog(
+      context: context,
+      title: outcome.deleted == 0 ? 'Not deleted' : 'Partly deleted',
+      message: outcome.deleted == 0
           ? '${outcome.stoppedAt} was not deleted. $why'
           : 'Deleted ${outcome.deleted} of ${outcome.total}. '
-                '${outcome.stoppedAt} was not deleted. $why';
-    }
-    messenger.showSnackBar(
-      SnackBar(
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(milliseconds: 4000),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        content: Text(message),
-      ),
+                '${outcome.stoppedAt} was not deleted. $why',
+      tone: ConfirmationTone.destructive,
     );
   }
 
