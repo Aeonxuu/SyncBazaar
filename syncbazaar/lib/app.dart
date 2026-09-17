@@ -212,8 +212,11 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
             )..loadPending(),
           ),
           BlocProvider(
-            create: (_) =>
-                InventoryCubit(_productRepository, _salesRepository)..load(),
+            create: (_) => InventoryCubit(
+              _productRepository,
+              _salesRepository,
+              events: _eventRepository,
+            )..load(),
           ),
           BlocProvider(create: (_) => StaffCubit(_authRepository)..load()),
           BlocProvider(

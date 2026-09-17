@@ -523,6 +523,25 @@ class EventRepository {
     _allocationsByEventId.remove(eventId);
   }
 
+  /// Bazaars holding stock of [productId], for a delete confirmation to name.
+  ///
+  /// The server cascades a product delete through its variants and through
+  /// their bazaar allocations without a word; only a recorded sale stops it.
+  /// So a product set aside for next week's bazaar deletes cleanly and the
+  /// bazaar loses that stock with no warning from the server. This is the
+  /// warning.
+  Future<List<BazaarEvent>> eventsAllocating(int productId) async {
+    await _ensureLoaded();
+    final prefix = '$productId:';
+    return [
+      for (final event in _events)
+        if ((_allocationsByEventId[event.id] ?? const {}).entries.any(
+          (entry) => entry.key.startsWith(prefix) && entry.value > 0,
+        ))
+          event,
+    ];
+  }
+
   Future<Map<String, int>> allocationsForEventByAllocationKey(
     int eventId,
   ) async {

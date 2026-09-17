@@ -154,6 +154,12 @@ class ProductRepository {
   /// has not issued a variant id for. The quick-edit control is hidden rather
   /// than disabled on false: online-only means the affordance should not exist
   /// where it cannot work.
+  /// Whether this catalogue is the server's, so writes have somewhere to go.
+  ///
+  /// The one question the inventory screen asks before offering an edit that
+  /// is not wired to the server yet. False in the demo build.
+  bool get isRemote => _auth?.vendorId != null;
+
   bool canQuickEdit(String allocationKey) =>
       _auth?.vendorId != null &&
       _variantIdByAllocationKey[allocationKey] != null;
@@ -312,8 +318,26 @@ class ProductRepository {
     );
   }
 
+  /// Removes a product, on the server first when there is one.
+  ///
+  /// The local copy goes only after the server has answered 204. A product
+  /// that vanished from the table but still exists on the server would come
+  /// straight back on the next refresh, which reads as the delete "not
+  /// working" when it never happened at all.
+  ///
+  /// The server refuses with a 409 when any variant has recorded sales, and
+  /// that [ApiException] is left to the caller, whose job is to name the
+  /// product and say why. What the server does *not* refuse is a product
+  /// allocated to a bazaar that has not sold yet: those allocations are
+  /// cascaded away silently. Warning about that is the caller's job too, and
+  /// [EventRepository.eventsAllocating] is how it finds out.
   Future<void> deleteProduct(int id) async {
     await _ensureSeeded();
+    final auth = _auth;
+    final vendorId = auth?.vendorId;
+    if (auth != null && vendorId != null) {
+      await auth.api.delete('/api/core/vendor/$vendorId/product/$id/');
+    }
     _products.removeWhere((p) => p.id == id);
     final groups = _variantGroupsByProductId.remove(id) ?? const [];
     for (final group in groups) {
