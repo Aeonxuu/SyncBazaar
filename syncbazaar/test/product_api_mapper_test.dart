@@ -62,6 +62,18 @@ void main() {
     expect(colours, ['Triple White', 'Triple Black']);
   });
 
+  test('keeps every variant price, not only the lowest', () {
+    // basePrice is the lowest across the product, which is all the table
+    // shows. The rest are kept so a product-wide price change can tell
+    // whether it is about to flatten a real difference, and warn first.
+    final prices = mapped().priceByAllocationKey;
+
+    expect(prices['16:10:7'], 1900);
+    expect(prices['16:11:7'], 1900);
+    expect(prices['16:10:8'], 2400);
+    expect(mapped().products.single.basePrice, 1900);
+  });
+
   test('names the categories from the server, not from hardcoded labels', () {
     // Category 1 and 2 are vendor-named slots -- an ice cream seller would get
     // Size and Flavour here -- so the names must come from the payload.

@@ -229,6 +229,48 @@ class InventoryCubit extends Cubit<InventoryState> {
     return _productRepository.allocationItems();
   }
 
+  /// Whether the quick-edit control should exist for this row at all.
+  bool canQuickEdit(String allocationKey) =>
+      _productRepository.canQuickEdit(allocationKey);
+
+  /// What the quick-edit dialog needs to know before it opens: every variant
+  /// price of the product, so it can warn when a product-wide change would
+  /// flatten a real difference.
+  Map<String, double> variantPricesForProduct(int productId) =>
+      _productRepository.variantPricesForProduct(productId);
+
+  /// Writes a stock correction for one variant, then reloads the table.
+  ///
+  /// The exception is left to the caller: the dialog keeps the typed value on
+  /// screen and says why it was not saved, which a cubit cannot do.
+  Future<void> updateVariantStock({
+    required String allocationKey,
+    required int stock,
+  }) async {
+    await _productRepository.updateVariantStock(
+      allocationKey: allocationKey,
+      stock: stock,
+    );
+    await load();
+  }
+
+  /// Writes a product-wide price, then reloads the table whatever happened.
+  ///
+  /// Reloaded even after a partial failure, on purpose: the repository has
+  /// already re-fetched, and the table must show the mix the server now holds
+  /// rather than the price that was asked for.
+  Future<PriceUpdateOutcome> updateProductPrice({
+    required int productId,
+    required double price,
+  }) async {
+    final outcome = await _productRepository.updateProductPrice(
+      productId: productId,
+      price: price,
+    );
+    await load();
+    return outcome;
+  }
+
   Future<List<ProductVariantGroup>> variantGroupsForProduct(int productId) {
     return _productRepository.variantGroupsForProduct(productId);
   }

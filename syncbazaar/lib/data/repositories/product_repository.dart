@@ -21,6 +21,25 @@ class VariantCategoryDraft {
   final Map<String, double> extraPriceByValue;
 }
 
+/// What came of a product-wide price change.
+///
+/// [updated] of [total] variants took the new price. When [failure] is set the
+/// run stopped there, and the variants after it still hold the old price; the
+/// caller has already refreshed, so the table shows the real mix.
+class PriceUpdateOutcome {
+  const PriceUpdateOutcome({
+    required this.updated,
+    required this.total,
+    this.failure,
+  });
+
+  final int updated;
+  final int total;
+  final ApiException? failure;
+
+  bool get isComplete => failure == null && updated == total;
+}
+
 /// A single sellable row surfaced for stock allocation (pre-bazaar) and
 /// bazaar editing (POS) screens. When a product has two variant categories
 /// this represents one cell of the Category A x Category B combination
@@ -118,8 +137,35 @@ class ProductRepository {
   /// from the server as variant ids that have to become combinations again.
   final Map<int, String> _allocationKeyByVariantId = {};
 
+  /// Each variant's own price, from the API. `Product.basePrice` is the lowest
+  /// of these; this keeps the rest so a product-wide price change can tell
+  /// whether it is about to erase a real difference.
+  final Map<String, double> _priceByAllocationKey = {};
+
   int? variantIdFor(String allocationKey) =>
       _variantIdByAllocationKey[allocationKey];
+
+  /// Master stock held by one combination, or null if it is not known.
+  int? stockFor(String allocationKey) => _stockByAllocationKey[allocationKey];
+
+  /// Whether [allocationKey] can be edited in place on the server.
+  ///
+  /// False in the demo build, which has no server, and for anything the server
+  /// has not issued a variant id for. The quick-edit control is hidden rather
+  /// than disabled on false: online-only means the affordance should not exist
+  /// where it cannot work.
+  bool canQuickEdit(String allocationKey) =>
+      _auth?.vendorId != null &&
+      _variantIdByAllocationKey[allocationKey] != null;
+
+  /// Every variant price of one product, keyed by allocation key.
+  ///
+  /// Empty in the demo build. What the quick-edit dialog reads to decide
+  /// whether a product-wide price change needs a warning first.
+  Map<String, double> variantPricesForProduct(int productId) => {
+    for (final entry in _priceByAllocationKey.entries)
+      if (productIdFromKey(entry.key) == productId) entry.key: entry.value,
+  };
 
   String? allocationKeyForVariant(int variantId) =>
       _allocationKeyByVariantId[variantId];
@@ -596,6 +642,9 @@ class ProductRepository {
     _variantIdByAllocationKey
       ..clear()
       ..addAll(bundle.variantIdByAllocationKey);
+    _priceByAllocationKey
+      ..clear()
+      ..addAll(bundle.priceByAllocationKey);
     _allocationKeyByVariantId
       ..clear()
       ..addAll({
@@ -613,6 +662,99 @@ class ProductRepository {
     _nextVariantOptionId = _above(
       _variantOptionsByGroupId.values.expand((o) => o).map((o) => o.id),
       9000,
+    );
+  }
+
+  /// Sets one variant's master stock on the server.
+  ///
+  /// The first write this repository has ever made. Everything else here is
+  /// still in-memory, which is why this is deliberately narrow: one field, one
+  /// row, an absolute value rather than a delta, and no attempt to queue it.
+  /// A price or stock correction is the edit a booth operator actually makes,
+  /// and it only needs a PATCH.
+  ///
+  /// Online-only by decision. There is no offline queue for this and no local
+  /// change on failure: the row keeps showing the server's number until the
+  /// server has confirmed a new one, so the table never shows a stock count
+  /// that exists only on this tablet. The [ApiException] is left to the
+  /// caller, whose job is to say so.
+  ///
+  /// On success the row takes the value the server echoed back, not the value
+  /// sent, for the same reason.
+  Future<void> updateVariantStock({
+    required String allocationKey,
+    required int stock,
+  }) async {
+    final target = _writeTarget(allocationKey);
+    final row =
+        await target.api.patch(target.path, body: {'stock_quantity': stock})
+            as Map<String, dynamic>;
+    _stockByAllocationKey[allocationKey] =
+        (row['stock_quantity'] as num?)?.toInt() ?? stock;
+  }
+
+  /// Sets every variant of [productId] to [price] on the server.
+  ///
+  /// Product-wide by decision. The server prices each variant separately, but
+  /// this app shows one price per product and that is how a booth operator
+  /// thinks of it: "this shoe is 3,200 now", not "size 42 is 3,200 now". The
+  /// caller is expected to have checked [variantPricesForProduct] and warned
+  /// if the variants currently disagree, since this overwrites all of them.
+  ///
+  /// One call per variant, in order, stopping at the first failure. Bazaar
+  /// wifi makes a half-finished run a real state rather than a corner case,
+  /// so the outcome says how many were changed and the caller refreshes so
+  /// the table shows whichever mix the server now holds. Sent as a decimal
+  /// string: a bare double can serialise as `3200.5`, and this is money.
+  ///
+  /// The catalogue is re-fetched afterwards whenever anything was written.
+  /// `Product.basePrice` is the lowest variant price, and after a partial run
+  /// nothing on this side can compute that honestly; the server can.
+  Future<PriceUpdateOutcome> updateProductPrice({
+    required int productId,
+    required double price,
+  }) async {
+    final keys = variantPricesForProduct(productId).keys.toList()..sort();
+    var updated = 0;
+    ApiException? failure;
+    try {
+      for (final key in keys) {
+        final target = _writeTarget(key);
+        await target.api.patch(
+          target.path,
+          body: {'price': price.toStringAsFixed(2)},
+        );
+        updated++;
+      }
+    } on ApiException catch (error) {
+      failure = error;
+    }
+    if (updated > 0) {
+      await refresh();
+    }
+    return PriceUpdateOutcome(
+      updated: updated,
+      total: keys.length,
+      failure: failure,
+    );
+  }
+
+  /// Where a variant is written to, or a [StateError] when there is nowhere.
+  ///
+  /// A StateError rather than an ApiException because reaching this without a
+  /// server is a programming mistake, not a network condition: the control is
+  /// meant to be hidden whenever [canQuickEdit] is false.
+  ({ApiClient api, String path}) _writeTarget(String allocationKey) {
+    final auth = _auth;
+    final vendorId = auth?.vendorId;
+    final variantId = _variantIdByAllocationKey[allocationKey];
+    if (auth == null || vendorId == null || variantId == null) {
+      throw StateError('No server-side variant for $allocationKey');
+    }
+    final productId = productIdFromKey(allocationKey);
+    return (
+      api: auth.api,
+      path: '/api/core/vendor/$vendorId/product/$productId/variant/$variantId/',
     );
   }
 
