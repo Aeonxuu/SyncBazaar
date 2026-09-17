@@ -234,7 +234,7 @@ void main() {
 
       await h.repo.updateProductPrice(productId: 16, price: 2000);
 
-      // basePrice is the lowest across variants. After a write nothing here
+      // lowestPrice is the lowest across variants. After a write nothing here
       // can compute that honestly; the server can.
       expect(h.requests.where((r) => r.method == 'GET').length, getsBefore + 1);
     });

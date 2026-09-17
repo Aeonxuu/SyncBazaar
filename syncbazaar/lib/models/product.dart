@@ -19,7 +19,7 @@ class Product {
     required this.id,
     required this.name,
     this.description,
-    required this.basePrice,
+    required this.lowestPrice,
     this.stockQuantity = 0,
     this.imagePath,
     this.imageBytes,
@@ -29,7 +29,16 @@ class Product {
   final int id;
   final String name;
   final String? description;
-  final double basePrice;
+
+  /// The product's headline selling price: the lowest across its variants.
+  ///
+  /// The server prices each variant on its own, and this is what one number
+  /// per product has to mean once they can differ. Named for what it is
+  /// rather than "base price", because the server has a `base_price` too and
+  /// it means something else entirely: the cost price of a variant, for
+  /// profit. Two fields called base price with opposite meanings was one
+  /// misread away from a wrong margin.
+  final double lowestPrice;
   final int stockQuantity;
 
   /// Path to a bundled asset or a remote `http(s)` URL. Used for images that

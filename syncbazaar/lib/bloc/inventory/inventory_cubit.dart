@@ -177,7 +177,7 @@ class InventoryCubit extends Cubit<InventoryState> {
     );
     final inventoryValue = products.fold<double>(
       0,
-      (sum, p) => sum + (p.stockQuantity * p.basePrice),
+      (sum, p) => sum + (p.stockQuantity * p.lowestPrice),
     );
     final unitsSold = (await _salesRepository.listSales()).fold<int>(
       0,
@@ -287,7 +287,7 @@ class InventoryCubit extends Cubit<InventoryState> {
     int? id,
     required String name,
     String? description,
-    required double basePrice,
+    required double lowestPrice,
     String? imagePath,
     Uint8List? imageBytes,
     List<VariantCategoryDraft> variantGroups = const [],
@@ -299,7 +299,7 @@ class InventoryCubit extends Cubit<InventoryState> {
       id: id,
       name: name,
       description: description,
-      basePrice: basePrice,
+      lowestPrice: lowestPrice,
       imagePath: imagePath,
       imageBytes: imageBytes,
       variantGroups: variantGroups,

@@ -16,14 +16,14 @@ class _ProductInfo {
   const _ProductInfo({
     required this.id,
     required this.name,
-    required this.basePrice,
+    required this.lowestPrice,
     required this.colorIdByValue,
     required this.sizeIdByValue,
   });
 
   final int id;
   final String name;
-  final double basePrice;
+  final double lowestPrice;
   final Map<String, int> colorIdByValue;
   final Map<String, int> sizeIdByValue;
 }
@@ -111,7 +111,9 @@ class DevMockDataSeeder {
   /// from its bazaar's start and the timestamp is built from that, so moving the
   /// bazaar carries its takings with it.
   static void _ageForward(Map<String, dynamic> data) {
-    final generatedOn = DateTime.tryParse(data['generated_on'] as String? ?? '');
+    final generatedOn = DateTime.tryParse(
+      data['generated_on'] as String? ?? '',
+    );
     if (generatedOn == null) {
       return;
     }
@@ -119,7 +121,9 @@ class DevMockDataSeeder {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final elapsed = today
-        .difference(DateTime(generatedOn.year, generatedOn.month, generatedOn.day))
+        .difference(
+          DateTime(generatedOn.year, generatedOn.month, generatedOn.day),
+        )
         .inDays;
     if (elapsed < 7) {
       return;
@@ -186,7 +190,9 @@ class DevMockDataSeeder {
         // ProductThumbnail resolves a non-http path through Image.asset, so
         // seeded products render a real photo with no extra plumbing.
         imagePath: item['image'] as String?,
-        basePrice: (item['base_price'] as num).toDouble(),
+        // The fixture's own key, not the server's. The server's `base_price`
+        // is a variant's cost price and never reaches this seeder.
+        lowestPrice: (item['base_price'] as num).toDouble(),
         variantGroups: [
           VariantCategoryDraft(name: 'Color', optionValues: colors),
           VariantCategoryDraft(name: 'Size', optionValues: sizes),
@@ -210,7 +216,7 @@ class DevMockDataSeeder {
       result[item['id'] as String] = _ProductInfo(
         id: product.id,
         name: product.name,
-        basePrice: product.basePrice,
+        lowestPrice: product.lowestPrice,
         colorIdByValue: {for (final o in colorOptions) o.value: o.id},
         sizeIdByValue: {for (final o in sizeOptions) o.value: o.id},
       );
@@ -327,7 +333,7 @@ class DevMockDataSeeder {
       }
 
       final discountPercent = (item['discount_percent'] as num?)?.toInt() ?? 0;
-      final total = product.basePrice * qty * (1 - discountPercent / 100);
+      final total = product.lowestPrice * qty * (1 - discountPercent / 100);
 
       final eventStart = eventStartByTempId[eventTempId] ?? DateTime.now();
       final dayOffset = (item['days_after_start'] as num?)?.toInt() ?? 0;

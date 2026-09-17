@@ -19,7 +19,7 @@ void main() {
   }) async {
     final product = await products.saveProduct(
       name: name,
-      basePrice: 3500,
+      lowestPrice: 3500,
       variantGroups: categories,
       stockQuantity: 5,
     );

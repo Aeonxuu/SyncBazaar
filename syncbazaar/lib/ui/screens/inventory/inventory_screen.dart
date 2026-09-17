@@ -718,7 +718,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        formatPeso(product.basePrice),
+                        formatPeso(product.lowestPrice),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -1373,7 +1373,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
     final product = widget.product;
     _nameController = TextEditingController(text: product?.name ?? '');
     _priceController = TextEditingController(
-      text: product == null ? '' : _plainNumber(product.basePrice),
+      text: product == null ? '' : _plainNumber(product.lowestPrice),
     );
     _stockController = TextEditingController(
       text: product == null ? '' : product.stockQuantity.toString(),
@@ -1654,14 +1654,14 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
     setState(() => _saving = true);
     final cubit = context.read<InventoryCubit>();
     final name = _nameController.text.trim();
-    final basePrice = double.parse(_priceController.text.trim());
+    final lowestPrice = double.parse(_priceController.text.trim());
 
     if (!_hasVariants) {
       await cubit.saveProduct(
         id: widget.product?.id,
         name: name,
         description: widget.product?.description,
-        basePrice: basePrice,
+        lowestPrice: lowestPrice,
         imagePath: _imagePath,
         imageBytes: _imageBytes,
         stockQuantity: int.parse(_stockController.text.trim()),
@@ -1686,7 +1686,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
         id: widget.product?.id,
         name: name,
         description: widget.product?.description,
-        basePrice: basePrice,
+        lowestPrice: lowestPrice,
         imagePath: _imagePath,
         imageBytes: _imageBytes,
         variantGroups: variantGroups,

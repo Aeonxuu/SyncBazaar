@@ -63,7 +63,7 @@ void main() {
   });
 
   test('keeps every variant price, not only the lowest', () {
-    // basePrice is the lowest across the product, which is all the table
+    // lowestPrice is the lowest across the product, which is all the table
     // shows. The rest are kept so a product-wide price change can tell
     // whether it is about to flatten a real difference, and warn first.
     final prices = mapped().priceByAllocationKey;
@@ -71,7 +71,7 @@ void main() {
     expect(prices['16:10:7'], 1900);
     expect(prices['16:11:7'], 1900);
     expect(prices['16:10:8'], 2400);
-    expect(mapped().products.single.basePrice, 1900);
+    expect(mapped().products.single.lowestPrice, 1900);
   });
 
   test('names the categories from the server, not from hardcoded labels', () {
@@ -117,7 +117,7 @@ void main() {
 
   test('takes the lowest variant price as the headline price', () {
     // 1900 and 2400 across variants; the client carries one base price.
-    expect(mapped().products.single.basePrice, 1900);
+    expect(mapped().products.single.lowestPrice, 1900);
   });
 
   test('falls back to a variant that has an image', () {
@@ -135,6 +135,6 @@ void main() {
     expect(bundle.products.single.name, 'Plain');
     expect(bundle.groupsByProductId, isEmpty);
     expect(bundle.stockByAllocationKey, isEmpty);
-    expect(bundle.products.single.basePrice, 0);
+    expect(bundle.products.single.lowestPrice, 0);
   });
 }

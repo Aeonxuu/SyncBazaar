@@ -99,7 +99,7 @@ class _QuickEditDialogState extends State<_QuickEditDialog> {
   @override
   void initState() {
     super.initState();
-    _price = TextEditingController(text: _plain(widget.product.basePrice));
+    _price = TextEditingController(text: _plain(widget.product.lowestPrice));
     _stock = TextEditingController(text: widget.currentStock.toString());
   }
 
@@ -118,7 +118,7 @@ class _QuickEditDialogState extends State<_QuickEditDialog> {
   int? get _typedStock => int.tryParse(_stock.text.trim());
 
   bool get _priceChanged =>
-      _typedPrice != null && _typedPrice != widget.product.basePrice;
+      _typedPrice != null && _typedPrice != widget.product.lowestPrice;
   bool get _stockChanged =>
       _typedStock != null && _typedStock != widget.currentStock;
 

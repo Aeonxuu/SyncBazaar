@@ -20,7 +20,7 @@ void main() {
     products = ProductRepository();
     final product = await products.saveProduct(
       name: 'Nike Air Max SC',
-      basePrice: 3500,
+      lowestPrice: 3500,
       variantGroups: const [
         VariantCategoryDraft(name: 'Color', optionValues: ['Black', 'White']),
         VariantCategoryDraft(name: 'Size', optionValues: ['42', '43']),
@@ -47,7 +47,7 @@ void main() {
   });
 
   test('a product with no categories still keys cleanly', () async {
-    final plain = await products.saveProduct(name: 'Tote', basePrice: 200);
+    final plain = await products.saveProduct(name: 'Tote', lowestPrice: 200);
     final key = products.allocationKey(plain.id);
 
     // Zeroes stand in for "no option", and must not be looked up as ids.

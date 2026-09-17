@@ -29,7 +29,7 @@ class ApiProductBundle {
   /// sold by variant, never by the client's composite string.
   final Map<String, int> variantIdByAllocationKey;
 
-  /// Each variant's own price, which `Product.basePrice` collapses to the
+  /// Each variant's own price, which `Product.lowestPrice` collapses to the
   /// lowest of. Kept so a product-wide price change can tell whether it is
   /// about to flatten a real difference, and say so first.
   final Map<String, double> priceByAllocationKey;
@@ -168,7 +168,7 @@ ApiProductBundle mapProductsResponse(List<dynamic> payload) {
       Product(
         id: productId,
         name: product['name'] as String? ?? '',
-        basePrice: _basePriceOf(variants),
+        lowestPrice: _lowestPriceOf(variants),
         // The server stores whatever the client sent, which for the seeded data
         // is the app's own asset path. A CDN URL will land here unchanged once
         // object storage exists; `ProductThumbnail` already handles both.
@@ -209,12 +209,12 @@ String allocationKeyFor(int productId, {int? optionIdA, int? optionIdB}) =>
 /// The lowest variant price, as the product's headline price.
 ///
 /// The server prices each variant independently; the client carries one
-/// `basePrice` per product plus an optional per-option surcharge. That is
+/// `lowestPrice` per product plus an optional per-option surcharge. That is
 /// narrower, and the two only agree exactly while every variant of a product
 /// costs the same — true of everything seeded so far. Taking the lowest means a
 /// mismatch understates rather than overstates, which is the safer way to be
 /// wrong on a price tag.
-double _basePriceOf(List<Map<String, dynamic>> variants) {
+double _lowestPriceOf(List<Map<String, dynamic>> variants) {
   double? lowest;
   for (final variant in variants) {
     final price = double.tryParse('${variant['price']}');

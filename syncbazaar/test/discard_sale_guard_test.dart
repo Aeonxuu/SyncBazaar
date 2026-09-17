@@ -20,7 +20,7 @@ class _FakePosCubit extends Cubit<PosState> implements PosCubit {
 
 void main() {
   CartItem itemWithQuantity(int quantity) => CartItem(
-    product: const Product(id: 1, name: 'Nike Air Max SC', basePrice: 1900),
+    product: const Product(id: 1, name: 'Nike Air Max SC', lowestPrice: 1900),
     quantity: quantity,
   );
 
