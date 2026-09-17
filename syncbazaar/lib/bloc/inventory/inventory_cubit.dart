@@ -2,8 +2,11 @@ import 'dart:typed_data';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../data/repositories/event_repository.dart';
 import '../../data/repositories/product_repository.dart';
+import '../../data/remote/api_client.dart';
 import '../../data/repositories/sales_repository.dart';
+import '../../models/bazaar_event.dart';
 import '../../models/product.dart';
 import '../../models/product_variant.dart';
 
@@ -15,6 +18,25 @@ import '../../models/product_variant.dart';
 /// repository keys quantities by option combination), and the level stock
 /// questions get asked at: "how many Triple White 37s are left?" is not
 /// answerable from a product-level total.
+/// What came of a bulk delete.
+class DeleteOutcome {
+  const DeleteOutcome({
+    required this.deleted,
+    required this.total,
+    this.stoppedAt,
+    this.failure,
+  });
+
+  final int deleted;
+  final int total;
+
+  /// The product the server refused, or null when every one was deleted.
+  final String? stoppedAt;
+  final ApiException? failure;
+
+  bool get isComplete => failure == null;
+}
+
 class InventoryRow {
   const InventoryRow({
     required this.product,
@@ -82,10 +104,18 @@ class InventoryState {
 }
 
 class InventoryCubit extends Cubit<InventoryState> {
-  InventoryCubit(this._productRepository, this._salesRepository)
-    : super(const InventoryState());
+  InventoryCubit(
+    this._productRepository,
+    this._salesRepository, {
+    EventRepository? events,
+  }) : _events = events,
+       super(const InventoryState());
 
   final ProductRepository _productRepository;
+
+  /// Only for naming the bazaars a delete would strip stock from. Absent in
+  /// the demo build and in most tests, where deletion is in-memory anyway.
+  final EventRepository? _events;
   final SalesRepository _salesRepository;
 
   Future<void> load() async {
@@ -196,17 +226,47 @@ class InventoryCubit extends Cubit<InventoryState> {
     );
   }
 
+  /// Whether the catalogue is the server's, so edits not wired to it yet
+  /// (archive) should not be offered.
+  bool get isRemote => _productRepository.isRemote;
+
+  /// Bazaars that would lose stock if [productId] were deleted.
+  Future<List<BazaarEvent>> eventsAllocating(int productId) =>
+      _events?.eventsAllocating(productId) ?? Future.value(const []);
+
   Future<void> delete(int id) async {
     await _productRepository.deleteProduct(id);
     await load();
   }
 
-  /// Bulk-deletes the products backing the table's checkbox selection.
-  Future<void> deleteMany(Iterable<int> ids) async {
-    for (final id in ids) {
-      await _productRepository.deleteProduct(id);
+  /// Deletes the products backing the table's checkbox selection, one at a
+  /// time, stopping at the first the server refuses.
+  ///
+  /// The table is reloaded whatever happened, so it shows what is actually
+  /// gone rather than what was asked for. The outcome names the product that
+  /// stopped it and carries the server's reason, which for a 409 is "one of
+  /// its variants has recorded sales".
+  Future<DeleteOutcome> deleteMany(Map<int, String> namesById) async {
+    var deleted = 0;
+    String? stoppedAt;
+    ApiException? failure;
+    for (final entry in namesById.entries) {
+      try {
+        await _productRepository.deleteProduct(entry.key);
+        deleted++;
+      } on ApiException catch (error) {
+        stoppedAt = entry.value;
+        failure = error;
+        break;
+      }
     }
     await load();
+    return DeleteOutcome(
+      deleted: deleted,
+      total: namesById.length,
+      stoppedAt: stoppedAt,
+      failure: failure,
+    );
   }
 
   /// Archives or restores individual combinations.

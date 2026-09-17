@@ -481,24 +481,32 @@ class _InventoryScreenState extends State<InventoryScreen> {
             ),
           ),
           const Spacer(),
-          OutlinedButton.icon(
-            onPressed: () =>
-                _setArchivedForKeys(context, selected, archived: !allArchived),
-            icon: Icon(
-              allArchived ? Icons.unarchive_outlined : Icons.archive_outlined,
-              size: 16,
-            ),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.primary,
-              side: const BorderSide(color: AppColors.primary),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(6),
+          if (!context.read<InventoryCubit>().isRemote) ...[
+            OutlinedButton.icon(
+              onPressed: () => _setArchivedForKeys(
+                context,
+                selected,
+                archived: !allArchived,
               ),
+              icon: Icon(
+                allArchived ? Icons.unarchive_outlined : Icons.archive_outlined,
+                size: 16,
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                side: const BorderSide(color: AppColors.primary),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(6),
+                ),
+              ),
+              label: Text(allArchived ? 'Restore' : 'Archive'),
             ),
-            label: Text(allArchived ? 'Restore' : 'Archive'),
-          ),
-          const SizedBox(width: 8),
+            const SizedBox(width: 8),
+          ],
           OutlinedButton.icon(
             onPressed: () => _deleteSelectedProducts(
               context,
@@ -564,27 +572,86 @@ class _InventoryScreenState extends State<InventoryScreen> {
     List<InventoryRow> selectedRows,
     Set<int> productIds,
   ) async {
-    final names = <String>{for (final row in selectedRows) row.product.name};
+    final namesById = <int, String>{
+      for (final row in selectedRows) row.product.id: row.product.name,
+    };
+    final names = namesById.values.toSet();
     final listed = names.length <= 3
         ? names.join(', ')
         : '${names.take(3).join(', ')} and ${names.length - 3} more';
     final cubit = context.read<InventoryCubit>();
+    final messenger = ScaffoldMessenger.of(context);
+
+    // The server cascades a delete through a product's bazaar allocations
+    // and says nothing; only a recorded sale stops it. So the bazaars that
+    // would lose stock are named here, before the tap, because afterwards
+    // there is nothing left to warn about.
+    final bazaars = <String>{};
+    for (final id in productIds) {
+      for (final event in await cubit.eventsAllocating(id)) {
+        bazaars.add(event.name);
+      }
+    }
+    if (!context.mounted) return;
+    final allocationNote = bazaars.isEmpty
+        ? ''
+        : bazaars.length == 1
+        ? ' It also removes stock set aside for ${bazaars.single}.'
+        : ' It also removes stock set aside for ${bazaars.length} bazaars: '
+              '${bazaars.join(', ')}.';
 
     final confirmed = await showConfirmationDialog(
       context: context,
       title: productIds.length == 1 ? 'Delete product' : 'Delete products',
       message: productIds.length == 1
-          ? 'Delete "$listed"? Every variant and all its stock go with it. '
-                'This cannot be undone.'
-          : 'Delete $listed? Every variant and all their stock go with them. '
-                'This cannot be undone.',
+          ? 'Delete "$listed"? Every variant and all its stock go with it.'
+                '$allocationNote This cannot be undone.'
+          : 'Delete $listed? Every variant and all their stock go with them.'
+                '$allocationNote This cannot be undone.',
       confirmLabel: 'Delete',
       tone: ConfirmationTone.destructive,
     );
     if (!confirmed || !mounted) return;
-    await cubit.deleteMany(productIds);
+    final outcome = await cubit.deleteMany(namesById);
     if (!mounted) return;
     setState(_selectedKeys.clear);
+
+    if (outcome.isComplete) {
+      messenger.showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(milliseconds: 2600),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          content: Text(
+            outcome.total == 1
+                ? 'Deleted ${namesById.values.single}.'
+                : 'Deleted ${outcome.total} products.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    // A refusal is a dialog, not a SnackBar. It names the product and carries
+    // the server's reason, which for a 409 is that it has recorded sales, and
+    // a partial run says how far it got. On a tablet a SnackBar at the bottom
+    // is easy to miss and gone in four seconds, and "the delete looked like it
+    // worked" is the misread this exists to prevent. The table already shows
+    // the real state behind it.
+    final failure = outcome.failure!;
+    final why = failure.isOffline
+        ? 'Cannot reach the server.'
+        : failure.message;
+    if (!context.mounted) return;
+    await showNoticeDialog(
+      context: context,
+      title: outcome.deleted == 0 ? 'Not deleted' : 'Partly deleted',
+      message: outcome.deleted == 0
+          ? '${outcome.stoppedAt} was not deleted. $why'
+          : 'Deleted ${outcome.deleted} of ${outcome.total}. '
+                '${outcome.stoppedAt} was not deleted. $why',
+      tone: ConfirmationTone.destructive,
+    );
   }
 
   Widget _buildTableHeader(
@@ -649,11 +716,21 @@ class _InventoryScreenState extends State<InventoryScreen> {
     final isSelected = _selectedKeys.contains(row.allocationKey);
     final isArchived = row.status == ProductStatus.archived;
 
+    final cubit = context.read<InventoryCubit>();
+    final quickEditable = cubit.canQuickEdit(row.allocationKey);
+
     return _InventoryTableRow(
       isSelected: isSelected,
-      onTap: canManage
-          ? () => _showProductDialog(context, product: product)
-          : null,
+      // A server product opens the pencil, not the form. The form's edit mode
+      // saves nothing past a restart, and a booth operator who renamed a
+      // product there would only find out at the next launch. So the form is
+      // for creating, and the only edits offered on a server row are the ones
+      // that reach the server.
+      onTap: !canManage
+          ? null
+          : quickEditable
+          ? () => _quickEdit(context, row)
+          : () => _showProductDialog(context, product: product),
       child: Row(
         children: [
           SizedBox(
@@ -753,10 +830,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   // should not exist where it cannot work.
                   SizedBox(
                     width: 40,
-                    child:
-                        context.read<InventoryCubit>().canQuickEdit(
-                          row.allocationKey,
-                        )
+                    child: quickEditable
                         ? _RowActionButton(
                             icon: Icons.edit_outlined,
                             tooltip: 'Edit price or stock',
@@ -773,18 +847,24 @@ class _InventoryScreenState extends State<InventoryScreen> {
                     // represents one of its sizes, so deletion stays in the
                     // bulk bar where the confirmation can name what it's
                     // about to remove.
-                    child: _RowActionButton(
-                      icon: isArchived
-                          ? Icons.unarchive_outlined
-                          : Icons.archive_outlined,
-                      tooltip: isArchived
-                          ? 'Restore this variant'
-                          : 'Archive this variant',
-                      hoverColor: AppColors.primary,
-                      onPressed: () => _setArchivedForKeys(context, {
-                        row.allocationKey,
-                      }, archived: !isArchived),
-                    ),
+                    //
+                    // Hidden when signed in: the server has no column for
+                    // archived, so the only thing this could do there is
+                    // look done until the next restart.
+                    child: cubit.isRemote
+                        ? null
+                        : _RowActionButton(
+                            icon: isArchived
+                                ? Icons.unarchive_outlined
+                                : Icons.archive_outlined,
+                            tooltip: isArchived
+                                ? 'Restore this variant'
+                                : 'Archive this variant',
+                            hoverColor: AppColors.primary,
+                            onPressed: () => _setArchivedForKeys(context, {
+                              row.allocationKey,
+                            }, archived: !isArchived),
+                          ),
                   ),
                 ],
               ),

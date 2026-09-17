@@ -72,6 +72,40 @@ Future<bool> showConfirmationDialog({
   return result ?? false;
 }
 
+/// Something the user has to see, with one way out.
+///
+/// For a failure that changes what they do next: a delete the server refused,
+/// a save that did not happen. A SnackBar at the bottom of a tablet screen is
+/// easy to miss and gone in four seconds, and "the delete looked like it
+/// worked" is exactly the misread this exists to prevent. The dialog holds
+/// until dismissed, and dismissing it is the only thing it asks.
+Future<void> showNoticeDialog({
+  required BuildContext context,
+  required String title,
+  required String message,
+  String buttonLabel = 'OK',
+  ConfirmationTone tone = ConfirmationTone.normal,
+  IconData? icon,
+}) async {
+  await showDialog<void>(
+    context: context,
+    // Holds until dismissed. A stray tap on the scrim would swallow the one
+    // message the user needed, which is the SnackBar failure all over again.
+    barrierDismissible: false,
+    barrierColor: Colors.black.withValues(alpha: 0.45),
+    builder: (context) => _ConfirmationDialog(
+      title: title,
+      message: message,
+      // No cancel: there is nothing to back out of, only something to read.
+      cancelLabel: null,
+      confirmLabel: buttonLabel,
+      tone: tone,
+      emphasis: ConfirmationEmphasis.confirm,
+      icon: icon ?? Icons.error_outline_rounded,
+    ),
+  );
+}
+
 class _ConfirmationDialog extends StatelessWidget {
   const _ConfirmationDialog({
     required this.title,
@@ -85,7 +119,9 @@ class _ConfirmationDialog extends StatelessWidget {
 
   final String title;
   final String message;
-  final String cancelLabel;
+
+  /// Null hides the cancel button entirely, for a notice with one way out.
+  final String? cancelLabel;
   final String confirmLabel;
   final ConfirmationTone tone;
 
@@ -185,12 +221,14 @@ class _ConfirmationDialog extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     if (emphasis == ConfirmationEmphasis.confirm) ...[
-                      _QuietButton(
-                        label: cancelLabel,
-                        color: Colors.black54,
-                        onPressed: () => Navigator.pop(context, false),
-                      ),
-                      const SizedBox(width: 12),
+                      if (cancelLabel != null) ...[
+                        _QuietButton(
+                          label: cancelLabel!,
+                          color: Colors.black54,
+                          onPressed: () => Navigator.pop(context, false),
+                        ),
+                        const SizedBox(width: 12),
+                      ],
                       _FilledButton(
                         label: confirmLabel,
                         color: accent,
@@ -204,7 +242,9 @@ class _ConfirmationDialog extends StatelessWidget {
                       ),
                       const SizedBox(width: 12),
                       _FilledButton(
-                        label: cancelLabel,
+                        // A cancel-emphasis dialog is a two-way choice by
+                        // definition; a notice never asks for it.
+                        label: cancelLabel ?? 'Cancel',
                         color: AppColors.primary,
                         onPressed: () => Navigator.pop(context, false),
                       ),
