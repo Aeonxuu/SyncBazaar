@@ -1461,7 +1461,7 @@ class _PosScreenState extends State<PosScreen> {
                       const Spacer(),
                       _NumericCrossfade(
                         text: formatPeso(
-                          (product.basePrice + extraPrice) * quantity,
+                          (product.lowestPrice + extraPrice) * quantity,
                         ),
                         style: Theme.of(context).textTheme.titleMedium
                             ?.copyWith(fontWeight: FontWeight.w700),

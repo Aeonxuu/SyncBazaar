@@ -14,7 +14,7 @@ void main() {
   const product = Product(
     id: 1,
     name: 'Nike Air Force 1 \'07 Triple White',
-    basePrice: 5495,
+    lowestPrice: 5495,
     stockQuantity: 12,
     status: ProductStatus.active,
   );

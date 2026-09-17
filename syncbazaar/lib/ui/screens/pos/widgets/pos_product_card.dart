@@ -147,7 +147,7 @@ class _PosProductCardState extends State<PosProductCard> {
                         // ellipsing "PHP 1,900.00" into "PHP 1,900...." right
                         // where the cashier is checking it.
                         Text(
-                          formatPeso(product.basePrice),
+                          formatPeso(product.lowestPrice),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.bodyMedium

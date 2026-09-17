@@ -38,7 +38,7 @@ class CartItem {
   final ProductVariantOption? optionB;
 
   double get unitPrice =>
-      product.basePrice +
+      product.lowestPrice +
       (optionA?.extraPrice ?? 0) +
       (optionB?.extraPrice ?? 0);
   double get lineTotal => unitPrice * quantity;
@@ -365,7 +365,7 @@ class PosCubit extends Cubit<PosState> {
                   id: product.id,
                   name: product.name,
                   description: product.description,
-                  basePrice: product.basePrice,
+                  lowestPrice: product.lowestPrice,
                   stockQuantity: _allocatedTotalFor(product.id, allocations),
                   imagePath: product.imagePath,
                   imageBytes: product.imageBytes,
@@ -791,7 +791,7 @@ class PosCubit extends Cubit<PosState> {
               id: product.id,
               name: product.name,
               description: product.description,
-              basePrice: product.basePrice,
+              lowestPrice: product.lowestPrice,
               stockQuantity: _allocatedTotalFor(product.id, remaining),
               imagePath: product.imagePath,
               imageBytes: product.imageBytes,

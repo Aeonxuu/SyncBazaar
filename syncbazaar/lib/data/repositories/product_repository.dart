@@ -137,7 +137,7 @@ class ProductRepository {
   /// from the server as variant ids that have to become combinations again.
   final Map<int, String> _allocationKeyByVariantId = {};
 
-  /// Each variant's own price, from the API. `Product.basePrice` is the lowest
+  /// Each variant's own price, from the API. `Product.lowestPrice` is the lowest
   /// of these; this keeps the rest so a product-wide price change can tell
   /// whether it is about to erase a real difference.
   final Map<String, double> _priceByAllocationKey = {};
@@ -245,7 +245,7 @@ class ProductRepository {
     int? id,
     required String name,
     String? description,
-    required double basePrice,
+    required double lowestPrice,
     String? imagePath,
     Uint8List? imageBytes,
     List<VariantCategoryDraft> variantGroups = const [],
@@ -265,7 +265,7 @@ class ProductRepository {
       id: productId,
       name: normalizedName,
       description: normalizedDescription,
-      basePrice: basePrice,
+      lowestPrice: lowestPrice,
       imagePath: imagePath,
       imageBytes: imageBytes,
       status: status,
@@ -310,7 +310,7 @@ class ProductRepository {
       id: current.id,
       name: current.name,
       description: current.description,
-      basePrice: current.basePrice,
+      lowestPrice: current.lowestPrice,
       imagePath: current.imagePath,
       imageBytes: current.imageBytes,
       stockQuantity: current.stockQuantity,
@@ -582,7 +582,7 @@ class ProductRepository {
       id: product.id,
       name: product.name,
       description: product.description,
-      basePrice: product.basePrice,
+      lowestPrice: product.lowestPrice,
       imagePath: product.imagePath,
       imageBytes: product.imageBytes,
       stockQuantity: _totalStockForProduct(product.id),
@@ -732,7 +732,7 @@ class ProductRepository {
   /// string: a bare double can serialise as `3200.5`, and this is money.
   ///
   /// The catalogue is re-fetched afterwards whenever anything was written.
-  /// `Product.basePrice` is the lowest variant price, and after a partial run
+  /// `Product.lowestPrice` is the lowest variant price, and after a partial run
   /// nothing on this side can compute that honestly; the server can.
   Future<PriceUpdateOutcome> updateProductPrice({
     required int productId,

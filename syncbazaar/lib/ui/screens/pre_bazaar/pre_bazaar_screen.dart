@@ -266,7 +266,7 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
             // request's detailsJson, and the approvals table formats it when
             // it renders. Baking the display format in at encode time is how
             // the price ended up as the one unseparated amount in the app.
-            'price': product?.basePrice,
+            'price': product?.lowestPrice,
             'qty': entry.value,
           };
         }).toList();

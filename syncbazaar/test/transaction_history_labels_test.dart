@@ -28,7 +28,7 @@ void main() {
 
     final product = await products.saveProduct(
       name: 'Nike Air Max SC',
-      basePrice: 3500,
+      lowestPrice: 3500,
       variantGroups: const [
         VariantCategoryDraft(name: 'Color', optionValues: ['Black', 'White']),
         VariantCategoryDraft(name: 'Size', optionValues: ['42', '43']),

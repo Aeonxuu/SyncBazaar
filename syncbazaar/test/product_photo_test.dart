@@ -18,7 +18,7 @@ void main() {
   test('a saved photo survives the read path back out', () async {
     final saved = await repository.saveProduct(
       name: 'Test Sneaker',
-      basePrice: 1800,
+      lowestPrice: 1800,
       imageBytes: photo,
       stockQuantity: 5,
     );
@@ -34,7 +34,7 @@ void main() {
   test('archiving a product keeps its photo', () async {
     final saved = await repository.saveProduct(
       name: 'Test Sneaker',
-      basePrice: 1800,
+      lowestPrice: 1800,
       imageBytes: photo,
       stockQuantity: 5,
     );
@@ -52,7 +52,7 @@ void main() {
   });
 
   test('a product with no photo stays null rather than empty', () async {
-    await repository.saveProduct(name: 'No Photo', basePrice: 1500);
+    await repository.saveProduct(name: 'No Photo', lowestPrice: 1500);
     final listed = await repository.listProducts();
     expect(listed.single.imageBytes, isNull);
     expect(listed.single.imagePath, isNull);
