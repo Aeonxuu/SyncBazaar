@@ -14,6 +14,7 @@ class ApiProductBundle {
     required this.optionsByGroupId,
     required this.stockByAllocationKey,
     required this.variantIdByAllocationKey,
+    required this.priceByAllocationKey,
   });
 
   final List<Product> products;
@@ -27,6 +28,11 @@ class ApiProductBundle {
   /// it yet; uploading a sale needs it, because the server identifies what was
   /// sold by variant, never by the client's composite string.
   final Map<String, int> variantIdByAllocationKey;
+
+  /// Each variant's own price, which `Product.basePrice` collapses to the
+  /// lowest of. Kept so a product-wide price change can tell whether it is
+  /// about to flatten a real difference, and say so first.
+  final Map<String, double> priceByAllocationKey;
 }
 
 /// Turns `GET /api/core/vendor/<id>/product/` into the shapes the app already
@@ -51,6 +57,7 @@ ApiProductBundle mapProductsResponse(List<dynamic> payload) {
   final optionsByGroupId = <int, List<ProductVariantOption>>{};
   final stockByAllocationKey = <String, int>{};
   final variantIdByAllocationKey = <String, int>{};
+  final priceByAllocationKey = <String, double>{};
 
   for (final entry in payload) {
     final product = entry as Map<String, dynamic>;
@@ -151,6 +158,10 @@ ApiProductBundle mapProductsResponse(List<dynamic> payload) {
           (stockByAllocationKey[key] ?? 0) +
           ((variant['stock_quantity'] as num?)?.toInt() ?? 0);
       variantIdByAllocationKey[key] = (variant['id'] as num).toInt();
+      final price = double.tryParse('${variant['price']}');
+      if (price != null) {
+        priceByAllocationKey[key] = price;
+      }
     }
 
     products.add(
@@ -173,6 +184,7 @@ ApiProductBundle mapProductsResponse(List<dynamic> payload) {
     optionsByGroupId: optionsByGroupId,
     stockByAllocationKey: stockByAllocationKey,
     variantIdByAllocationKey: variantIdByAllocationKey,
+    priceByAllocationKey: priceByAllocationKey,
   );
 }
 

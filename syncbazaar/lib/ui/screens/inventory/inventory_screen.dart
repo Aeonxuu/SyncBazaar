@@ -16,6 +16,7 @@ import '../../widgets/confirmation_dialog.dart';
 import '../../widgets/product_thumbnail.dart';
 import '../../widgets/selectable_option_button.dart';
 import '../../../core/utils/formatters.dart';
+import 'widgets/quick_edit_dialog.dart';
 
 /// Outline for unchecked boxes in the inventory table. Material's default is
 /// a 2px `onSurface` rule, which reads heavier than the hairline dividers
@@ -630,7 +631,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
           Expanded(flex: 3, child: Text('Category 1', style: style)),
           Expanded(flex: 3, child: Text('Category 2', style: style)),
           SizedBox(width: 80, child: Text('Stock', style: style)),
-          if (canManage) const SizedBox(width: 40),
+          if (canManage) const SizedBox(width: 80),
         ],
       ),
     );
@@ -742,23 +743,50 @@ class _InventoryScreenState extends State<InventoryScreen> {
           SizedBox(width: 80, child: _StockCell(quantity: row.stock)),
           if (canManage)
             SizedBox(
-              width: 40,
-              // Archive, not delete. Retiring one empty combination is the
-              // per-row action that makes sense; deleting from here would
-              // destroy the whole product from a row that represents one of
-              // its sizes, so deletion stays in the bulk bar where the
-              // confirmation can name what it's about to remove.
-              child: _RowActionButton(
-                icon: isArchived
-                    ? Icons.unarchive_outlined
-                    : Icons.archive_outlined,
-                tooltip: isArchived
-                    ? 'Restore this variant'
-                    : 'Archive this variant',
-                hoverColor: AppColors.primary,
-                onPressed: () => _setArchivedForKeys(context, {
-                  row.allocationKey,
-                }, archived: !isArchived),
+              width: 80,
+              child: Row(
+                children: [
+                  // Price and stock, in place, over the wire. The only edit
+                  // this screen makes that reaches the server; the full form
+                  // is still in-memory. Absent entirely when there is no
+                  // server to reach, since online-only means the control
+                  // should not exist where it cannot work.
+                  SizedBox(
+                    width: 40,
+                    child:
+                        context.read<InventoryCubit>().canQuickEdit(
+                          row.allocationKey,
+                        )
+                        ? _RowActionButton(
+                            icon: Icons.edit_outlined,
+                            tooltip: 'Edit price or stock',
+                            hoverColor: AppColors.primary,
+                            onPressed: () => _quickEdit(context, row),
+                          )
+                        : null,
+                  ),
+                  SizedBox(
+                    width: 40,
+                    // Archive, not delete. Retiring one empty combination is
+                    // the per-row action that makes sense; deleting from here
+                    // would destroy the whole product from a row that
+                    // represents one of its sizes, so deletion stays in the
+                    // bulk bar where the confirmation can name what it's
+                    // about to remove.
+                    child: _RowActionButton(
+                      icon: isArchived
+                          ? Icons.unarchive_outlined
+                          : Icons.archive_outlined,
+                      tooltip: isArchived
+                          ? 'Restore this variant'
+                          : 'Archive this variant',
+                      hoverColor: AppColors.primary,
+                      onPressed: () => _setArchivedForKeys(context, {
+                        row.allocationKey,
+                      }, archived: !isArchived),
+                    ),
+                  ),
+                ],
               ),
             ),
         ],
@@ -788,6 +816,34 @@ class _InventoryScreenState extends State<InventoryScreen> {
             ).textTheme.bodyMedium?.copyWith(color: Colors.black45),
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _quickEdit(BuildContext context, InventoryRow row) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final cubit = context.read<InventoryCubit>();
+    final label = [
+      row.optionOneValue,
+      row.optionTwoValue,
+    ].whereType<String>().join(' · ');
+
+    final message = await showQuickEditDialog(
+      context: context,
+      cubit: cubit,
+      product: row.product,
+      allocationKey: row.allocationKey,
+      variantLabel: label,
+      currentStock: row.stock,
+      variantPrices: cubit.variantPricesForProduct(row.product.id),
+    );
+    if (!mounted || message == null) return;
+    messenger.showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(milliseconds: 2600),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        content: Text(message),
       ),
     );
   }
