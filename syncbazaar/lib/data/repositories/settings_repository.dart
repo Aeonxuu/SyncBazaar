@@ -188,26 +188,92 @@ class SettingsRepository {
       establishmentPath(vendorId, company.id),
       body: establishmentBody(
         company: company,
-        acceptedPaymentMethodIds: _methodIdsFor(company.id),
+        acceptedPaymentMethodIds: await _methodIdsFor(auth, company.id),
       ),
     );
   }
 
-  /// The ids of the methods a venue accepts, defaulting to everything the
-  /// server knows when nothing has been chosen yet.
-  List<int> _methodIdsFor(int companyId) {
+  /// The ids of the methods a venue accepts, creating any the server has not
+  /// heard of, and defaulting to everything it knows when nothing was chosen.
+  ///
+  /// The creating half is the point. A venue's methods are typed by hand, and
+  /// this used to keep only the names that already matched a server row and
+  /// drop the rest without a word. A cashier would add "QR PH", save, see it
+  /// listed, restart, and find it gone -- because it had never left the device,
+  /// and the venue came back from the server without it.
+  Future<List<int>> _methodIdsFor(AuthRepository auth, int companyId) async {
     final chosen = _locationPaymentMethodsByCompanyId[companyId];
     if (chosen == null || chosen.isEmpty) {
       return _methodsById.keys.toList();
     }
-    final wanted = chosen.map((m) => m.name.trim().toUpperCase()).toSet();
-    final ids = [
-      for (final entry in _methodsById.entries)
-        if (wanted.contains(entry.value.name.trim().toUpperCase())) entry.key,
-    ];
+
+    final ids = <int>[];
+    for (final method in chosen) {
+      final id = await _ensureMethodOnServer(auth, method);
+      if (id != null) {
+        ids.add(id);
+      }
+    }
     // An empty list would leave the venue accepting no payment at all.
     return ids.isEmpty ? _methodsById.keys.toList() : ids;
   }
+
+  /// The server's id for [method], creating the row if there is not one.
+  ///
+  /// Matched loosely on purpose: spacing and punctuation are ignored, so "QR
+  /// PH" finds an existing "QRPH" instead of adding a second row beside it.
+  /// `ModeOfPayment` is one global table shared by every vendor, and it has
+  /// already collected duplicates once -- the backend seeder carries a command
+  /// to prune them -- so a near-miss here is a mess everybody sees.
+  ///
+  /// A refusal from the server is left to throw, and the venue save fails with
+  /// it. That is the point of this change: swallowing the failure here would
+  /// save the venue without the method and report success, which is the exact
+  /// silent loss being fixed. Null is returned only for a name with nothing in
+  /// it, which there is no row to make.
+  Future<int?> _ensureMethodOnServer(
+    AuthRepository auth,
+    PaymentMethodMeta method,
+  ) async {
+    final wanted = _squashMethodName(method.name);
+    if (wanted.isEmpty) {
+      return null;
+    }
+    for (final entry in _methodsById.entries) {
+      if (_squashMethodName(entry.value.name) == wanted) {
+        return entry.key;
+      }
+    }
+
+    final label = method.extraFieldLabel?.trim();
+    final created =
+        await auth.api.post(
+              '/api/core/mode-of-payment/',
+              body: {
+                'name': method.name.trim(),
+                if (label != null && label.isNotEmpty)
+                  'required_information_name': label,
+              },
+            )
+            as Map<String, dynamic>;
+
+    final id = (created['id'] as num?)?.toInt();
+    if (id == null) {
+      return null;
+    }
+    // Recorded so a second venue choosing the same method reuses this row
+    // rather than creating another one in the same session.
+    _methodsById[id] = PaymentMethodMeta(
+      name: (created['name'] as String? ?? method.name).toUpperCase(),
+      extraFieldLabel: created['required_information_name'] as String?,
+    );
+    return id;
+  }
+
+  /// Letters and digits only, upper-cased. "QR Ph", "qr-ph" and "QRPH" all
+  /// reduce to one key.
+  static String _squashMethodName(String name) =>
+      name.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
 
   Future<Company> createCompany({
     required String name,
@@ -348,6 +414,14 @@ class SettingsRepository {
     required List<PaymentMethodMeta> paymentMethods,
     bool clearMissingQr = false,
   }) async {
+    // Loaded first, and the order matters. `_loadFromApi` replaces the method
+    // lists wholesale, so recording the choice before the first load of a
+    // session would see it wiped a moment later by the very save meant to
+    // persist it. In the app the venue screen has always listed the venues
+    // before offering to edit one, so loading had already happened; a caller
+    // that saved without reading first would have lost the edit silently.
+    await _ensureLoaded();
+
     // Recorded before the write, so the venue is saved with the methods just
     // chosen rather than the ones it had a moment ago.
     final normalized = _normalizePaymentMethods(paymentMethods);
