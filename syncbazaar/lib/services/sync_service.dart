@@ -84,6 +84,8 @@ class SyncService {
         uploaded: upload.uploaded,
         stillWaiting: upload.skipped,
         elsewhere: upload.elsewhere,
+        rejected: upload.rejected,
+        rejectionReason: upload.rejectionReason,
         refreshed: refreshed,
         pendingBefore: pendingBefore,
       ),
@@ -98,6 +100,8 @@ class SyncService {
     required int uploaded,
     required int stillWaiting,
     required int elsewhere,
+    required int rejected,
+    required String? rejectionReason,
     required bool refreshed,
     required int pendingBefore,
   }) {
@@ -108,17 +112,30 @@ class SyncService {
         ? ' $elsewhere sale(s) belong to a different server and were not sent.'
         : '';
 
+    // Distinct from "still waiting": the server was reached and it refused
+    // the sale, so retrying the same request will not fix it. Folding this
+    // into "could not reach the server" is exactly what hid a real 400 behind
+    // a connectivity message during the Sept 18 event.
+    final refusedTail = rejected > 0
+        ? ' $rejected sale(s) were rejected by the server'
+              '${rejectionReason != null ? ' ($rejectionReason)' : ''}.'
+        : '';
+
     if (stillWaiting > 0) {
       return uploaded > 0
           ? 'Sent $uploaded sale(s). $stillWaiting still waiting for a '
-                'connection.$held'
+                'connection.$refusedTail$held'
           : 'Could not reach the server. '
-                '$stillWaiting sale(s) still waiting.$held';
+                '$stillWaiting sale(s) still waiting.$refusedTail$held';
     }
     if (uploaded > 0) {
       return refreshed
-          ? 'Sent $uploaded sale(s) and updated from the server.$held'
-          : 'Sent $uploaded sale(s), but could not refresh.$held';
+          ? 'Sent $uploaded sale(s) and updated from the server.$refusedTail$held'
+          : 'Sent $uploaded sale(s), but could not refresh.$refusedTail$held';
+    }
+    if (rejected > 0) {
+      return 'The server rejected $rejected sale(s)'
+          '${rejectionReason != null ? ': $rejectionReason' : '.'}$held';
     }
     if (!refreshed) {
       return 'Could not reach the server.$held';

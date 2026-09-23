@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../data/remote/api_client.dart';
 import '../data/repositories/auth_repository.dart';
 import '../data/repositories/event_repository.dart';
@@ -116,7 +118,11 @@ class SaleUploadService {
     final Map<String, int> methodIds;
     try {
       methodIds = await _loadPaymentMethodIds();
-    } on ApiException {
+    } on ApiException catch (error) {
+      debugPrint(
+        'SaleUploadService: loading payment methods failed '
+        '(${error.kind}, status ${error.statusCode}): ${error.message}',
+      );
       return SaleUploadResult(
         uploaded: 0,
         skipped: pending.length,
@@ -131,15 +137,21 @@ class SaleUploadService {
 
     var uploaded = 0;
     var skipped = 0;
+    var rejected = 0;
+    String? rejectionReason;
     for (final entry in byEvent.entries) {
       final result = await _uploadEvent(entry.key, entry.value, methodIds);
       uploaded += result.uploaded;
       skipped += result.skipped;
+      rejected += result.rejected;
+      rejectionReason ??= result.rejectionReason;
     }
     return SaleUploadResult(
       uploaded: uploaded,
       skipped: skipped,
       elsewhere: elsewhere,
+      rejected: rejected,
+      rejectionReason: rejectionReason,
     );
   }
 
@@ -186,11 +198,31 @@ class SaleUploadService {
         '/api/bazaar/event/$eventId/batch-sale/',
         body: {'sales': payload},
       );
-    } on ApiException {
+    } on ApiException catch (error) {
+      debugPrint(
+        'SaleUploadService: batch-sale POST for event $eventId failed '
+        '(${error.kind}, status ${error.statusCode}): ${error.message}',
+      );
+
       // Includes the retry case: a batch the server stored but whose response
       // was lost comes back through here, and the client uuid on every row is
       // what stops the second attempt recording them twice.
-      return SaleUploadResult(uploaded: 0, skipped: skipped + sent.length);
+      if (error.isOffline) {
+        return SaleUploadResult(uploaded: 0, skipped: skipped + sent.length);
+      }
+
+      // The server was reached and it said no -- a 400 means the payload
+      // itself was rejected, not that the connection dropped. Retrying the
+      // exact same request on the next sync will not fix that on its own, so
+      // this is reported apart from "skipped", which means "still waiting for
+      // a connection" and nothing else. The sale stays unsynced either way:
+      // this is not the code that decides it is safe to drop.
+      return SaleUploadResult(
+        uploaded: 0,
+        skipped: skipped,
+        rejected: sent.length,
+        rejectionReason: error.message,
+      );
     }
 
     await _sales.markSynced(sent.toSet());
@@ -223,6 +255,8 @@ class SaleUploadResult {
     required this.uploaded,
     required this.skipped,
     this.elsewhere = 0,
+    this.rejected = 0,
+    this.rejectionReason,
   });
 
   /// Sales the server has confirmed it holds, including ones it recognised as
@@ -238,6 +272,18 @@ class SaleUploadResult {
   /// anything here, and reporting them as pending would leave a permanent
   /// "still waiting" figure that no amount of syncing can ever clear.
   final int elsewhere;
+
+  /// Sales the server actually answered and refused — a 4xx/5xx, not a
+  /// connection failure.
+  ///
+  /// Also counted apart from [skipped]: that figure means "no connection yet",
+  /// which invites the cashier to just try again later. A rejection is a
+  /// different problem — the payload itself was refused — and saying "still
+  /// waiting" about it is what turned a 400 into an overnight mystery.
+  final int rejected;
+
+  /// What the server said about the first rejection, safe to show a cashier.
+  final String? rejectionReason;
 
   bool get isComplete => skipped == 0;
 }

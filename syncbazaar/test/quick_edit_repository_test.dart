@@ -235,8 +235,10 @@ void main() {
       await h.repo.updateProductPrice(productId: 16, price: 2000);
 
       // lowestPrice is the lowest across variants. After a write nothing here
-      // can compute that honestly; the server can.
-      expect(h.requests.where((r) => r.method == 'GET').length, getsBefore + 1);
+      // can compute that honestly; the server can. Three GETs, not one: the
+      // catalogue refetch now also refreshes the vendor's categories and
+      // brands alongside its products.
+      expect(h.requests.where((r) => r.method == 'GET').length, getsBefore + 3);
     });
 
     test('stops at the first failure and says how far it got', () async {

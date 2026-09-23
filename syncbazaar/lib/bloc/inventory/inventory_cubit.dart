@@ -7,6 +7,8 @@ import '../../data/repositories/product_repository.dart';
 import '../../data/remote/api_client.dart';
 import '../../data/repositories/sales_repository.dart';
 import '../../models/bazaar_event.dart';
+import '../../models/brand.dart';
+import '../../models/category.dart';
 import '../../models/product.dart';
 import '../../models/product_variant.dart';
 
@@ -230,6 +232,10 @@ class InventoryCubit extends Cubit<InventoryState> {
   /// (archive) should not be offered.
   bool get isRemote => _productRepository.isRemote;
 
+  Future<List<Category>> listCategories() => _productRepository.listCategories();
+
+  Future<List<Brand>> listBrands() => _productRepository.listBrands();
+
   /// Bazaars that would lose stock if [productId] were deleted.
   Future<List<BazaarEvent>> eventsAllocating(int productId) =>
       _events?.eventsAllocating(productId) ?? Future.value(const []);
@@ -343,7 +349,10 @@ class InventoryCubit extends Cubit<InventoryState> {
     return _productRepository.combinationStocksForProduct(productId);
   }
 
-  Future<void> saveProduct({
+  /// Saves a product, catching the [ApiException] a remote write can throw
+  /// (a duplicate variant, a network drop mid-way) rather than letting it
+  /// reach the form's caller unhandled.
+  Future<SaveOutcome> saveProduct({
     int? id,
     required String name,
     String? description,
@@ -354,19 +363,45 @@ class InventoryCubit extends Cubit<InventoryState> {
     Map<String, int> combinationStocks = const {},
     int stockQuantity = 0,
     ProductStatus status = ProductStatus.active,
+    int? categoryId,
+    String? categoryName,
+    int? brandId,
+    String? brandName,
   }) async {
-    await _productRepository.saveProduct(
-      id: id,
-      name: name,
-      description: description,
-      lowestPrice: lowestPrice,
-      imagePath: imagePath,
-      imageBytes: imageBytes,
-      variantGroups: variantGroups,
-      combinationStocks: combinationStocks,
-      stockQuantity: stockQuantity,
-      status: status,
-    );
-    await load();
+    try {
+      await _productRepository.saveProduct(
+        id: id,
+        name: name,
+        description: description,
+        lowestPrice: lowestPrice,
+        imagePath: imagePath,
+        imageBytes: imageBytes,
+        variantGroups: variantGroups,
+        combinationStocks: combinationStocks,
+        stockQuantity: stockQuantity,
+        status: status,
+        categoryId: categoryId,
+        categoryName: categoryName,
+        brandId: brandId,
+        brandName: brandName,
+      );
+      await load();
+      return const SaveOutcome();
+    } on ApiException catch (error) {
+      // A failure can land mid-sequence (product written, a variant not),
+      // so this refetches rather than trusting whatever was last loaded.
+      await _productRepository.refresh();
+      await load();
+      return SaveOutcome(failure: error);
+    }
   }
+}
+
+/// What came of saving a product.
+class SaveOutcome {
+  const SaveOutcome({this.failure});
+
+  final ApiException? failure;
+
+  bool get isComplete => failure == null;
 }

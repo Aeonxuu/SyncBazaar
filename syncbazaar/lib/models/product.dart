@@ -2,14 +2,13 @@ import 'dart:typed_data';
 
 /// Lifecycle state of a product in the master inventory.
 ///
-/// [active] products are sellable and allocatable to bazaars, [draft] ones are
-/// still being set up, and [archived] ones are retired but kept for history.
-enum ProductStatus { active, draft, archived }
+/// [active] products are sellable and allocatable to bazaars; [archived] ones
+/// are retired but kept for history.
+enum ProductStatus { active, archived }
 
 extension ProductStatusLabel on ProductStatus {
   String get label => switch (this) {
     ProductStatus.active => 'Active',
-    ProductStatus.draft => 'Draft',
     ProductStatus.archived => 'Archived',
   };
 }
@@ -24,6 +23,10 @@ class Product {
     this.imagePath,
     this.imageBytes,
     this.status = ProductStatus.active,
+    this.categoryId,
+    this.categoryName,
+    this.brandId,
+    this.brandName,
   });
 
   final int id;
@@ -59,6 +62,13 @@ class Product {
   final Uint8List? imageBytes;
 
   final ProductStatus status;
+
+  /// Present only for a vendor's own server catalogue — there is no local
+  /// equivalent, so both stay null in the mock-seeded build.
+  final int? categoryId;
+  final String? categoryName;
+  final int? brandId;
+  final String? brandName;
 
   // Backward-compatibility getters for legacy UI sections not yet migrated.
   String get variant => '-';

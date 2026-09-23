@@ -10,9 +10,12 @@ import 'bloc/auth/auth_state.dart';
 import 'bloc/dashboard/dashboard_cubit.dart';
 import 'bloc/inventory/inventory_cubit.dart';
 import 'bloc/notifications/notifications_cubit.dart';
+import 'bloc/post_bazaar/reconciliation_cubit.dart';
 import 'bloc/orders/orders_cubit.dart';
 import 'bloc/pos/pos_cubit.dart';
 import 'bloc/pre_bazaar/pre_bazaar_cubit.dart';
+import 'bloc/settings/catalog_cubit.dart';
+import 'bloc/settings/payment_methods_cubit.dart';
 import 'bloc/settings/settings_cubit.dart';
 import 'bloc/staff/staff_cubit.dart';
 import 'bloc/sync/sync_cubit.dart';
@@ -26,6 +29,7 @@ import 'data/repositories/orders_repository.dart';
 import 'data/repositories/product_repository.dart';
 import 'data/repositories/sales_repository.dart';
 import 'data/repositories/settings_repository.dart';
+import 'data/repositories/vendor_payment_method_repository.dart';
 import 'dev/dev_mock_data_seeder.dart';
 import 'models/approval_request.dart';
 import 'models/user.dart';
@@ -37,6 +41,8 @@ import 'ui/screens/dashboard/dashboard_screen.dart';
 import 'ui/screens/inventory/inventory_screen.dart';
 import 'ui/screens/login/login_screen.dart';
 import 'ui/screens/notifications/notifications_screen.dart';
+import 'ui/screens/settings/catalog_screen.dart';
+import 'ui/screens/settings/payment_methods_screen.dart';
 import 'ui/screens/venues/venues_screen.dart';
 import 'ui/screens/orders/orders_screen.dart';
 import 'ui/screens/pos/pos_screen.dart';
@@ -82,6 +88,7 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
   late final OrdersRepository _ordersRepository;
   late final ApprovalsRepository _approvalsRepository;
   late final SettingsRepository _settingsRepository;
+  late final VendorPaymentMethodRepository _vendorPaymentMethodRepository;
   late final NotificationService _notificationService;
   late final SyncService _syncService;
   SaleUploadService? _saleUploader;
@@ -125,6 +132,9 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
       events: _eventRepository,
     );
     _settingsRepository = SettingsRepository(auth: session);
+    _vendorPaymentMethodRepository = VendorPaymentMethodRepository(
+      auth: session,
+    );
     _notificationService = NotificationService();
     _syncService = SyncService(
       salesRepository: _salesRepository,
@@ -173,6 +183,9 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
         RepositoryProvider<SettingsRepository>.value(
           value: _settingsRepository,
         ),
+        RepositoryProvider<VendorPaymentMethodRepository>.value(
+          value: _vendorPaymentMethodRepository,
+        ),
       ],
       child: MultiBlocProvider(
         providers: [
@@ -196,6 +209,7 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
               _salesRepository,
               _ordersRepository,
               _settingsRepository,
+              _vendorPaymentMethodRepository,
               saleUploader: _saleUploader,
             ),
           ),
@@ -224,11 +238,21 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
           ),
           BlocProvider(
             create: (_) =>
+                PaymentMethodsCubit(_vendorPaymentMethodRepository)..load(),
+          ),
+          BlocProvider(
+            create: (_) => CatalogCubit(_productRepository)..load(),
+          ),
+          BlocProvider(
+            create: (_) =>
                 PreBazaarCubit(_approvalsRepository, _eventRepository),
           ),
           BlocProvider(create: (_) => SyncCubit(_syncService)),
           BlocProvider(
             create: (_) => NotificationsCubit(_notificationService)..load(),
+          ),
+          BlocProvider(
+            create: (_) => ReconciliationCubit(_eventRepository)..load(),
           ),
         ],
         child: MaterialApp(
@@ -340,6 +364,8 @@ class _MainShellState extends State<MainShell> {
         context.read<InventoryCubit>().load();
       case AppSection.staff:
         context.read<StaffCubit>().load();
+      case AppSection.postBazaar:
+        context.read<ReconciliationCubit>().load();
       default:
         break;
     }
@@ -464,6 +490,16 @@ class _MainShellState extends State<MainShell> {
               label: 'Venues & Terms',
               icon: Icons.storefront_outlined,
             ),
+            const AppNavItem(
+              section: AppSection.paymentMethods,
+              label: 'Payment Methods',
+              icon: Icons.account_balance_wallet_outlined,
+            ),
+            const AppNavItem(
+              section: AppSection.catalog,
+              label: 'Catalog',
+              icon: Icons.sell_outlined,
+            ),
           ],
           const AppNavItem(
             section: AppSection.settings,
@@ -499,28 +535,35 @@ class _MainShellState extends State<MainShell> {
                   BlocBuilder<NotificationsCubit, NotificationsState>(
                     builder: (context, notificationsState) =>
                         BlocBuilder<ApprovalsCubit, List<ApprovalRequest>>(
-                          builder: (context, pendingApprovals) =>
-                              SideNavigationRail(
-                                groups: _navGroups,
-                                selected: section,
-                                onSelect: _handleSectionSelect,
-                                isCollapsed: _isNavCollapsed,
-                                onToggle: () => setState(
-                                  () => _isNavCollapsed = !_isNavCollapsed,
+                          builder: (context, pendingApprovals) => BlocBuilder<
+                            ReconciliationCubit,
+                            ReconciliationState
+                          >(
+                            builder: (context, reconciliationState) =>
+                                SideNavigationRail(
+                                  groups: _navGroups,
+                                  selected: section,
+                                  onSelect: _handleSectionSelect,
+                                  isCollapsed: _isNavCollapsed,
+                                  onToggle: () => setState(
+                                    () => _isNavCollapsed = !_isNavCollapsed,
+                                  ),
+                                  onLogout: _confirmLogout,
+                                  isSyncing: syncState.isSyncing,
+                                  onSync: () =>
+                                      context.read<SyncCubit>().syncNow(),
+                                  syncMessage: syncState.lastMessage,
+                                  badges: {
+                                    AppSection.notifications:
+                                        notificationsState.unreadCount,
+                                    if (widget.user.isAdminOrOwner)
+                                      AppSection.approvals:
+                                          pendingApprovals.length,
+                                    AppSection.postBazaar:
+                                        reconciliationState.pendingCount,
+                                  },
                                 ),
-                                onLogout: _confirmLogout,
-                                isSyncing: syncState.isSyncing,
-                                onSync: () =>
-                                    context.read<SyncCubit>().syncNow(),
-                                syncMessage: syncState.lastMessage,
-                                badges: {
-                                  AppSection.notifications:
-                                      notificationsState.unreadCount,
-                                  if (widget.user.isAdminOrOwner)
-                                    AppSection.approvals:
-                                        pendingApprovals.length,
-                                },
-                              ),
+                          ),
                         ),
                   ),
             ),
@@ -559,6 +602,10 @@ class _MainShellState extends State<MainShell> {
         return SettingsScreen(user: widget.user);
       case AppSection.venues:
         return VenuesScreen(user: widget.user);
+      case AppSection.paymentMethods:
+        return PaymentMethodsScreen(user: widget.user);
+      case AppSection.catalog:
+        return CatalogScreen(user: widget.user);
       case AppSection.notifications:
         return const NotificationsScreen();
     }

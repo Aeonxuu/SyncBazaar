@@ -6,15 +6,17 @@ import '../../../../models/receipt.dart';
 
 /// The printable receipt, laid out as a thermal roll.
 ///
-/// Never mounted in the app: it is rendered detached by `ReceiptService` and
-/// captured straight to a PNG. Two constraints follow from that and are not
-/// optional.
+/// Rendered two ways: detached and captured straight to a PNG by
+/// `ReceiptService`, and mounted for real inside `ReceiptPrintDialog` as a
+/// live preview once printing finishes — a scrollable ancestor there
+/// supplies the bounded height a normal widget tree expects. Two
+/// constraints follow from the *capture* path and are not optional.
 ///
-/// First, the capture runs with an **unbounded height** so the image can grow
-/// with the basket, which means nothing in the outer [Column] may flex
-/// vertically — no `Expanded`, `Flexible`, `Spacer` or scrollable. `Expanded`
-/// inside a [Row] is fine, since width stays pinned at
-/// `ReceiptService.documentWidth`.
+/// First, the capture itself runs with an **unbounded height** so the image
+/// can grow with the basket, which means nothing in the outer [Column] may
+/// flex vertically — no `Expanded`, `Flexible`, `Spacer` or scrollable
+/// *inside this widget*. `Expanded` inside a [Row] is fine, since width
+/// stays pinned at `ReceiptService.documentWidth`.
 ///
 /// Second, the capture wraps this in a *transparent* `Material`, so the white
 /// background here is load-bearing: without it the receipt exports as dark text

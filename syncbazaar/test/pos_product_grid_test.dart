@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:syncbazaar/core/theme/app_theme.dart';
@@ -7,9 +5,10 @@ import 'package:syncbazaar/models/product.dart';
 import 'package:syncbazaar/ui/screens/pos/widgets/pos_product_card.dart';
 
 /// The POS grid went from three columns to four, so every card is narrower.
-/// The card splits its height evenly between the photo and the details, and
-/// the details half has a fixed floor — name, price row and a 32px Add button.
-/// These pin the sizing rule that keeps the button from being clipped.
+/// The photo is a square (its height is the card's own width) and the
+/// details block below it — name, price row and a 32px Add button — is a
+/// fixed height regardless of column width. These pin the sizing rule that
+/// keeps the button from being clipped.
 void main() {
   const product = Product(
     id: 1,
@@ -20,7 +19,8 @@ void main() {
   );
 
   /// Mirrors the delegate in `_productPanel`.
-  double extentFor(double cardWidth) => math.max(cardWidth / 0.72, 208.0);
+  double extentFor(double cardWidth) =>
+      cardWidth + PosProductCard.detailsHeight;
 
   int columnsFor(double available, double gap, double minCardWidth) {
     for (var columns = 4; columns > 2; columns--) {
@@ -76,17 +76,21 @@ void main() {
       });
     }
 
-    testWidgets('at the smallest extent the floor allows', (tester) async {
-      // 208 is the floor; below it the details half drops under the ~96px its
-      // contents need and the button starts to clip.
-      await pumpCard(tester, width: 150, height: 208);
+    testWidgets('at the narrowest column the grid allows', (tester) async {
+      // 150 is `minCardWidth` — the narrowest a card ever gets.
+      await pumpCard(tester, width: 150, height: extentFor(150));
 
       expect(tester.takeException(), isNull);
       expect(find.text('Add to cart'), findsOneWidget);
     });
 
     testWidgets('out of stock still fits', (tester) async {
-      await pumpCard(tester, width: 150, height: 208, inStock: false);
+      await pumpCard(
+        tester,
+        width: 150,
+        height: extentFor(150),
+        inStock: false,
+      );
 
       expect(tester.takeException(), isNull);
       expect(find.text('Out of stock'), findsOneWidget);

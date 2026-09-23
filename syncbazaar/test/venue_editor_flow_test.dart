@@ -9,9 +9,12 @@ import 'package:syncbazaar/ui/screens/venues/venues_screen.dart';
 
 /// Adding a venue, end to end through the screen.
 ///
-/// The editor is two steps and returns a draft; the screen turns that into a
-/// createLocation call and the list rebuilds off cubit state. Several places
-/// for a new venue to be lost between pressing Save and seeing it.
+/// The editor is one step now -- name, address, contact, rates -- since
+/// payment methods moved to their own screen and there is nothing left for a
+/// second step to hold. Still worth an end-to-end check: the editor returns a
+/// draft, the screen turns that into a createLocation call, and the list
+/// rebuilds off cubit state, which is several places for a new venue to be
+/// lost between pressing Save and seeing it.
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
@@ -49,12 +52,13 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Continue'));
-    await tester.pumpAndSettle();
-
-    // Step two: cash is there by default, so this can be saved as-is.
-    expect(find.text('Save venue'), findsOneWidget);
-    await tester.tap(find.text('Save venue'));
+    // One step now: no "Continue" to a payment-methods page, since venues
+    // do not carry payment methods any more. Two "Add venue" buttons are on
+    // screen at once here -- the header's, behind the dialog, and the
+    // dialog's own submit -- so the dialog's is picked out by its footer
+    // position rather than by text alone.
+    expect(find.text('Add venue'), findsWidgets);
+    await tester.tap(find.widgetWithText(ElevatedButton, 'Add venue').last);
     await tester.pumpAndSettle();
 
     expect(
@@ -65,59 +69,8 @@ void main() {
     expect(find.text('Robinsons Lipa'), findsOneWidget);
   });
 
-  testWidgets('the add-a-method controls are all one height', (tester) async {
-    // Measured, they always were: every version of this row rendered all
-    // three at 44. What differed was that the fields were filled grey with
-    // no border while the button was white with one, and a filled box beside
-    // an outlined box reads as a different size even at identical
-    // dimensions. The styling is consistent now; this guards the dimension,
-    // which is the half a diff cannot show.
-    final cubit = SettingsCubit(SettingsRepository());
-    await cubit.load();
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: BlocProvider.value(
-          value: cubit,
-          child: const Scaffold(body: VenuesScreen(user: owner)),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('Add venue'));
-    await tester.pumpAndSettle();
-    await tester.enterText(
-      find.widgetWithText(TextField, 'e.g. SM City Lucena'),
-      'Robinsons Lipa',
-    );
-    await tester.tap(find.text('Continue'));
-    await tester.pumpAndSettle();
-
-    // Measured on the painted boxes, not on a constrained child. The first
-    // version of this test compared a TextField against an OutlinedButton
-    // and passed while the two were visibly different heights: the button's
-    // padded tap target lays out larger than the box it is handed, so the
-    // rect that mattered was never the one being read.
-    // The box that paints the border, which is the Container wrapping each
-    // field -- not the TextField (always the height it is handed) and not
-    // its InputDecorator (sized from the text, and 20px here). Reading
-    // either of those is how three earlier attempts at this test passed
-    // while the row was visibly uneven on screen.
-    Rect boxAround(Finder field) => tester.getRect(
-      find.ancestor(of: field, matching: find.byType(Container)).first,
-    );
-
-    final name = boxAround(find.widgetWithText(TextField, 'e.g. GCASH'));
-    final asks = boxAround(
-      find.widgetWithText(TextField, 'Asks for… (optional)').last,
-    );
-    final add = tester.getRect(find.widgetWithText(InkWell, 'Add'));
-
-    expect(add.height, name.height);
-    expect(asks.height, name.height);
-    // On one line, not merely at one size.
-    expect(add.top, name.top);
-    expect(asks.top, name.top);
-  });
+  // The add-a-method row this file used to guard the height of does not
+  // exist here any more: payment methods moved to their own screen, added
+  // through a plain AlertDialog rather than a hand-laid-out row, so there is
+  // no custom row geometry left for a test like this to protect.
 }
