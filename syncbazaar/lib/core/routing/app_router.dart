@@ -10,5 +10,6 @@ enum AppSection {
   staff,
   venues,
   paymentMethods,
+  catalog,
   settings,
 }

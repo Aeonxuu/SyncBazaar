@@ -126,11 +126,23 @@ void main() {
                     200,
                     headers: {'content-type': 'application/json'},
                   )
-                : http.Response('{"detail":"Batch failed to sync."}', 400),
+                // The real shape the backend sends: `detail` is the same
+                // generic wrapper on every failure, and `errors` is where the
+                // actual reason (a serializer error, per field) lives.
+                : http.Response(
+                    jsonEncode({
+                      'detail': 'Batch failed to sync.',
+                      'errors': {
+                        'event_stock': ['Invalid pk "999" - object does not exist.'],
+                      },
+                      'batch_results': [],
+                    }),
+                    400,
+                  ),
           ),
         ),
       ),
-      events: await eventsWithStockRow(),
+      events: _StockyEvents(),
       products: ProductRepository(),
       sales: sales,
     );
@@ -140,6 +152,18 @@ void main() {
     // The endpoint is atomic, so a 400 means none of them landed.
     expect(result.uploaded, 0);
     expect((await sales.listUnsyncedSales()), hasLength(2));
+
+    // A 400 is the server answering, not a dropped connection. Counting it as
+    // "skipped" (which means "still waiting for a connection") is what showed
+    // a cashier "could not reach the server" for a batch the server actually
+    // rejected -- the real reason belongs in `rejected`, not folded into the
+    // offline count.
+    expect(result.skipped, 0);
+    expect(result.rejected, 2);
+    // The field-level reason from `errors`, not the generic `detail` wrapper
+    // that reads the same for every failure regardless of cause.
+    expect(result.rejectionReason, contains('event_stock'));
+    expect(result.rejectionReason, contains('does not exist'));
   });
 
   test('holds back a sale with no stock row rather than guessing', () async {
@@ -285,4 +309,18 @@ void main() {
       expect(result.skipped, 1);
     });
   });
+}
+
+/// A stock row for anything, without the real server round-trip
+/// `EventRepository.createEvent` needs to learn one for real.
+///
+/// `stockIdFor` only ever comes back non-null once the id it names has been
+/// handed out by the server, which needs a session and a POST this test has
+/// no interest in simulating. Without this, every sale in a test using a
+/// plain `EventRepository()` resolves to "no stock row" and the batch never
+/// reaches the network at all -- which is exactly what let the 400-handling
+/// test below pass while silently testing the wrong code path.
+class _StockyEvents extends EventRepository {
+  @override
+  int? stockIdFor({required int eventId, required String allocationKey}) => 1;
 }

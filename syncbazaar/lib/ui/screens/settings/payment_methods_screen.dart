@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../bloc/settings/payment_methods_cubit.dart';
 import '../../../core/constants/colors.dart';
+import '../../../core/constants/motion.dart';
 import '../../../data/remote/vendor_payment_method_api_mapper.dart';
 import '../../../models/user.dart';
 import '../../../services/qr_crop_service.dart';
@@ -455,97 +456,288 @@ class _AddMethodDialogState extends State<_AddMethodDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return BlocBuilder<PaymentMethodsCubit, PaymentMethodsState>(
       builder: (context, state) {
         final suggestions = _suggestions(state);
         final matched = _exactMatch(state);
-        return AlertDialog(
-          title: const Text('Add a payment method'),
-          content: SizedBox(
-            width: 360,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TextField(
-                  controller: _name,
-                  autofocus: true,
-                  onChanged: (_) => setState(() => _error = null),
-                  decoration: const InputDecoration(
-                    labelText: 'Method name',
-                    hintText: 'e.g. GCash',
-                  ),
-                ),
-                if (suggestions.isNotEmpty && matched == null) ...[
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final entry in suggestions.take(5))
-                        ActionChip(
-                          label: Text(entry.name),
-                          onPressed: () => _pick(entry),
+        return Dialog(
+          backgroundColor: AppColors.surface,
+          surfaceTintColor: Colors.transparent,
+          elevation: 3,
+          clipBehavior: Clip.antiAlias,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0.97, end: 1),
+            duration: AppMotion.entrance,
+            curve: AppMotion.easeOut,
+            builder: (context, value, child) => Transform.scale(
+              scale: value,
+              child: Opacity(opacity: value.clamp(0, 1), child: child),
+            ),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 400),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 20, 10, 14),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Add payment method',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                         ),
-                    ],
-                  ),
-                ],
-                if (matched != null) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    matched.extraFieldLabel == null
-                        ? 'Reusing the existing "${matched.name}" method.'
-                        : 'Reusing the existing "${matched.name}" method. '
-                              'Asks for: ${matched.extraFieldLabel}.',
-                    style: const TextStyle(color: Colors.black45, fontSize: 12),
-                  ),
-                ] else ...[
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _label,
-                    decoration: const InputDecoration(
-                      labelText: 'Reference field (optional)',
-                      hintText: 'e.g. Reference Number',
+                        IconButton(
+                          onPressed: _saving
+                              ? null
+                              : () => Navigator.pop(context),
+                          splashRadius: 18,
+                          tooltip: 'Close',
+                          icon: const Icon(
+                            Icons.close_rounded,
+                            size: 17,
+                            color: Colors.black45,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Shown at checkout if the customer needs to give a '
-                    'reference for this method. Leave blank if not.',
-                    style: TextStyle(color: Colors.black45, fontSize: 12),
+                  const Divider(height: 1, color: AppColors.border),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 18, 24, 18),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _MethodFormField(
+                          label: 'Method name',
+                          child: TextField(
+                            controller: _name,
+                            autofocus: true,
+                            onChanged: (_) => setState(() => _error = null),
+                            style: theme.textTheme.bodyMedium,
+                            decoration: _methodFieldDecoration(
+                              hint: 'e.g. GCash',
+                            ),
+                          ),
+                        ),
+                        if (suggestions.isNotEmpty && matched == null) ...[
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              for (final entry in suggestions.take(5))
+                                _SuggestionChip(
+                                  label: entry.name,
+                                  onTap: () => _pick(entry),
+                                ),
+                            ],
+                          ),
+                        ],
+                        if (matched != null) ...[
+                          const SizedBox(height: 10),
+                          Text(
+                            matched.extraFieldLabel == null
+                                ? 'Reusing the existing "${matched.name}" '
+                                      'method.'
+                                : 'Reusing the existing "${matched.name}" '
+                                      'method. Asks for: '
+                                      '${matched.extraFieldLabel}.',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: Colors.black45,
+                            ),
+                          ),
+                        ] else ...[
+                          const SizedBox(height: 16),
+                          _MethodFormField(
+                            label: 'Reference field (optional)',
+                            child: TextField(
+                              controller: _label,
+                              style: theme.textTheme.bodyMedium,
+                              decoration: _methodFieldDecoration(
+                                hint: 'e.g. Reference Number',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Shown at checkout if the customer needs to '
+                            'give a reference for this method. Leave '
+                            'blank if not.',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: Colors.black45,
+                            ),
+                          ),
+                        ],
+                        if (_error != null) ...[
+                          const SizedBox(height: 10),
+                          Text(
+                            _error!,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: AppColors.error,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
-                ],
-                if (_error != null) ...[
-                  const SizedBox(height: 10),
-                  Text(
-                    _error!,
-                    style: const TextStyle(
-                      color: AppColors.error,
-                      fontSize: 12,
+                  const Divider(height: 1, color: AppColors.border),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 14, 24, 16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: _saving
+                              ? null
+                              : () => Navigator.pop(context),
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.black54,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 10,
+                            ),
+                          ),
+                          child: const Text('Cancel'),
+                        ),
+                        const SizedBox(width: 12),
+                        ElevatedButton(
+                          onPressed: _saving ? null : _save,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                            disabledBackgroundColor: AppColors.primary
+                                .withValues(alpha: 0.45),
+                            disabledForegroundColor: Colors.white,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 18,
+                              vertical: 12,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          child: _saving
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Text('Add'),
+                        ),
+                      ],
                     ),
                   ),
                 ],
-              ],
+              ),
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: _saving ? null : () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: _saving ? null : _save,
-              child: _saving
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Add'),
-            ),
-          ],
         );
       },
+    );
+  }
+}
+
+/// A label above its input — this dialog's one field recipe, matching the
+/// product form's `_FormField` (label / 6px gap / input) rather than the
+/// default `TextField` floating label, which is the one other form-shaped
+/// dialog in the app doesn't use.
+class _MethodFormField extends StatelessWidget {
+  const _MethodFormField({required this.label, required this.child});
+
+  final String label;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: Colors.black54,
+            fontWeight: FontWeight.w600,
+            fontSize: 11.5,
+          ),
+        ),
+        const SizedBox(height: 6),
+        child,
+      ],
+    );
+  }
+}
+
+/// Flat gray fill, radius 8, purple focus border — the app's one text-field
+/// recipe (see `_fieldDecoration` in `inventory_screen.dart`), copied here
+/// rather than shared across files per that recipe's own convention.
+InputDecoration _methodFieldDecoration({String? hint}) {
+  const radius = BorderRadius.all(Radius.circular(8));
+  OutlineInputBorder border(Color color, double width) {
+    return OutlineInputBorder(
+      borderRadius: radius,
+      borderSide: color == Colors.transparent
+          ? BorderSide.none
+          : BorderSide(color: color, width: width),
+    );
+  }
+
+  return InputDecoration(
+    hintText: hint,
+    hintStyle: const TextStyle(color: Colors.black38),
+    isDense: true,
+    filled: true,
+    fillColor: AppColors.inputFill,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+    border: border(Colors.transparent, 1),
+    enabledBorder: border(Colors.transparent, 1),
+    focusedBorder: border(AppColors.primary, 1.5),
+  );
+}
+
+/// A one-tap suggestion from the shared catalog — the selection-colour
+/// rule's unselected state (flat `primaryLight` fill, no border, primary
+/// text), since picking one is a single action rather than a persisted
+/// choice the button itself needs to keep showing as selected.
+class _SuggestionChip extends StatelessWidget {
+  const _SuggestionChip({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.primaryLight,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: AppColors.primary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

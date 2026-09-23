@@ -4,6 +4,7 @@ import '../../../../core/constants/colors.dart';
 import '../../../../core/constants/motion.dart';
 import '../../../../models/receipt.dart';
 import '../../../../services/receipt_service.dart';
+import 'receipt_document.dart';
 
 /// Prints the receipt, then says so.
 ///
@@ -117,7 +118,7 @@ class _ReceiptPrintDialogState extends State<_ReceiptPrintDialog> {
           child: Opacity(opacity: value.clamp(0, 1), child: child),
         ),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
+          constraints: const BoxConstraints(maxWidth: 428),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -180,6 +181,21 @@ class _ReceiptPrintDialogState extends State<_ReceiptPrintDialog> {
                   ),
                 ),
               ],
+              if (_phase == _PrintPhase.done) ...[
+                const Divider(height: 1, color: AppColors.border),
+                // The same widget the PNG was captured from, mounted for
+                // real this time — a live preview beats a round trip to the
+                // gallery to confirm a receipt actually rendered right.
+                // Capped and scrollable rather than sized to content: a long
+                // basket's receipt can run well past what fits on screen.
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 480),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    child: Center(child: ReceiptDocument(data: widget.data)),
+                  ),
+                ),
+              ],
               const Divider(height: 1, color: AppColors.border),
               Padding(
                 padding: const EdgeInsets.fromLTRB(24, 14, 24, 16),
@@ -214,7 +230,7 @@ class _ReceiptPrintDialogState extends State<_ReceiptPrintDialog> {
             autofocus: true,
             onPressed: () => Navigator.pop(context),
             style: _primaryButtonStyle,
-            child: const Text('Done'),
+            child: const Text('Close'),
           ),
         ];
       case _PrintPhase.failed:

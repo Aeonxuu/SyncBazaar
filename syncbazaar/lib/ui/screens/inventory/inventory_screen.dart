@@ -9,13 +9,18 @@ import '../../../core/constants/colors.dart';
 import '../../../core/constants/motion.dart';
 import '../../../data/repositories/product_repository.dart'
     show ProductRepository, VariantCategoryDraft;
+import '../../../models/brand.dart';
+import '../../../models/category.dart' as catalog;
 import '../../../models/product.dart';
 import '../../../models/product_variant.dart';
 import '../../../models/user.dart';
+import '../../widgets/app_dropdown.dart';
 import '../../widgets/confirmation_dialog.dart';
 import '../../widgets/product_thumbnail.dart';
 import '../../widgets/selectable_option_button.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../services/document_saver.dart';
+import '../../../services/inventory_workbook.dart';
 import 'widgets/quick_edit_dialog.dart';
 
 /// Outline for unchecked boxes in the inventory table. Material's default is
@@ -93,20 +98,28 @@ Widget? _hiddenCounter(
 /// which is what actually makes these read as light rather than chunky.
 const double _actionIconSize = 17;
 
+/// The product form's photo well, in the details step.
+///
+/// Sized a touch shorter than the Product name + Base price fields stacked
+/// beside it, now that price moved up next to name and stock moved out to
+/// its own step — matching their height exactly read as slightly heavy;
+/// sitting a little inside it reads as the companion to that column rather
+/// than competing with it for attention.
+const double _photoWellSize = 125;
+
 /// Which SKUs the table is showing.
 ///
-/// Four of these are lifecycle states; [outOfStock] is derived from stock
+/// Three of these are lifecycle states; [outOfStock] is derived from stock
 /// instead. Mixing them in one bar is deliberate — from the user's side these
 /// are all just "which part of the inventory am I looking at", and splitting
 /// them into a tab bar plus a separate stock filter would make the most
 /// common question ("what's empty?") the hardest one to ask.
-enum _InventoryTab { all, active, draft, archived, outOfStock }
+enum _InventoryTab { all, active, archived, outOfStock }
 
 extension _InventoryTabLabel on _InventoryTab {
   String get label => switch (this) {
     _InventoryTab.all => 'All',
     _InventoryTab.active => 'Active',
-    _InventoryTab.draft => 'Draft',
     _InventoryTab.archived => 'Archived',
     _InventoryTab.outOfStock => 'Out of stock',
   };
@@ -114,7 +127,6 @@ extension _InventoryTabLabel on _InventoryTab {
   bool matches(InventoryRow row) => switch (this) {
     _InventoryTab.all => true,
     _InventoryTab.active => row.status == ProductStatus.active,
-    _InventoryTab.draft => row.status == ProductStatus.draft,
     _InventoryTab.archived => row.status == ProductStatus.archived,
     // Archived SKUs are excluded on purpose: this tab is a worklist of
     // what still needs a decision, so archiving something removes it from
@@ -159,6 +171,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
   final Set<String> _selectedKeys = <String>{};
   _InventoryTab _tab = _InventoryTab.all;
   _InventorySort _sort = _InventorySort.nameAsc;
+  bool _exportingInventory = false;
 
   @override
   void dispose() {
@@ -219,6 +232,57 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
   String _variantLabel(InventoryRow row) =>
       '${row.optionOneValue ?? ''}|${row.optionTwoValue ?? ''}';
+
+  /// Exports whatever the table is currently showing — the active tab and
+  /// search narrow this exactly the way they narrow the table itself, so
+  /// filtering to "Active" and exporting gives a sheet of active SKUs, not
+  /// a surprise full catalogue.
+  Future<void> _exportInventory(
+    BuildContext context,
+    List<InventoryRow> rows,
+  ) async {
+    setState(() => _exportingInventory = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final lines = [
+        for (final row in rows)
+          InventoryLine(
+            name: row.product.name,
+            category: row.product.categoryName,
+            brand: row.product.brandName,
+            attributeOne: row.optionOneValue,
+            attributeTwo: row.optionTwoValue,
+            quantity: row.stock,
+          ),
+      ];
+      final bytes = const InventoryWorkbook().build(lines);
+      final now = DateTime.now();
+      String two(int value) => value.toString().padLeft(2, '0');
+      final fileName =
+          'MasterInventory_${now.year}${two(now.month)}${two(now.day)}';
+      final where = await const DocumentSaver().save(
+        bytes: bytes,
+        fileName: fileName,
+        format: DocumentFormat.xlsx,
+      );
+      if (!mounted || where == null) {
+        return;
+      }
+      messenger.showSnackBar(
+        SnackBar(content: Text('$where (${lines.length} rows).')),
+      );
+    } on StateError {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('The inventory export could not be written. Try again.'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _exportingInventory = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -360,23 +424,52 @@ class _InventoryScreenState extends State<InventoryScreen> {
             decoration: InputDecoration(
               hintText: 'Search products',
               hintStyle: const TextStyle(color: Colors.black38),
-              prefixIcon: const Icon(
-                Icons.search_rounded,
-                size: 19,
-                color: Colors.black45,
+              // Icons default to a 48px minimum tap target, which floors the
+              // field's height no matter how tight `contentPadding` gets —
+              // zeroed out here the same way the price field's currency
+              // prefix already does, so the padding below can actually
+              // bring this down to the filter tabs' own height (36.5,
+              // measured with a widget test) instead of stopping at 48.
+              prefixIcon: const Padding(
+                padding: EdgeInsets.only(left: 12, right: 8),
+                child: Icon(
+                  Icons.search_rounded,
+                  size: 19,
+                  color: Colors.black45,
+                ),
+              ),
+              prefixIconConstraints: const BoxConstraints(
+                minWidth: 0,
+                minHeight: 0,
               ),
               suffixIcon: _searchController.text.isEmpty
                   ? null
                   : IconButton(
-                      splashRadius: 18,
+                      splashRadius: 16,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 28,
+                        minHeight: 28,
+                      ),
+                      visualDensity: VisualDensity.compact,
+                      // `constraints` alone doesn't shrink an `IconButton`
+                      // below Material's 48px tap target — this is the part
+                      // that actually does.
+                      style: IconButton.styleFrom(
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
                       onPressed: () {
                         _searchController.clear();
                         setState(() {});
                       },
                       icon: const Icon(Icons.close_rounded, size: 17),
                     ),
+              suffixIconConstraints: const BoxConstraints(
+                minWidth: 0,
+                minHeight: 0,
+              ),
               isDense: true,
-              contentPadding: const EdgeInsets.symmetric(vertical: 12),
+              contentPadding: const EdgeInsets.fromLTRB(0, 12.5, 0, 11.5),
               filled: true,
               fillColor: AppColors.surface,
               border: _inputBorder(_borderColor),
@@ -388,6 +481,44 @@ class _InventoryScreenState extends State<InventoryScreen> {
         _SortDropdown(
           selected: _sort,
           onSelected: (sort) => setState(() => _sort = sort),
+        ),
+        ElevatedButton.icon(
+          onPressed: _exportingInventory
+              ? null
+              : () => _exportInventory(context, _visibleRows(state)),
+          icon: _exportingInventory
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              // Pointing up: this button sends data out, and a down arrow
+              // reads as incoming (a download) rather than outgoing.
+              : const Icon(Icons.file_upload_outlined, size: 18),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primary,
+            foregroundColor: Colors.white,
+            disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.45),
+            disabledForegroundColor: Colors.white,
+            elevation: 0,
+            // Matched to the filter tabs' own height (36.5, measured with a
+            // widget test) — `ElevatedButton` enforces a 48px minimum tap
+            // target on top of whatever padding says, so that has to be
+            // lifted too or the padding number alone does nothing.
+            padding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 15.5,
+            ),
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+          label: Text(_exportingInventory ? 'Preparing…' : 'Export Inventory'),
         ),
       ],
     );
@@ -721,15 +852,15 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
     return _InventoryTableRow(
       isSelected: isSelected,
-      // A server product opens the pencil, not the form. The form's edit mode
-      // saves nothing past a restart, and a booth operator who renamed a
-      // product there would only find out at the next launch. So the form is
-      // for creating, and the only edits offered on a server row are the ones
-      // that reach the server.
+      // The row opens the full form — name, photo, category/brand, status,
+      // stock — which now reaches the server the same as everything else in
+      // it. The dedicated pencil in the price/stock column stays the fast
+      // path for just those two, since that is the edit made often enough
+      // to earn a shortcut; the row itself no longer needs to choose between
+      // the two, and choosing quick-edit here was what made the full form
+      // unreachable for any product the server already knows about.
       onTap: !canManage
           ? null
-          : quickEditable
-          ? () => _quickEdit(context, row)
           : () => _showProductDialog(context, product: product),
       child: Row(
         children: [
@@ -1158,7 +1289,7 @@ class _InventoryKpiCard extends StatelessWidget {
   }
 }
 
-/// All / Active / Draft / Archived / Out of stock.
+/// All / Active / Archived / Out of stock.
 ///
 /// Underline tabs rather than filled chips: this is a view switcher over one
 /// dataset, and tabs are the pattern people already read that way (Jakob's
@@ -1348,7 +1479,6 @@ class _StatusBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = switch (status) {
       ProductStatus.archived => const Color(0xFF4B5563),
-      ProductStatus.draft => const Color(0xFFB45309),
       ProductStatus.active => const Color(0xFF2E7D32),
     };
     return Container(
@@ -1430,6 +1560,15 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
   _ProductStep _step = _ProductStep.details;
   bool _saving = false;
 
+  /// The vendor's own categories/brands, for the pickers below. Only
+  /// fetched when [InventoryCubit.isRemote] — there's no local equivalent,
+  /// so the pickers are hidden entirely otherwise.
+  List<catalog.Category> _categoryOptions = const [];
+  List<Brand> _brandOptions = const [];
+  catalog.Category? _selectedCategory;
+  Brand? _selectedBrand;
+  bool _loadingCatalogFilters = false;
+
   String? _nameError;
   String? _priceError;
   String? _stockError;
@@ -1446,6 +1585,15 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
   String? _stepError;
 
   bool get _isEditing => widget.product != null;
+
+  /// The steps this particular product actually visits, in order.
+  ///
+  /// Every product now gets a details step and a stock step — a flat
+  /// product just goes straight from one to the other, skipping Options
+  /// entirely, since there is nothing to pick a combination's stock from.
+  List<_ProductStep> get _activeSteps => _hasVariants
+      ? const [_ProductStep.details, _ProductStep.options, _ProductStep.stock]
+      : const [_ProductStep.details, _ProductStep.stock];
 
   @override
   void initState() {
@@ -1467,6 +1615,35 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
       _comboControllers[key] = TextEditingController(text: value);
     });
     _openedWith = _snapshot();
+    if (context.read<InventoryCubit>().isRemote) {
+      _loadCatalogFilters();
+    }
+  }
+
+  Future<void> _loadCatalogFilters() async {
+    setState(() => _loadingCatalogFilters = true);
+    final cubit = context.read<InventoryCubit>();
+    final categories = await cubit.listCategories();
+    final brands = await cubit.listBrands();
+    if (!mounted) return;
+    final product = widget.product;
+    setState(() {
+      _categoryOptions = categories;
+      _brandOptions = brands;
+      _selectedCategory = product?.categoryId == null
+          ? null
+          : categories.cast<catalog.Category?>().firstWhere(
+              (c) => c!.id == product!.categoryId,
+              orElse: () => null,
+            );
+      _selectedBrand = product?.brandId == null
+          ? null
+          : brands.cast<Brand?>().firstWhere(
+              (b) => b!.id == product!.brandId,
+              orElse: () => null,
+            );
+      _loadingCatalogFilters = false;
+    });
   }
 
   /// Everything the user can change, flattened. Crude on purpose: it only has
@@ -1610,7 +1787,6 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
   bool _validateDetails() {
     final name = _nameController.text.trim();
     final price = double.tryParse(_priceController.text.trim());
-    final stock = int.tryParse(_stockController.text.trim());
 
     setState(() {
       _nameError = name.isEmpty ? 'Product name is required.' : null;
@@ -1621,19 +1797,28 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
           : price <= 0
           ? 'Price must be more than 0.'
           : null;
-      _stockError = _hasVariants
-          ? null
-          : _stockController.text.trim().isEmpty
+      _stepError = null;
+    });
+
+    return _nameError == null && _priceError == null;
+  }
+
+  /// Validates the flat-product stock step — the single-field counterpart
+  /// to [_validateStock], which validates the per-combination grid instead.
+  bool _validateFlatStock() {
+    final stock = int.tryParse(_stockController.text.trim());
+
+    setState(() {
+      _stockError = _stockController.text.trim().isEmpty
           ? 'Stock is required.'
           : stock == null
           ? 'Enter a whole number.'
           : stock < 0
           ? 'Stock cannot be negative.'
           : null;
-      _stepError = null;
     });
 
-    return _nameError == null && _priceError == null && _stockError == null;
+    return _stockError == null;
   }
 
   /// Validates the variant-options step. These failures are reported as one
@@ -1683,11 +1868,14 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
   }
 
   void _goBack() {
+    final steps = _activeSteps;
+    final index = steps.indexOf(_step);
+    if (index <= 0) {
+      return;
+    }
     setState(() {
       _stepError = null;
-      _step = _step == _ProductStep.stock
-          ? _ProductStep.options
-          : _ProductStep.details;
+      _step = steps[index - 1];
     });
   }
 
@@ -1699,7 +1887,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
     if (_step == _ProductStep.details) {
       if (!_validateDetails()) return;
       if (!_hasVariants) {
-        await _save();
+        setState(() => _step = _ProductStep.stock);
         return;
       }
       setState(() {
@@ -1726,7 +1914,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
       return;
     }
 
-    if (!_validateStock()) return;
+    if (!(_hasVariants ? _validateStock() : _validateFlatStock())) return;
     await _save();
   }
 
@@ -1736,8 +1924,9 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
     final name = _nameController.text.trim();
     final lowestPrice = double.parse(_priceController.text.trim());
 
+    final SaveOutcome outcome;
     if (!_hasVariants) {
-      await cubit.saveProduct(
+      outcome = await cubit.saveProduct(
         id: widget.product?.id,
         name: name,
         description: widget.product?.description,
@@ -1746,6 +1935,10 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
         imageBytes: _imageBytes,
         stockQuantity: int.parse(_stockController.text.trim()),
         status: _status,
+        categoryId: _selectedCategory?.id,
+        categoryName: _selectedCategory?.name,
+        brandId: _selectedBrand?.id,
+        brandName: _selectedBrand?.name,
       );
     } else {
       final combinationStocks = <String, int>{
@@ -1762,7 +1955,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
         );
       }).toList();
 
-      await cubit.saveProduct(
+      outcome = await cubit.saveProduct(
         id: widget.product?.id,
         name: name,
         description: widget.product?.description,
@@ -1772,10 +1965,30 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
         variantGroups: variantGroups,
         combinationStocks: combinationStocks,
         status: _status,
+        categoryId: _selectedCategory?.id,
+        categoryName: _selectedCategory?.name,
+        brandId: _selectedBrand?.id,
+        brandName: _selectedBrand?.name,
       );
     }
 
     if (!mounted) return;
+
+    if (!outcome.isComplete) {
+      setState(() => _saving = false);
+      final failure = outcome.failure!;
+      final why = failure.isOffline
+          ? 'Cannot reach the server.'
+          : failure.message;
+      await showNoticeDialog(
+        context: context,
+        title: 'Not saved',
+        message: 'This product was not saved. $why',
+        tone: ConfirmationTone.destructive,
+      );
+      return;
+    }
+
     Navigator.pop(context);
   }
 
@@ -1840,17 +2053,11 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
               ),
             ],
           ),
-          // The stepper only exists when there's more than one step to be at.
-          AnimatedSize(
-            duration: AppMotion.small,
-            curve: AppMotion.easeOut,
-            alignment: Alignment.topLeft,
-            child: _hasVariants
-                ? Padding(
-                    padding: const EdgeInsets.only(top: 12, right: 14),
-                    child: _buildStepper(context),
-                  )
-                : const SizedBox(width: double.infinity),
+          // Every product now visits at least Details and Stock, so the
+          // stepper always has something to show.
+          Padding(
+            padding: const EdgeInsets.only(top: 12, right: 14),
+            child: _buildStepper(context),
           ),
         ],
       ),
@@ -1858,12 +2065,17 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
   }
 
   Widget _buildStepper(BuildContext context) {
-    const labels = ['Details', 'Options', 'Stock'];
-    final currentIndex = _ProductStep.values.indexOf(_step);
+    final steps = _activeSteps;
+    String labelFor(_ProductStep step) => switch (step) {
+      _ProductStep.details => 'Details',
+      _ProductStep.options => 'Options',
+      _ProductStep.stock => 'Stock',
+    };
+    final currentIndex = steps.indexOf(_step);
 
     return Row(
       children: [
-        for (var i = 0; i < labels.length; i++) ...[
+        for (var i = 0; i < steps.length; i++) ...[
           if (i > 0)
             Expanded(
               child: Container(
@@ -1874,7 +2086,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
             ),
           _StepMarker(
             number: i + 1,
-            label: labels[i],
+            label: labelFor(steps[i]),
             isDone: i < currentIndex,
             isCurrent: i == currentIndex,
             // Steps already cleared can be revisited; jumping ahead would
@@ -1882,7 +2094,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
             onTap: i < currentIndex
                 ? () => setState(() {
                     _stepError = null;
-                    _step = _ProductStep.values[i];
+                    _step = steps[i];
                   })
                 : null,
           ),
@@ -1895,7 +2107,8 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
     return switch (_step) {
       _ProductStep.details => _buildDetailsStep(context),
       _ProductStep.options => _buildOptionsStep(context),
-      _ProductStep.stock => _buildStockStep(context),
+      _ProductStep.stock when _hasVariants => _buildStockStep(context),
+      _ProductStep.stock => _buildFlatStockStep(context),
     };
   }
 
@@ -1911,6 +2124,11 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
           children: [
             _buildImagePicker(context),
             const SizedBox(width: 16),
+            // Name and price stacked in the column beside the photo, rather
+            // than price sharing a row below it — stock moved to its own
+            // step, so this pair is now the whole of what "details" means
+            // for a product's headline info, and reads as one block next to
+            // its photo instead of two.
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1929,9 +2147,37 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                           setState(() => _nameError = null);
                         }
                       },
+                      // A touch taller than this dialog's other fields —
+                      // together with Base price below it, the two now
+                      // match the photo well's height (measured with a
+                      // widget test, not eyeballed).
                       decoration: _fieldDecoration(
                         hint: 'e.g. Air Jordan 1 Low',
                         hasError: _nameError != null,
+                        verticalPadding: 17,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _FormField(
+                    label: 'Base price',
+                    error: _priceError,
+                    child: TextField(
+                      controller: _priceController,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      style: Theme.of(context).textTheme.bodyMedium,
+                      onChanged: (_) {
+                        if (_priceError != null) {
+                          setState(() => _priceError = null);
+                        }
+                      },
+                      decoration: _fieldDecoration(
+                        hint: '0.00',
+                        hasError: _priceError != null,
+                        prefixText: 'PHP',
+                        verticalPadding: 17,
                       ),
                     ),
                   ),
@@ -1940,66 +2186,76 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
             ),
           ],
         ),
-        const SizedBox(height: 16),
+        // Only meaningful once there's a vendor catalogue to file into —
+        // the mock-seeded build has no server-side category/brand at all.
+        if (context.read<InventoryCubit>().isRemote) ...[
+          const SizedBox(height: 16),
+          _buildCategoryBrandRow(context),
+        ],
+        // Only shown for a product that is already archived, to restore it —
+        // Active is otherwise the only status a product can have here, and a
+        // picker offering one permanently-selected option is not a choice.
+        // Archiving itself lives in the table's row/bulk actions, not here.
+        if (widget.product?.status == ProductStatus.archived) ...[
+          const SizedBox(height: 24),
+          _buildStatusField(context),
+        ],
+        const SizedBox(height: 24),
+        _buildVariantToggle(context),
+      ],
+    );
+  }
+
+  Widget _buildCategoryBrandRow(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
               child: _FormField(
-                label: 'Base price',
-                error: _priceError,
-                child: TextField(
-                  controller: _priceController,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  style: Theme.of(context).textTheme.bodyMedium,
-                  onChanged: (_) {
-                    if (_priceError != null) {
-                      setState(() => _priceError = null);
-                    }
-                  },
-                  decoration: _fieldDecoration(
-                    hint: '0.00',
-                    hasError: _priceError != null,
-                    prefixText: 'PHP',
-                  ),
+                label: 'Category',
+                child: AppDropdown<catalog.Category>(
+                  options: _categoryOptions,
+                  selected: _selectedCategory,
+                  labelOf: (category) => category.name,
+                  onSelected: (category) =>
+                      setState(() => _selectedCategory = category),
+                  hint: _loadingCatalogFilters ? 'Loading…' : 'None',
+                  enabled: !_loadingCatalogFilters,
                 ),
               ),
             ),
-            // With variants on, stock is entered per combination on step 3 —
-            // a single stock box here would contradict that.
-            if (!_hasVariants) ...[
-              const SizedBox(width: 12),
-              Expanded(
-                child: _FormField(
-                  label: 'Stock quantity',
-                  error: _stockError,
-                  child: TextField(
-                    controller: _stockController,
-                    keyboardType: TextInputType.number,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                    onChanged: (_) {
-                      if (_stockError != null) {
-                        setState(() => _stockError = null);
-                      }
-                    },
-                    decoration: _fieldDecoration(
-                      hint: 'e.g. 24',
-                      hasError: _stockError != null,
-                    ),
-                  ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _FormField(
+                label: 'Brand',
+                child: AppDropdown<Brand>(
+                  options: _brandOptions,
+                  selected: _selectedBrand,
+                  labelOf: (brand) => brand.name,
+                  onSelected: (brand) =>
+                      setState(() => _selectedBrand = brand),
+                  hint: _loadingCatalogFilters ? 'Loading…' : 'None',
+                  enabled: !_loadingCatalogFilters,
                 ),
               ),
-            ],
+            ),
           ],
         ),
-        // Section break, one step up the scale from the 16 between fields,
-        // so Status and the variants panel read as their own groups.
-        const SizedBox(height: 24),
-        _buildStatusField(context),
-        const SizedBox(height: 24),
-        _buildVariantToggle(context),
+        // Creating/renaming these lives in Settings, not here — this is the
+        // one moment a vendor is mid-way through a different task (adding a
+        // product), and giving it a whole create flow of its own would ask
+        // more of that moment than it should.
+        const SizedBox(height: 6),
+        Text(
+          'Add or edit these under Settings → Catalog.',
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(color: Colors.black38),
+        ),
       ],
     );
   }
@@ -2017,8 +2273,8 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
         // 1:1, matching how the table and POS grid render a product — what
         // you frame here is what you'll see there.
         SizedBox(
-          width: 104,
-          height: 104,
+          width: _photoWellSize,
+          height: _photoWellSize,
           child: Material(
             color: _inputFill,
             borderRadius: BorderRadius.circular(10),
@@ -2030,21 +2286,21 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                       imagePath: _imagePath,
                       imageBytes: _imageBytes,
                       borderRadius: BorderRadius.circular(10),
-                      iconSize: 26,
+                      iconSize: 30,
                     )
                   : const Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(
                           Icons.add_photo_alternate_outlined,
-                          size: 22,
+                          size: 28,
                           color: AppColors.primary,
                         ),
-                        SizedBox(height: 6),
+                        SizedBox(height: 8),
                         Text(
                           'Add photo',
                           style: TextStyle(
-                            fontSize: 11.5,
+                            fontSize: 12.5,
                             color: AppColors.primary,
                             fontWeight: FontWeight.w600,
                           ),
@@ -2059,7 +2315,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
           // The preview is now the confirmation, so there's no filename
           // caption to read — just the two things you'd want to do next.
           SizedBox(
-            width: 104,
+            width: _photoWellSize,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -2097,16 +2353,11 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
     );
   }
 
+  /// Only reachable when editing a product that is currently archived — see
+  /// the call site — so this is always the two-way "restore it or leave it
+  /// archived" choice, never offered on a product that couldn't be either.
   Widget _buildStatusField(BuildContext context) {
-    // Archived is only offered on an existing archived product: it's a state
-    // you restore *from*, not one you'd create a product into. Hiding it when
-    // it doesn't apply keeps the common case to a two-way choice.
-    final statuses = <ProductStatus>[
-      ProductStatus.active,
-      ProductStatus.draft,
-      if (widget.product?.status == ProductStatus.archived)
-        ProductStatus.archived,
-    ];
+    const statuses = [ProductStatus.active, ProductStatus.archived];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2132,12 +2383,10 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
         ),
         const SizedBox(height: 6),
         // Says what the choice actually does. Only Active stock reaches a
-        // bazaar; both other states are held back, for different reasons.
+        // bazaar.
         Text(
           switch (_status) {
             ProductStatus.active => 'Available to allocate to a bazaar.',
-            ProductStatus.draft =>
-              'Still being set up — cannot be allocated to a bazaar yet.',
             ProductStatus.archived =>
               'Out of circulation — cannot be allocated until set to Active.',
           },
@@ -2395,6 +2644,48 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
 
   // ------------------------------------------------------------ stock step
 
+  /// The flat product's stock step — its own screen now rather than a field
+  /// squeezed next to price on details, so it gets the same "one focused
+  /// question per step" treatment a variant product's per-combination stock
+  /// grid already had.
+  Widget _buildFlatStockStep(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'How much stock does this product have?',
+          style: Theme.of(
+            context,
+          ).textTheme.bodyMedium?.copyWith(color: Colors.black54),
+        ),
+        const SizedBox(height: 16),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 220),
+          child: _FormField(
+            label: 'Stock quantity',
+            error: _stockError,
+            child: TextField(
+              controller: _stockController,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              style: Theme.of(context).textTheme.bodyMedium,
+              onChanged: (_) {
+                if (_stockError != null) {
+                  setState(() => _stockError = null);
+                }
+              },
+              decoration: _fieldDecoration(
+                hint: 'e.g. 24',
+                hasError: _stockError != null,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildStockStep(BuildContext context) {
     final single = _variantCategories.length == 1;
     final nameA = _variantCategories.isEmpty
@@ -2568,12 +2859,12 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
   // ----------------------------------------------------------------- footer
 
   Widget _buildFooter(BuildContext context) {
-    final isLastStep = !_hasVariants || _step == _ProductStep.stock;
+    final isLastStep = _step == _ProductStep.stock;
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 14, 24, 16),
       child: Row(
         children: [
-          if (_hasVariants && _step != _ProductStep.details)
+          if (_step != _ProductStep.details)
             TextButton.icon(
               onPressed: _saving ? null : _goBack,
               icon: const Icon(Icons.arrow_back_rounded, size: 16),
@@ -2638,6 +2929,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
     String? prefixText,
     bool hasError = false,
     Color? fillColor,
+    double verticalPadding = 12,
   }) {
     const radius = BorderRadius.all(Radius.circular(8));
     OutlineInputBorder border(Color color, double width) {
@@ -2671,9 +2963,9 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
       fillColor: fillColor ?? _inputFill,
       contentPadding: EdgeInsets.fromLTRB(
         prefixText == null ? 12 : 0,
+        verticalPadding,
         12,
-        12,
-        12,
+        verticalPadding,
       ),
       // An invalid field carries a red outline so it's findable at a glance,
       // rather than relying on the message alone.
@@ -2955,7 +3247,11 @@ class _SortDropdownState extends State<_SortDropdown> {
       child: AnimatedContainer(
         duration: AppMotion.small,
         curve: AppMotion.easeOut,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        // Matched to the filter tabs' own height (36.5, measured with a
+        // widget test), same as the search field and export button beside
+        // it, so all three read as one row rather than three different
+        // heights.
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7.25),
         decoration: BoxDecoration(
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(8),

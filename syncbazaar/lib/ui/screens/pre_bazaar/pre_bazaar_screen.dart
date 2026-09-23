@@ -22,6 +22,7 @@ import '../../../models/company.dart';
 import '../../../models/user.dart';
 import '../../widgets/confirmation_dialog.dart';
 import '../../widgets/date_range_picker_dialog.dart';
+import '../../widgets/loading_dialog.dart';
 import 'widgets/bazaar_details_step.dart';
 import 'widgets/stock_allocation_step.dart';
 
@@ -304,10 +305,17 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
         final preBazaarCubit = context.read<PreBazaarCubit>();
         final messenger = ScaffoldMessenger.of(context);
         final bazaarName = _eventName.text.trim();
-        await preBazaarCubit.submitAllocation(
-          user: widget.user,
-          detailsJson: details,
-        );
+
+        final dialogNavigator = Navigator.of(context, rootNavigator: true);
+        showLoadingDialog(context, 'Submitting for approval…');
+        try {
+          await preBazaarCubit.submitAllocation(
+            user: widget.user,
+            detailsJson: details,
+          );
+        } finally {
+          dialogNavigator.pop();
+        }
 
         await _resetPreBazaarForm();
 
@@ -388,72 +396,82 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
         }
       }
 
-      final reserved = await productRepository.reserveStocksByAllocationKey(
-        allocationsByAllocationKey,
-      );
-
-      if (!reserved) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Unable to reserve stock. Please review allocations and try again.',
-              ),
-            ),
-          );
-        }
+      if (!mounted) {
         return;
       }
-
-      final createdEvent = await eventRepository.createEvent(
-        name: _eventName.text.trim(),
-        companyId: _selectedCompanyId ?? _locations.first.id,
-        startDate: _dateRange!.start,
-        endDate: _dateRange!.end,
-        acceptedPaymentMethods: selectedMethods
-            .map((method) => method.name)
-            .toList(),
-        customOtherMethods: selectedMethods
-            .map(
-              (method) => BazaarPaymentMethod(
-                name: method.name,
-                extraFieldLabel: method.extraFieldLabel,
-              ),
-            )
-            .toList(),
-        allocationsByAllocationKey: allocationsByAllocationKey,
-      );
-
-      if (_assignedEmployeeIds.isNotEmpty) {
-        await staffCubit.assignEmployeesToBazaar(
-          eventId: createdEvent.id,
-          employeeIds: _assignedEmployeeIds.toList(),
+      final dialogNavigator = Navigator.of(context, rootNavigator: true);
+      showLoadingDialog(context, 'Publishing bazaar…');
+      try {
+        final reserved = await productRepository.reserveStocksByAllocationKey(
+          allocationsByAllocationKey,
         );
-      }
 
-      await dashboardCubit.load(widget.user);
-      await posCubit.load(widget.user);
-      await inventoryCubit.load();
-      await ordersCubit.load();
+        if (!reserved) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Unable to reserve stock. Please review allocations and try again.',
+                ),
+              ),
+            );
+          }
+          return;
+        }
 
-      // Described by what the server actually did, not by what was asked for.
-      // An owner's bazaar is meant to go live immediately, but the server can
-      // still file it as a proposal, and reporting "published" over the top of
-      // that is how a bazaar came to be sold against on one machine while
-      // being invisible everywhere else. Once the server honours the role, an
-      // owner stops seeing the pending wording without anything changing here.
-      final pending = eventRepository.isProposal(createdEvent.id);
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            pending
-                ? 'Bazaar submitted for approval. It will not appear in Sales '
-                      'until it is approved.'
-                : 'Bazaar published successfully.',
+        final createdEvent = await eventRepository.createEvent(
+          name: _eventName.text.trim(),
+          companyId: _selectedCompanyId ?? _locations.first.id,
+          startDate: _dateRange!.start,
+          endDate: _dateRange!.end,
+          acceptedPaymentMethods: selectedMethods
+              .map((method) => method.name)
+              .toList(),
+          customOtherMethods: selectedMethods
+              .map(
+                (method) => BazaarPaymentMethod(
+                  name: method.name,
+                  extraFieldLabel: method.extraFieldLabel,
+                ),
+              )
+              .toList(),
+          allocationsByAllocationKey: allocationsByAllocationKey,
+        );
+
+        if (_assignedEmployeeIds.isNotEmpty) {
+          await staffCubit.assignEmployeesToBazaar(
+            eventId: createdEvent.id,
+            employeeIds: _assignedEmployeeIds.toList(),
+          );
+        }
+
+        await dashboardCubit.load(widget.user);
+        await posCubit.load(widget.user);
+        await inventoryCubit.load();
+        await ordersCubit.load();
+
+        // Described by what the server actually did, not by what was asked
+        // for. An owner's bazaar is meant to go live immediately, but the
+        // server can still file it as a proposal, and reporting "published"
+        // over the top of that is how a bazaar came to be sold against on
+        // one machine while being invisible everywhere else. Once the
+        // server honours the role, an owner stops seeing the pending
+        // wording without anything changing here.
+        final pending = eventRepository.isProposal(createdEvent.id);
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              pending
+                  ? 'Bazaar submitted for approval. It will not appear in '
+                        'Sales until it is approved.'
+                  : 'Bazaar published successfully.',
+            ),
+            duration: Duration(seconds: pending ? 5 : 4),
           ),
-          duration: Duration(seconds: pending ? 5 : 4),
-        ),
-      );
+        );
+      } finally {
+        dialogNavigator.pop();
+      }
       await _resetPreBazaarForm();
     }
   }

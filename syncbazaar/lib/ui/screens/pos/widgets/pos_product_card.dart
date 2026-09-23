@@ -20,7 +20,13 @@ import '../../../../core/utils/formatters.dart';
 /// and the button's radius falls out of it.
 const double _cardRadius = 10;
 const double _contentInset = 6;
-const double _buttonRadius = _cardRadius - _contentInset;
+const double _borderWidth = 1;
+
+/// The card's hairline border adds its own width to the gap: `Container`
+/// insets its child by exactly the border's thickness whenever a decoration
+/// has both, so the button sits `_contentInset + _borderWidth` inside the
+/// card's outer edge, not just `_contentInset`.
+const double _buttonRadius = _cardRadius - _contentInset - _borderWidth;
 
 /// A compact rounded badge for a count, e.g. remaining stock.
 class StockPill extends StatelessWidget {
@@ -60,6 +66,16 @@ class PosProductCard extends StatefulWidget {
   final VoidCallback onTap;
   final bool isEnabled;
 
+  /// Height of the name/price/stock/button block below the photo.
+  ///
+  /// Fixed regardless of column width — per the grid-tile rule in
+  /// DESIGN_GUIDELINES.md, this content must not shrink with the viewport
+  /// or the Add-to-cart button eventually clips. The photo above it is a
+  /// square (`AspectRatio(aspectRatio: 1)`), so the grid's own
+  /// `mainAxisExtent` has to be `cardWidth + detailsHeight` for the two to
+  /// add up exactly — see the call site in `pos_screen.dart`.
+  static const double detailsHeight = 128;
+
   @override
   State<PosProductCard> createState() => _PosProductCardState();
 }
@@ -89,6 +105,10 @@ class _PosProductCardState extends State<PosProductCard> {
             decoration: BoxDecoration(
               color: AppColors.surface,
               borderRadius: BorderRadius.circular(_cardRadius),
+              // A near-white card on the near-white page background reads
+              // as one surface without this — the same flat-card hairline
+              // used everywhere else in the app, not a new border style.
+              border: Border.all(color: AppColors.border, width: _borderWidth),
               boxShadow: const [
                 BoxShadow(
                   color: Color(0x11000000),
@@ -98,15 +118,19 @@ class _PosProductCardState extends State<PosProductCard> {
               ],
             ),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 8:12 rather than an even split. Giving the price its own
-                // line costs a line's worth of height, and the text block is
-                // where that has to come from — at the smallest size the grid
-                // produces, an even split overflows by 15px. The photo loses
-                // proportionally little and is still the largest element.
-                Expanded(
-                  flex: 8,
+                // Square rather than a fraction of the tile's height — most
+                // of what actually gets sold on a bazaar table isn't shoes,
+                // and a wide, short crop was tuned for a product shape that
+                // won't always be the one on screen. `mainAxisExtent` at the
+                // call site adds this square's height (= the tile's own
+                // width) back to `detailsHeight` explicitly, rather than
+                // switching the grid to `childAspectRatio` — the fixed block
+                // below still must not shrink with the viewport.
+                AspectRatio(
+                  aspectRatio: 1,
                   child: ProductThumbnail(
                     imagePath: product.imagePath,
                     imageBytes: product.imageBytes,
@@ -114,10 +138,16 @@ class _PosProductCardState extends State<PosProductCard> {
                       topLeft: Radius.circular(_cardRadius),
                       topRight: Radius.circular(_cardRadius),
                     ),
+                    // Whole photo, not a crop — a square box rarely matches
+                    // a product photo's own shape, and cropping to fill it
+                    // was cutting real products off rather than just their
+                    // margins. Whatever space that leaves is filled by the
+                    // thumbnail's own placeholder gray, not left blank.
+                    fit: BoxFit.contain,
                   ),
                 ),
-                Expanded(
-                  flex: 12,
+                SizedBox(
+                  height: PosProductCard.detailsHeight,
                   child: Padding(
                     // Sides and bottom are the gap the corner rule is
                     // measured against, so they have to match each other.
@@ -139,7 +169,7 @@ class _PosProductCardState extends State<PosProductCard> {
                           style: Theme.of(context).textTheme.bodyMedium
                               ?.copyWith(fontWeight: FontWeight.w700),
                         ),
-                        const Spacer(),
+                        const SizedBox(height: 8),
                         // Price on its own line rather than sharing a row with
                         // the stock pill. Sharing one meant the two competed
                         // for a 150-190px tile, and the price — the longer and
@@ -159,6 +189,11 @@ class _PosProductCardState extends State<PosProductCard> {
                         const SizedBox(height: 4),
                         StockPill(quantity: product.stockQuantity),
                         const SizedBox(height: 8),
+                        // Absorbs whatever `detailsHeight` doesn't exactly
+                        // match, so the button still sits flush against the
+                        // bottom padding — the corner-radius relation below
+                        // is measured off that edge.
+                        const Spacer(),
                         SizedBox(
                           width: double.infinity,
                           height: 32,

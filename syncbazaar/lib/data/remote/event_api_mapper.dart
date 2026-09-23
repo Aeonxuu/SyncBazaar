@@ -69,10 +69,17 @@ List<BazaarEvent> mapEventsResponse(
 /// was sold against that row, not against a product or a variant, because the
 /// same variant has a separate row — and a separate count — at every bazaar it
 /// was allocated to.
+///
+/// [soldByAllocationKey], when given, is filled with `amount_sold` itself.
+/// The server's `amount_allocated` is the *total* ever committed to this
+/// bazaar, not what's left — so re-sending [allocations]' remaining figure
+/// as a new `amount_allocated` would understate it by however much already
+/// sold. Whatever rebuilds that field has to add this back on.
 Map<String, int> mapEventStockResponse(
   List<dynamic> payload, {
   required String? Function(int variantId) allocationKeyForVariant,
   Map<String, int>? stockIdByAllocationKey,
+  Map<String, int>? soldByAllocationKey,
 }) {
   final allocations = <String, int>{};
   for (final entry in payload) {
@@ -98,6 +105,9 @@ Map<String, int> mapEventStockResponse(
     final stockId = (row['id'] as num?)?.toInt();
     if (stockId != null) {
       stockIdByAllocationKey?[key] = stockId;
+    }
+    if (soldByAllocationKey != null) {
+      soldByAllocationKey[key] = (soldByAllocationKey[key] ?? 0) + sold;
     }
   }
   return allocations;

@@ -51,7 +51,15 @@ class ApiProductBundle {
 /// its own variants, so the option lists here are built from those and the
 /// `attributes` block is used solely to learn which category a value belongs
 /// to.
-ApiProductBundle mapProductsResponse(List<dynamic> payload) {
+/// [categoryNameById]/[brandNameById] resolve the plain FK ids the server
+/// sends (`category`, `brand`) to a name to show. The read serializer does
+/// not nest those the way it does `attributes`, so the caller supplies
+/// whatever it already fetched for the vendor's category/brand pickers.
+ApiProductBundle mapProductsResponse(
+  List<dynamic> payload, {
+  Map<int, String> categoryNameById = const {},
+  Map<int, String> brandNameById = const {},
+}) {
   final products = <Product>[];
   final groupsByProductId = <int, List<ProductVariantGroup>>{};
   final optionsByGroupId = <int, List<ProductVariantOption>>{};
@@ -164,6 +172,9 @@ ApiProductBundle mapProductsResponse(List<dynamic> payload) {
       }
     }
 
+    final categoryId = (product['category'] as num?)?.toInt();
+    final brandId = (product['brand'] as num?)?.toInt();
+
     products.add(
       Product(
         id: productId,
@@ -174,6 +185,10 @@ ApiProductBundle mapProductsResponse(List<dynamic> payload) {
         // object storage exists; `ProductThumbnail` already handles both.
         imagePath: _imageOf(variants),
         stockQuantity: 0, // recomputed from the stock map by the repository
+        categoryId: categoryId,
+        categoryName: categoryId == null ? null : categoryNameById[categoryId],
+        brandId: brandId,
+        brandName: brandId == null ? null : brandNameById[brandId],
       ),
     );
   }

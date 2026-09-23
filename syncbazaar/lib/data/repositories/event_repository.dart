@@ -41,6 +41,16 @@ class EventRepository {
   /// Empty in the in-memory and mock-seeded paths, where no such row exists.
   final Map<int, Map<String, int>> _stockIdsByEventId = {};
 
+  /// Event id, then combination, to `amount_sold` on that row.
+  ///
+  /// `_allocationsByEventId` holds what's *left* to sell, because that's what
+  /// the POS wants — but the server's `amount_allocated` is the running
+  /// total ever committed, not the remainder. Editing a bazaar's stock has to
+  /// add this back on before writing `amount_allocated`, or it silently
+  /// shrinks every already-selling row down to its leftover figure, which
+  /// the server then refuses for going below what was sold.
+  final Map<int, Map<String, int>> _soldByEventId = {};
+
   int? stockIdFor({required int eventId, required String allocationKey}) =>
       _stockIdsByEventId[eventId]?[allocationKey];
 
@@ -230,16 +240,20 @@ class EventRepository {
 
     _allocationsByEventId.clear();
     _stockIdsByEventId.clear();
+    _soldByEventId.clear();
     for (final event in events) {
       final stock =
           await auth.api.get('/api/bazaar/event/${event.id}/stock/') as List;
       final stockIds = <String, int>{};
+      final sold = <String, int>{};
       _allocationsByEventId[event.id] = mapEventStockResponse(
         stock,
         allocationKeyForVariant: products.allocationKeyForVariant,
         stockIdByAllocationKey: stockIds,
+        soldByAllocationKey: sold,
       );
       _stockIdsByEventId[event.id] = stockIds;
+      _soldByEventId[event.id] = sold;
     }
   }
 
@@ -300,6 +314,33 @@ class EventRepository {
     await _ensureLoaded();
     _refreshStatuses();
     return _sortedForDisplay(_events);
+  }
+
+  /// How many ended bazaars still have stock sitting at the stall rather
+  /// than sold or returned — each one [PostBazaarScreen]'s Inventory
+  /// Reconciliation tab lists for a physical count-and-return, keyed off
+  /// the same `quantity > 0` rule documented in
+  /// `reconciliation_leftovers_test.dart`, but only once that screen is
+  /// open. This is that same check, vendor-wide, for the nav badge — one
+  /// bazaar counts once, however many combinations are still left in it.
+  ///
+  /// A finalized bazaar needs no separate "reconciled" flag: [finalizeEvent]
+  /// already clears its allocation map to empty, so it naturally drops out
+  /// once handled.
+  Future<int> bazaarsPendingReconciliation() async {
+    await _ensureLoaded();
+    _refreshStatuses();
+    var count = 0;
+    for (final event in _events) {
+      if (event.status != BazaarStatus.ended) {
+        continue;
+      }
+      final allocations = await allocationsForEventByAllocationKey(event.id);
+      if (allocations.values.any((quantity) => quantity > 0)) {
+        count++;
+      }
+    }
+    return count;
   }
 
   Future<BazaarEvent> createEvent({
@@ -454,6 +495,7 @@ class EventRepository {
       stockIds[entry.key] = (row['id'] as num).toInt();
     }
     _stockIdsByEventId[eventId] = stockIds;
+    _soldByEventId[eventId] = {};
 
     return (id: eventId, approved: approved);
   }
@@ -511,6 +553,7 @@ class EventRepository {
       // sellable any more and the catalogue's figures have moved.
       _allocationsByEventId[eventId] = {};
       _stockIdsByEventId[eventId] = {};
+      _soldByEventId[eventId] = {};
       await _products?.refresh();
     }
     final idx = _events.indexWhere((e) => e.id == eventId);
@@ -675,12 +718,17 @@ class EventRepository {
     }
 
     final existing = Map<String, int>.from(_stockIdsByEventId[eventId] ?? {});
+    final sold = _soldByEventId[eventId] ?? const {};
     for (final entry in allocationsByAllocationKey.entries) {
       final stockId = existing.remove(entry.key);
       if (stockId != null) {
+        // `entry.value` is what's left to sell (see `_soldByEventId`'s doc
+        // comment), but `amount_allocated` is the running total — so the
+        // amount already sold has to go back on, or this would resubmit a
+        // number the server rejects for undercutting its own sales.
         await auth.api.patch(
           '/api/bazaar/event/$eventId/stock/$stockId/',
-          body: {'amount_allocated': entry.value},
+          body: {'amount_allocated': entry.value + (sold[entry.key] ?? 0)},
         );
         continue;
       }
@@ -704,15 +752,18 @@ class EventRepository {
     }
 
     // Whatever is left was allocated before and is not any more.
-    for (final stockId in existing.values) {
+    for (final entry in existing.entries) {
+      final stockId = entry.value;
       try {
         await auth.api.delete('/api/bazaar/event/$eventId/stock/$stockId/');
       } on ApiException {
         // The row has sales against it, and the server protects those. Nothing
-        // more can be sold from it instead, which is what removing it meant.
+        // more can be sold from it instead, which is what removing it meant —
+        // brought down to what's already sold, since the server refuses
+        // anything lower than that.
         await auth.api.patch(
           '/api/bazaar/event/$eventId/stock/$stockId/',
-          body: {'amount_allocated': 0},
+          body: {'amount_allocated': sold[entry.key] ?? 0},
         );
       }
     }
@@ -770,6 +821,7 @@ class EventRepository {
         stockIds[entry.key] = (row['id'] as num).toInt();
       }
       _stockIdsByEventId[eventId] = stockIds;
+      _soldByEventId[eventId] = {};
 
       await auth.api.patch(
         '/api/bazaar/event/$eventId/',
@@ -818,5 +870,6 @@ class EventRepository {
     _events.removeWhere((e) => e.id == eventId);
     _allocationsByEventId.remove(eventId);
     _stockIdsByEventId.remove(eventId);
+    _soldByEventId.remove(eventId);
   }
 }

@@ -69,6 +69,18 @@ dependencies:
   # Everything this feature needs (decode, crop, resize, encodePng) predates 4.9.
   zxing2: ^0.2.4
   image: ^4.3.0
+  # Disk-backed cache for remote product photos. Flutter's own ImageCache is
+  # memory-only, so a vendor's uploaded photos would vanish on app restart or
+  # once memory pressure evicted them -- exactly the offline-till scenario
+  # this app exists for. cached_network_image persists the decoded file to
+  # disk on first successful load and serves that copy indefinitely after,
+  # wifi or no wifi.
+  cached_network_image: ^3.4.1
+  # cached_network_image pulls this in transitively, but ProductThumbnail
+  # imports HttpExceptionWithStatus directly (to tell "server said no" from
+  # "connection/DNS failed" for retry purposes), so it's declared here rather
+  # than relied on by luck of the dependency tree.
+  flutter_cache_manager: ^3.4.1
 
 dev_dependencies:
   flutter_test:

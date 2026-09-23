@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import '../../models/brand.dart';
+import '../../models/category.dart';
 import '../../models/product.dart';
 import '../../models/product_variant.dart';
 import '../remote/api_client.dart';
@@ -182,6 +184,13 @@ class ProductRepository {
 
   final List<Product> _products = [];
 
+  /// The vendor's own categories and brands, refetched alongside the
+  /// catalogue. Empty in the mock-seeded build — there is no local
+  /// equivalent, so the picker built from [listCategories]/[listBrands]
+  /// simply has nothing to offer there.
+  final List<Category> _categories = [];
+  final List<Brand> _brands = [];
+
   /// Up to 2 variant categories per product, in the order they were created.
   final Map<int, List<ProductVariantGroup>> _variantGroupsByProductId = {};
   final Map<int, List<ProductVariantOption>> _variantOptionsByGroupId = {};
@@ -196,6 +205,13 @@ class ProductRepository {
   Future<void>? _seedFuture;
 
   static const int _maxVariantCategories = 2;
+
+  /// Reserved attribute/value names used only to give a flat (no variant
+  /// categories) product's single server-side variant an attribute value,
+  /// since the server requires at least one. Never surfaced to a vendor —
+  /// see the comment in [_saveProductRemote].
+  static const String _flatAttributeName = 'SyncBazaar Internal';
+  static const String _flatValueName = 'Single Variant';
 
   /// Combinations retired on their own, independent of their product's
   /// lifecycle state.
@@ -237,10 +253,147 @@ class ProductRepository {
     return _products.map(_withComputedStock).toList();
   }
 
+  /// The vendor's own categories, for the product form's picker. Empty
+  /// without a session.
+  Future<List<Category>> listCategories() async {
+    await _ensureSeeded();
+    return List<Category>.from(_categories);
+  }
+
+  /// The vendor's own brands, for the product form's picker. Empty without
+  /// a session.
+  Future<List<Brand>> listBrands() async {
+    await _ensureSeeded();
+    return List<Brand>.from(_brands);
+  }
+
+  /// Adds a category to the vendor's own list and returns it.
+  Future<Category> createCategory(String name) async {
+    final auth = _auth;
+    final vendorId = auth?.vendorId;
+    if (auth == null || vendorId == null) {
+      throw StateError('Cannot create a category without a session.');
+    }
+    final created =
+        await auth.api.post(
+              '/api/core/vendor/$vendorId/category/',
+              body: {'name': name.trim()},
+            )
+            as Map<String, dynamic>;
+    final category = Category(
+      id: (created['id'] as num).toInt(),
+      name: created['name'] as String? ?? name.trim(),
+    );
+    _categories.add(category);
+    return category;
+  }
+
+  /// Adds a brand to the vendor's own list and returns it.
+  Future<Brand> createBrand(String name) async {
+    final auth = _auth;
+    final vendorId = auth?.vendorId;
+    if (auth == null || vendorId == null) {
+      throw StateError('Cannot create a brand without a session.');
+    }
+    final created =
+        await auth.api.post(
+              '/api/core/vendor/$vendorId/brand/',
+              body: {'name': name.trim()},
+            )
+            as Map<String, dynamic>;
+    final brand = Brand(
+      id: (created['id'] as num).toInt(),
+      name: created['name'] as String? ?? name.trim(),
+    );
+    _brands.add(brand);
+    return brand;
+  }
+
+  /// Renames a category in place and returns the updated row.
+  Future<Category> renameCategory({required int id, required String name}) async {
+    final auth = _auth;
+    final vendorId = auth?.vendorId;
+    if (auth == null || vendorId == null) {
+      throw StateError('Cannot rename a category without a session.');
+    }
+    final updated =
+        await auth.api.patch(
+              '/api/core/vendor/$vendorId/category/$id/',
+              body: {'name': name.trim()},
+            )
+            as Map<String, dynamic>;
+    final category = Category(
+      id: id,
+      name: updated['name'] as String? ?? name.trim(),
+    );
+    final idx = _categories.indexWhere((c) => c.id == id);
+    if (idx == -1) {
+      _categories.add(category);
+    } else {
+      _categories[idx] = category;
+    }
+    return category;
+  }
+
+  /// Renames a brand in place and returns the updated row.
+  Future<Brand> renameBrand({required int id, required String name}) async {
+    final auth = _auth;
+    final vendorId = auth?.vendorId;
+    if (auth == null || vendorId == null) {
+      throw StateError('Cannot rename a brand without a session.');
+    }
+    final updated =
+        await auth.api.patch(
+              '/api/core/vendor/$vendorId/brand/$id/',
+              body: {'name': name.trim()},
+            )
+            as Map<String, dynamic>;
+    final brand = Brand(id: id, name: updated['name'] as String? ?? name.trim());
+    final idx = _brands.indexWhere((b) => b.id == id);
+    if (idx == -1) {
+      _brands.add(brand);
+    } else {
+      _brands[idx] = brand;
+    }
+    return brand;
+  }
+
+  /// Removes a category. The server drops any product's reference to it
+  /// rather than refusing (`on_delete=SET_NULL`), so this never fails
+  /// because something is using it — those products simply end up
+  /// uncategorised.
+  Future<void> deleteCategory(int id) async {
+    final auth = _auth;
+    final vendorId = auth?.vendorId;
+    if (auth == null || vendorId == null) {
+      throw StateError('Cannot delete a category without a session.');
+    }
+    await auth.api.delete('/api/core/vendor/$vendorId/category/$id/');
+    _categories.removeWhere((c) => c.id == id);
+  }
+
+  /// Removes a brand. Same `SET_NULL` behaviour as [deleteCategory].
+  Future<void> deleteBrand(int id) async {
+    final auth = _auth;
+    final vendorId = auth?.vendorId;
+    if (auth == null || vendorId == null) {
+      throw StateError('Cannot delete a brand without a session.');
+    }
+    await auth.api.delete('/api/core/vendor/$vendorId/brand/$id/');
+    _brands.removeWhere((b) => b.id == id);
+  }
+
   /// Saves a product. [variantGroups] holds 0-2 variant categories (e.g.
   /// Color, Size). [combinationStocks] supplies the stock for each
   /// sellable combination, keyed by [combinationValueKey]. When
   /// [variantGroups] is empty, [stockQuantity] is used as the flat stock.
+  ///
+  /// Writes to the server when this catalogue is the vendor's
+  /// ([isRemote]), and stays local-only otherwise. The two paths share a
+  /// signature but not an implementation: the server splits a product into
+  /// a product row plus one `ProductVariant` row per combination, created or
+  /// updated separately, so [_saveProductRemote] handles that orchestration
+  /// on its own rather than reusing [_replaceVariantsForProduct].
   Future<Product> saveProduct({
     int? id,
     required String name,
@@ -252,8 +405,28 @@ class ProductRepository {
     Map<String, int> combinationStocks = const {},
     int stockQuantity = 0,
     ProductStatus status = ProductStatus.active,
+    int? categoryId,
+    String? categoryName,
+    int? brandId,
+    String? brandName,
   }) async {
     await _ensureSeeded();
+    if (isRemote) {
+      return _saveProductRemote(
+        id: id,
+        name: name,
+        description: description,
+        lowestPrice: lowestPrice,
+        imagePath: imagePath,
+        imageBytes: imageBytes,
+        variantGroups: variantGroups,
+        combinationStocks: combinationStocks,
+        stockQuantity: stockQuantity,
+        status: status,
+        categoryId: categoryId,
+        brandId: brandId,
+      );
+    }
     final normalizedName = name.trim();
     final normalizedDescription = description?.trim().isEmpty == true
         ? null
@@ -269,6 +442,10 @@ class ProductRepository {
       imagePath: imagePath,
       imageBytes: imageBytes,
       status: status,
+      categoryId: categoryId,
+      categoryName: categoryName,
+      brandId: brandId,
+      brandName: brandName,
     );
 
     if (existingIdx == -1) {
@@ -288,6 +465,293 @@ class ProductRepository {
     }
 
     return next;
+  }
+
+  /// The server-backed half of [saveProduct].
+  ///
+  /// `description` and `status` have no server column at all — the
+  /// backend's `Product` model has no such fields — so both are kept locally,
+  /// the same way [imageBytes] already is for the local path. A save touches
+  /// only its own product; every other product's locally-held fields are
+  /// snapshotted first and reapplied after [refresh], since a plain refetch
+  /// would otherwise reset them all to their defaults.
+  Future<Product> _saveProductRemote({
+    required int? id,
+    required String name,
+    required String? description,
+    required double lowestPrice,
+    required String? imagePath,
+    required Uint8List? imageBytes,
+    required List<VariantCategoryDraft> variantGroups,
+    required Map<String, int> combinationStocks,
+    required int stockQuantity,
+    required ProductStatus status,
+    int? categoryId,
+    int? brandId,
+  }) async {
+    final api = _auth!.api;
+    final vendorId = _auth.vendorId!;
+    final normalizedName = name.trim();
+    final normalizedDescription = description?.trim().isEmpty == true
+        ? null
+        : description?.trim();
+    final groups = variantGroups.take(_maxVariantCategories).toList();
+
+    // groupIndex -> trimmed option text -> its resolved server value.
+    final resolvedByGroup = <int, Map<String, ({int id, double extraPrice})>>{};
+    final attributeIds = <int>[];
+
+    var attributes =
+        (await api.get('/api/core/attribute/') as List)
+            .cast<Map<String, dynamic>>();
+
+    for (var i = 0; i < groups.length; i++) {
+      final group = groups[i];
+      final groupName = group.name.trim();
+      var attribute = _findByField(attributes, 'name', groupName);
+      if (attribute == null) {
+        attribute =
+            await api.post('/api/core/attribute/', body: {'name': groupName})
+                as Map<String, dynamic>;
+        attribute = {...attribute, 'values': const []};
+        attributes = [...attributes, attribute];
+      }
+      final attributeId = (attribute['id'] as num).toInt();
+      attributeIds.add(attributeId);
+
+      var values = (attribute['values'] as List? ?? const [])
+          .cast<Map<String, dynamic>>();
+      final resolved = <String, ({int id, double extraPrice})>{};
+      final seen = <String>{};
+      for (final rawValue in group.optionValues) {
+        final value = rawValue.trim();
+        if (value.isEmpty || !seen.add(value.toUpperCase())) {
+          continue;
+        }
+        var match = _findByField(values, 'value', value);
+        if (match == null) {
+          match =
+              await api.post(
+                    '/api/core/attribute/$attributeId/value/',
+                    body: {'value': value},
+                  )
+                  as Map<String, dynamic>;
+          values = [...values, match];
+        }
+        resolved[value] = (
+          id: (match['id'] as num).toInt(),
+          extraPrice: group.extraPriceByValue[rawValue] ?? 0,
+        );
+      }
+      resolvedByGroup[i] = resolved;
+    }
+
+    // The server requires every variant to carry at least one attribute
+    // value — there is no such thing as a bare `ProductVariant` there. A
+    // flat product (no variant categories chosen in the form) still needs
+    // exactly one variant to be its single sellable row, so it gets one
+    // resolved value from a reserved attribute that is never added to the
+    // product's own `attributes` list. That is what keeps it invisible: the
+    // mapper only turns a value into a variant category when its attribute
+    // is in `product.attributes`, so this one is read back as having none.
+    int? flatValueId;
+    if (groups.isEmpty) {
+      var flatAttribute = _findByField(attributes, 'name', _flatAttributeName);
+      if (flatAttribute == null) {
+        flatAttribute =
+            await api.post(
+                  '/api/core/attribute/',
+                  body: {'name': _flatAttributeName},
+                )
+                as Map<String, dynamic>;
+        flatAttribute = {...flatAttribute, 'values': const []};
+      }
+      final flatAttributeId = (flatAttribute['id'] as num).toInt();
+      final flatValues = (flatAttribute['values'] as List? ?? const [])
+          .cast<Map<String, dynamic>>();
+      var flatValue = _findByField(flatValues, 'value', _flatValueName);
+      flatValue ??=
+          await api.post(
+                '/api/core/attribute/$flatAttributeId/value/',
+                body: {'value': _flatValueName},
+              )
+              as Map<String, dynamic>;
+      flatValueId = (flatValue['id'] as num).toInt();
+    }
+
+    final productBody = {
+      'name': normalizedName,
+      'attributes': attributeIds,
+      'category': categoryId,
+      'brand': brandId,
+    };
+    int productId;
+    if (id == null) {
+      final created =
+          await api.post(
+                '/api/core/vendor/$vendorId/product/',
+                body: productBody,
+              )
+              as Map<String, dynamic>;
+      productId = (created['id'] as num).toInt();
+    } else {
+      productId = id;
+      await api.patch(
+        '/api/core/vendor/$vendorId/product/$productId/',
+        body: productBody,
+      );
+    }
+
+    // Desired variant rows, keyed the same way the loaded catalogue is, so
+    // they line up against `_variantIdByAllocationKey` below.
+    final desired = <String, Map<String, dynamic>>{};
+    if (groups.isEmpty) {
+      desired[allocationKey(productId)] = {
+        'attribute_values': [flatValueId!],
+        'price': lowestPrice.toStringAsFixed(2),
+        'stock_quantity': stockQuantity,
+      };
+    } else if (groups.length == 1) {
+      for (final entry in resolvedByGroup[0]!.entries) {
+        final key = allocationKey(productId, optionIdA: entry.value.id);
+        desired[key] = {
+          'attribute_values': [entry.value.id],
+          'price': (lowestPrice + entry.value.extraPrice).toStringAsFixed(2),
+          'stock_quantity':
+              combinationStocks[combinationValueKey(entry.key)] ?? 0,
+        };
+      }
+    } else {
+      for (final entryA in resolvedByGroup[0]!.entries) {
+        for (final entryB in resolvedByGroup[1]!.entries) {
+          final key = allocationKey(
+            productId,
+            optionIdA: entryA.value.id,
+            optionIdB: entryB.value.id,
+          );
+          desired[key] = {
+            'attribute_values': [entryA.value.id, entryB.value.id],
+            'price': (lowestPrice + entryA.value.extraPrice + entryB.value.extraPrice)
+                .toStringAsFixed(2),
+            'stock_quantity':
+                combinationStocks[combinationValueKey(
+                  entryA.key,
+                  entryB.key,
+                )] ??
+                0,
+          };
+        }
+      }
+    }
+
+    final previousKeys = id == null
+        ? const <String>{}
+        : _stockByAllocationKey.keys
+              .where((key) => productIdFromKey(key) == productId)
+              .toSet();
+
+    // Any variant will do to carry the product's photo — the mapper reads
+    // whichever one has an image, not a particular one — so the first
+    // written this call is as good as any.
+    int? primaryVariantId;
+    for (final entry in desired.entries) {
+      final body = {
+        ...entry.value,
+        if (imagePath != null) 'image_link': imagePath,
+      };
+      final existingVariantId = _variantIdByAllocationKey[entry.key];
+      int variantId;
+      if (existingVariantId != null) {
+        await api.patch(
+          '/api/core/vendor/$vendorId/product/$productId/variant/$existingVariantId/',
+          body: body,
+        );
+        variantId = existingVariantId;
+      } else {
+        final created =
+            await api.post(
+                  '/api/core/vendor/$vendorId/product/$productId/variant/',
+                  body: {'product': productId, ...body},
+                )
+                as Map<String, dynamic>;
+        variantId = (created['id'] as num).toInt();
+      }
+      primaryVariantId ??= variantId;
+    }
+
+    // The picked photo itself: a separate multipart call, since the JSON
+    // body above only carries a link for bundled/remote assets.
+    if (imageBytes != null && primaryVariantId != null) {
+      await api.uploadFile(
+        '/api/core/vendor/$vendorId/product/$productId/variant/$primaryVariantId/image/',
+        bytes: imageBytes,
+        field: 'image',
+        filename:
+            '${normalizedName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_')}.png',
+      );
+    }
+
+    for (final key in previousKeys) {
+      if (desired.containsKey(key)) {
+        continue;
+      }
+      final variantId = _variantIdByAllocationKey[key];
+      if (variantId != null) {
+        await api.delete(
+          '/api/core/vendor/$vendorId/product/$productId/variant/$variantId/',
+        );
+      }
+    }
+
+    final localOnly = <int, ({ProductStatus status, String? description, Uint8List? imageBytes})>{
+      for (final product in _products)
+        product.id: (
+          status: product.status,
+          description: product.description,
+          imageBytes: product.imageBytes,
+        ),
+    };
+
+    await refresh();
+
+    final merged = _products.map((product) {
+      final isSaved = product.id == productId;
+      final local = localOnly[product.id];
+      return Product(
+        id: product.id,
+        name: product.name,
+        description: isSaved ? normalizedDescription : local?.description,
+        lowestPrice: product.lowestPrice,
+        stockQuantity: product.stockQuantity,
+        imagePath: product.imagePath,
+        imageBytes: isSaved ? imageBytes : local?.imageBytes,
+        status: isSaved ? status : (local?.status ?? ProductStatus.active),
+        categoryId: product.categoryId,
+        categoryName: product.categoryName,
+        brandId: product.brandId,
+        brandName: product.brandName,
+      );
+    }).toList();
+    _products
+      ..clear()
+      ..addAll(merged);
+
+    return _products.firstWhere((product) => product.id == productId);
+  }
+
+  /// Case-insensitive lookup of the first row whose [field] matches [value].
+  static Map<String, dynamic>? _findByField(
+    List<Map<String, dynamic>> rows,
+    String field,
+    String value,
+  ) {
+    final needle = value.toLowerCase();
+    for (final row in rows) {
+      if ((row[field] as String? ?? '').trim().toLowerCase() == needle) {
+        return row;
+      }
+    }
+    return null;
   }
 
   /// Changes only a product's lifecycle status.
@@ -315,6 +779,10 @@ class ProductRepository {
       imageBytes: current.imageBytes,
       stockQuantity: current.stockQuantity,
       status: status,
+      categoryId: current.categoryId,
+      categoryName: current.categoryName,
+      brandId: current.brandId,
+      brandName: current.brandName,
     );
   }
 
@@ -587,6 +1055,10 @@ class ProductRepository {
       imageBytes: product.imageBytes,
       stockQuantity: _totalStockForProduct(product.id),
       status: product.status,
+      categoryId: product.categoryId,
+      categoryName: product.categoryName,
+      brandId: product.brandId,
+      brandName: product.brandName,
     );
   }
 
@@ -647,9 +1119,39 @@ class ProductRepository {
   /// [ApiException] surfaces through `_ensureSeeded` to whichever cubit
   /// triggered the load.
   Future<void> _loadFromApi(ApiClient api, int vendorId) async {
-    final payload =
-        await api.get('/api/core/vendor/$vendorId/product/') as List;
-    final bundle = mapProductsResponse(payload);
+    final results = await Future.wait([
+      api.get('/api/core/vendor/$vendorId/product/'),
+      api.get('/api/core/vendor/$vendorId/category/'),
+      api.get('/api/core/vendor/$vendorId/brand/'),
+    ]);
+    final payload = results[0] as List;
+
+    _categories
+      ..clear()
+      ..addAll(
+        (results[1] as List).cast<Map<String, dynamic>>().map(
+          (row) => Category(
+            id: (row['id'] as num).toInt(),
+            name: row['name'] as String? ?? '',
+          ),
+        ),
+      );
+    _brands
+      ..clear()
+      ..addAll(
+        (results[2] as List).cast<Map<String, dynamic>>().map(
+          (row) => Brand(
+            id: (row['id'] as num).toInt(),
+            name: row['name'] as String? ?? '',
+          ),
+        ),
+      );
+
+    final bundle = mapProductsResponse(
+      payload,
+      categoryNameById: {for (final c in _categories) c.id: c.name},
+      brandNameById: {for (final b in _brands) b.id: b.name},
+    );
 
     _products
       ..clear()

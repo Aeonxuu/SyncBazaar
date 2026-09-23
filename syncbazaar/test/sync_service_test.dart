@@ -87,6 +87,48 @@ void main() {
     // notification list into a record of work that never happened.
     expect(await notifications.listAll(), isEmpty);
   });
+
+  test('a server-rejected sale is reported as rejected, not offline', () async {
+    // What actually happened on Sept 18: the batch-sale endpoint answered
+    // with a 400, and the old message ("Could not reach the server") read as
+    // a connectivity problem when the server had been reached the whole time.
+    final withRejection = SyncService(
+      salesRepository: SalesRepository(),
+      eventRepository: EventRepository(),
+      productRepository: ProductRepository(),
+      notificationService: notifications,
+      settingsRepository: SettingsRepository(),
+      saleUploader: _RejectingUploader(),
+    );
+
+    final outcome = await withRejection.syncNow();
+
+    expect(outcome.message, isNot(contains('Could not reach the server')));
+    expect(outcome.message, contains('rejected'));
+    expect(outcome.message, contains('event_stock'));
+  });
+}
+
+/// Reports a sale the server refused, without a real batch-sale POST behind
+/// it -- `uploadPending` is overridden directly rather than routed through
+/// `ApiClient`, since this test is only about what `SyncService` says in
+/// response to a [SaleUploadResult] carrying [SaleUploadResult.rejected].
+class _RejectingUploader extends SaleUploadService {
+  _RejectingUploader()
+    : super(
+        auth: AuthRepository(),
+        events: EventRepository(),
+        products: ProductRepository(),
+        sales: SalesRepository(),
+      );
+
+  @override
+  Future<SaleUploadResult> uploadPending() async => const SaleUploadResult(
+    uploaded: 0,
+    skipped: 0,
+    rejected: 1,
+    rejectionReason: 'event_stock: Invalid pk "999" - object does not exist.',
+  );
 }
 
 /// Records that a refresh was asked for, without a server to ask.

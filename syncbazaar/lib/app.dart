@@ -10,9 +10,11 @@ import 'bloc/auth/auth_state.dart';
 import 'bloc/dashboard/dashboard_cubit.dart';
 import 'bloc/inventory/inventory_cubit.dart';
 import 'bloc/notifications/notifications_cubit.dart';
+import 'bloc/post_bazaar/reconciliation_cubit.dart';
 import 'bloc/orders/orders_cubit.dart';
 import 'bloc/pos/pos_cubit.dart';
 import 'bloc/pre_bazaar/pre_bazaar_cubit.dart';
+import 'bloc/settings/catalog_cubit.dart';
 import 'bloc/settings/payment_methods_cubit.dart';
 import 'bloc/settings/settings_cubit.dart';
 import 'bloc/staff/staff_cubit.dart';
@@ -39,6 +41,7 @@ import 'ui/screens/dashboard/dashboard_screen.dart';
 import 'ui/screens/inventory/inventory_screen.dart';
 import 'ui/screens/login/login_screen.dart';
 import 'ui/screens/notifications/notifications_screen.dart';
+import 'ui/screens/settings/catalog_screen.dart';
 import 'ui/screens/settings/payment_methods_screen.dart';
 import 'ui/screens/venues/venues_screen.dart';
 import 'ui/screens/orders/orders_screen.dart';
@@ -238,12 +241,18 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
                 PaymentMethodsCubit(_vendorPaymentMethodRepository)..load(),
           ),
           BlocProvider(
+            create: (_) => CatalogCubit(_productRepository)..load(),
+          ),
+          BlocProvider(
             create: (_) =>
                 PreBazaarCubit(_approvalsRepository, _eventRepository),
           ),
           BlocProvider(create: (_) => SyncCubit(_syncService)),
           BlocProvider(
             create: (_) => NotificationsCubit(_notificationService)..load(),
+          ),
+          BlocProvider(
+            create: (_) => ReconciliationCubit(_eventRepository)..load(),
           ),
         ],
         child: MaterialApp(
@@ -355,6 +364,8 @@ class _MainShellState extends State<MainShell> {
         context.read<InventoryCubit>().load();
       case AppSection.staff:
         context.read<StaffCubit>().load();
+      case AppSection.postBazaar:
+        context.read<ReconciliationCubit>().load();
       default:
         break;
     }
@@ -484,6 +495,11 @@ class _MainShellState extends State<MainShell> {
               label: 'Payment Methods',
               icon: Icons.account_balance_wallet_outlined,
             ),
+            const AppNavItem(
+              section: AppSection.catalog,
+              label: 'Catalog',
+              icon: Icons.sell_outlined,
+            ),
           ],
           const AppNavItem(
             section: AppSection.settings,
@@ -519,28 +535,35 @@ class _MainShellState extends State<MainShell> {
                   BlocBuilder<NotificationsCubit, NotificationsState>(
                     builder: (context, notificationsState) =>
                         BlocBuilder<ApprovalsCubit, List<ApprovalRequest>>(
-                          builder: (context, pendingApprovals) =>
-                              SideNavigationRail(
-                                groups: _navGroups,
-                                selected: section,
-                                onSelect: _handleSectionSelect,
-                                isCollapsed: _isNavCollapsed,
-                                onToggle: () => setState(
-                                  () => _isNavCollapsed = !_isNavCollapsed,
+                          builder: (context, pendingApprovals) => BlocBuilder<
+                            ReconciliationCubit,
+                            ReconciliationState
+                          >(
+                            builder: (context, reconciliationState) =>
+                                SideNavigationRail(
+                                  groups: _navGroups,
+                                  selected: section,
+                                  onSelect: _handleSectionSelect,
+                                  isCollapsed: _isNavCollapsed,
+                                  onToggle: () => setState(
+                                    () => _isNavCollapsed = !_isNavCollapsed,
+                                  ),
+                                  onLogout: _confirmLogout,
+                                  isSyncing: syncState.isSyncing,
+                                  onSync: () =>
+                                      context.read<SyncCubit>().syncNow(),
+                                  syncMessage: syncState.lastMessage,
+                                  badges: {
+                                    AppSection.notifications:
+                                        notificationsState.unreadCount,
+                                    if (widget.user.isAdminOrOwner)
+                                      AppSection.approvals:
+                                          pendingApprovals.length,
+                                    AppSection.postBazaar:
+                                        reconciliationState.pendingCount,
+                                  },
                                 ),
-                                onLogout: _confirmLogout,
-                                isSyncing: syncState.isSyncing,
-                                onSync: () =>
-                                    context.read<SyncCubit>().syncNow(),
-                                syncMessage: syncState.lastMessage,
-                                badges: {
-                                  AppSection.notifications:
-                                      notificationsState.unreadCount,
-                                  if (widget.user.isAdminOrOwner)
-                                    AppSection.approvals:
-                                        pendingApprovals.length,
-                                },
-                              ),
+                          ),
                         ),
                   ),
             ),
@@ -581,6 +604,8 @@ class _MainShellState extends State<MainShell> {
         return VenuesScreen(user: widget.user);
       case AppSection.paymentMethods:
         return PaymentMethodsScreen(user: widget.user);
+      case AppSection.catalog:
+        return CatalogScreen(user: widget.user);
       case AppSection.notifications:
         return const NotificationsScreen();
     }

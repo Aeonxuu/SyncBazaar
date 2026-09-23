@@ -115,8 +115,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         duration: AppMotion.entrance,
                         curve: AppMotion.easeOut,
                         alignment: Alignment.topCenter,
+                        // Full-width even collapsed, not `SizedBox.shrink()`
+                        // — `AnimatedSize` interpolates *both* axes between
+                        // whatever its child measures each frame, so a
+                        // collapsed width of 0 growing to the expanded
+                        // card's width animated sideways as well as
+                        // downward. Holding width constant leaves only the
+                        // height to animate, matching every other reveal in
+                        // this app (see `_FormField`'s error slot).
                         child: !_showBazaarSummary
-                            ? const SizedBox.shrink()
+                            ? const SizedBox(width: double.infinity)
                             : Padding(
                                 padding: const EdgeInsets.only(
                                   top: _dashboardGutter,
@@ -132,8 +140,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         duration: AppMotion.entrance,
                         curve: AppMotion.easeOut,
                         alignment: Alignment.topCenter,
+                        // Same fix as the bazaar summary above — constant
+                        // width so only height animates.
                         child: !_showTransactionHistory
-                            ? const SizedBox.shrink()
+                            ? const SizedBox(width: double.infinity)
                             : Padding(
                                 padding: const EdgeInsets.only(
                                   top: _dashboardGutter,

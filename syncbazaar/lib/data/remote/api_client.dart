@@ -383,6 +383,19 @@ class ApiClient {
     try {
       final decoded = jsonDecode(utf8.decode(response.bodyBytes));
       if (decoded is Map) {
+        // The batch-sale endpoint nests the actual reason under `errors`
+        // rather than in `detail`, which is just "Batch failed to sync." on
+        // every failure regardless of cause. Checked first so the specific
+        // field-level reason wins over that generic wrapper text.
+        final errors = decoded['errors'];
+        if (errors is Map && errors.isNotEmpty) {
+          final field = errors.entries.first;
+          final detail = field.value is List && (field.value as List).isNotEmpty
+              ? (field.value as List).first.toString()
+              : field.value.toString();
+          return '${field.key}: $detail';
+        }
+
         for (final key in const ['error', 'detail', 'message']) {
           final value = decoded[key];
           if (value is String && value.isNotEmpty) {

@@ -7,6 +7,7 @@ import '../../../data/repositories/product_repository.dart';
 import '../../../data/repositories/sales_repository.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../bloc/notifications/notifications_cubit.dart';
+import '../../../bloc/post_bazaar/reconciliation_cubit.dart';
 import '../../../bloc/settings/settings_cubit.dart';
 import '../../../data/repositories/settings_repository.dart';
 import '../../../data/repositories/vendor_payment_method_repository.dart';
@@ -240,10 +241,22 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
       _futureData = _loadData();
     });
     await _futureData;
+    if (!mounted) {
+      return;
+    }
+    // Returning stock (or just time passing a bazaar's end date) changes
+    // this count, and it backs a badge outside this screen too.
+    await context.read<ReconciliationCubit>().load();
   }
 
   @override
   Widget build(BuildContext context) {
+    // Same count the Documentation nav item's own badge reads — one cubit
+    // behind both, so they can't disagree.
+    final pendingReconciliation = context
+        .watch<ReconciliationCubit>()
+        .state
+        .pendingCount;
     return DefaultTabController(
       length: 3,
       child: Column(
@@ -268,10 +281,21 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
               labelStyle: Theme.of(
                 context,
               ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w700),
-              tabs: const [
-                Tab(text: 'SOA Draft'),
-                Tab(text: 'List of Orders'),
-                Tab(text: 'Inventory Reconciliation'),
+              tabs: [
+                const Tab(text: 'SOA Draft'),
+                const Tab(text: 'List of Orders'),
+                Tab(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('Inventory Reconciliation'),
+                      if (pendingReconciliation > 0) ...[
+                        const SizedBox(width: 6),
+                        _ReconciliationCountBadge(count: pendingReconciliation),
+                      ],
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
@@ -1300,6 +1324,36 @@ class _LeftoverLine {
 /// finalizing twice adds the leftovers to the warehouse twice. Until that
 /// lands, this being un-pressable while it runs -- and gone once it has -- is
 /// the only thing standing between a slow connection and inflated stock.
+/// Count as a pill, matching the side rail's own badge — the same number
+/// (`ReconciliationCubit`), so the two are drawn the same way on purpose.
+class _ReconciliationCountBadge extends StatelessWidget {
+  const _ReconciliationCountBadge({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppColors.primary,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        count > 99 ? '99+' : '$count',
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          height: 1.35,
+        ),
+      ),
+    );
+  }
+}
+
 class _ReturnStockButton extends StatefulWidget {
   const _ReturnStockButton({required this.onReturn, required this.onDone});
 

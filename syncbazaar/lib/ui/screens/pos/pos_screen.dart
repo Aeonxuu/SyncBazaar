@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -384,12 +383,13 @@ class _PosScreenState extends State<PosScreen> {
                     final cardWidth =
                         (constraints.maxWidth - (columns - 1) * gap) / columns;
 
-                    // mainAxisExtent, not childAspectRatio: the card splits
-                    // its height evenly between image and details, and the
-                    // details half needs ~100px for name, price and the Add
-                    // button. A pure ratio lets that half shrink with the
-                    // column width until the button is clipped.
-                    final extent = math.max(cardWidth / 0.72, 208.0);
+                    // mainAxisExtent, not childAspectRatio: the photo is a
+                    // square (its height is exactly `cardWidth`), and the
+                    // details block below it is a fixed height regardless of
+                    // column width — switching the grid itself to a ratio
+                    // would let that fixed block shrink until the Add button
+                    // clips, the exact failure this rule exists to avoid.
+                    final extent = cardWidth + PosProductCard.detailsHeight;
 
                     return GridView.builder(
                       itemCount: visibleProducts.length,

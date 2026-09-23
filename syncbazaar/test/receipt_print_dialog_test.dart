@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:syncbazaar/models/receipt.dart';
 import 'package:syncbazaar/services/receipt_saver.dart';
 import 'package:syncbazaar/services/receipt_service.dart';
+import 'package:syncbazaar/ui/screens/pos/widgets/receipt_document.dart';
 import 'package:syncbazaar/ui/screens/pos/widgets/receipt_print_dialog.dart';
 
 /// Drives the print dialog the way the POS does — by opening it — rather than
@@ -106,7 +107,9 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.text('Receipt printed'), findsOneWidget);
     expect(find.text('Saved to Photos'), findsOneWidget);
-    expect(find.widgetWithText(ElevatedButton, 'Done'), findsOneWidget);
+    // A live preview now stands in for the trip to the gallery.
+    expect(find.byType(ReceiptDocument), findsOneWidget);
+    expect(find.widgetWithText(ElevatedButton, 'Close'), findsOneWidget);
   });
 
   testWidgets('a save failure is reported, not swallowed', (tester) async {
