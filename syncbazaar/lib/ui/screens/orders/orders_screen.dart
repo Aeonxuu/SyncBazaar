@@ -1,15 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../bloc/dashboard/dashboard_cubit.dart';
+import '../../../bloc/inventory/inventory_cubit.dart';
 import '../../../bloc/orders/orders_cubit.dart';
 import '../../../bloc/pos/pos_cubit.dart';
 import '../../../core/constants/colors.dart';
 import '../../../core/constants/motion.dart';
+import '../../../data/remote/api_client.dart';
+import '../../../data/repositories/event_repository.dart';
+import '../../../data/repositories/refund_repository.dart';
+import '../../../data/repositories/vendor_payment_method_repository.dart';
+import '../../widgets/app_message.dart';
 import '../../widgets/app_dropdown.dart';
 import '../../widgets/bazaar_search_field.dart';
 import '../../widgets/bazaar_status_filter_button.dart';
 import '../../widgets/skeleton.dart';
 import 'widgets/orders_skeletons.dart';
+import 'widgets/refund_dialog.dart';
+import 'widgets/refund_slot.dart';
 import '../../../models/bazaar_event.dart';
 import '../../../models/user.dart';
 import '../../../core/utils/formatters.dart';
@@ -274,6 +283,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
             flex: 2,
             child: Text('TOTAL', style: style, textAlign: TextAlign.center),
           ),
+          const SizedBox(width: kRefundColumnWidth),
         ],
       ),
     );
@@ -378,8 +388,73 @@ class _OrdersScreenState extends State<OrdersScreen> {
               ),
             ),
           ),
+          SizedBox(
+            width: kRefundColumnWidth,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: _refundSlot(context, record),
+            ),
+          ),
         ],
       ),
+    );
+  }
+
+  Widget _refundSlot(BuildContext context, TransactionRecord record) {
+    final event = context
+        .read<PosCubit>()
+        .state
+        .events
+        .where((e) => e.id == record.eventId)
+        .firstOrNull;
+    return RefundSlot(
+      record: record,
+      event: event,
+      user: widget.user,
+      refunds: context.read<RefundRepository>(),
+      onRefund: () => _refund(record, event!),
+    );
+  }
+
+  Future<void> _refund(TransactionRecord record, BazaarEvent event) async {
+    // Everything that survives the dialog is taken before it opens.
+    final refunds = context.read<RefundRepository>();
+    final vendorMethods = context.read<VendorPaymentMethodRepository>();
+    final events = context.read<EventRepository>();
+    final posCubit = context.read<PosCubit>();
+    final dashboardCubit = context.read<DashboardCubit>();
+    final inventoryCubit = context.read<InventoryCubit>();
+    final ordersCubit = context.read<OrdersCubit>();
+
+    final refund = await showRefundDialog(
+      context: context,
+      record: record,
+      event: event,
+      refunds: refunds,
+      loadMethods: vendorMethods.catalog,
+    );
+    if (refund == null) {
+      return;
+    }
+
+    // The stock came back and the sale is Returned, so every screen that
+    // counts either has to be read again. The sales and refunds were already
+    // reloaded by the repository.
+    try {
+      await events.refresh();
+    } on ApiException {
+      // The refund stands; the next refresh catches the stock up.
+    }
+    await posCubit.load(widget.user);
+    await dashboardCubit.load(widget.user);
+    await inventoryCubit.load();
+    await ordersCubit.load();
+
+    showAppMessage(
+      'Refunded ${formatPeso(refund.amount)} to ${record.customerName}. '
+      'Approved by ${refund.authorizedByName}.',
+      kind: AppMessageKind.success,
+      title: 'Refund issued',
     );
   }
 

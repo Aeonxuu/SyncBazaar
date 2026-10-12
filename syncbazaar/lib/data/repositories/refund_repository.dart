@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../../models/approval_request.dart';
 import '../../models/refund.dart';
 import '../remote/api_client.dart';
@@ -56,11 +58,12 @@ class RefundRepository {
     required String password,
   }) async {
     final auth = _requireSession();
+    final path = '/api/bazaar/event/$eventId/sale/$saleId/refund/';
     final Refund refund;
     try {
       final created =
           await auth.api.post(
-                '/api/bazaar/event/$eventId/sale/$saleId/refund/',
+                path,
                 body: RefundApiMapper.createBody(
                   amount: amount,
                   methodId: methodId,
@@ -73,6 +76,11 @@ class RefundRepository {
               as Map<String, dynamic>;
       refund = RefundApiMapper.refundFromJson(created, eventId: eventId);
     } on ApiException catch (error) {
+      // The address, never the body: that carries the approver's password.
+      debugPrint(
+        'RefundRepository: POST $path failed '
+        '(${error.kind}, status ${error.statusCode}): ${error.message}',
+      );
       final earlier = await _earlierAttempt(
         error,
         saleId: saleId,

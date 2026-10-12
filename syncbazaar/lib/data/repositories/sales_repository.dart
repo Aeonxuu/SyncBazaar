@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../../models/refund.dart';
 import '../../models/sale.dart';
 import '../../services/local_store.dart';
@@ -45,6 +47,12 @@ class SalesRepository {
   /// server has accepted it, so there is nothing local to lose and nothing to
   /// upload. Joined to [_sales] by [Refund.saleId].
   final List<Refund> _refunds = [];
+
+  /// Stands in for the server's refunds in tests, which have no server.
+  @visibleForTesting
+  void debugSetRefunds(List<Refund> refunds) => _refunds
+    ..clear()
+    ..addAll(refunds);
 
   Future<void> addSale(Sale sale) async {
     await _restoreQueue();
@@ -215,14 +223,24 @@ class SalesRepository {
   /// Keyed on [Sale.clientUuid] rather than the local id, because that is the
   /// only identifier both sides agree on — the server assigns its own id and
   /// the local one is a timestamp that means nothing to it.
-  Future<void> markSynced(Set<String> clientUuids) async {
+  ///
+  /// [serverIds] maps a client uuid to the id the server gave that sale, read
+  /// from the reply to the upload. Without it a sale rung up here is "synced"
+  /// yet still known only by its local id, which the server cannot look up.
+  Future<void> markSynced(
+    Set<String> clientUuids, {
+    Map<String, int> serverIds = const {},
+  }) async {
     if (clientUuids.isEmpty) {
       return;
     }
     await _restoreQueue();
     for (var i = 0; i < _sales.length; i++) {
       if (clientUuids.contains(_sales[i].clientUuid)) {
-        _sales[i] = _sales[i].copyWith(synced: true);
+        _sales[i] = _sales[i].copyWith(
+          synced: true,
+          serverId: serverIds[_sales[i].clientUuid],
+        );
       }
     }
     await _persistQueue();

@@ -58,6 +58,7 @@ List<Sale> mapSalesResponse(
         // string would look like the same sale.
         clientUuid: (map['client_uuid'] as String?) ?? 'server-$id',
         eventId: eventId,
+        serverId: id,
         productId: int.tryParse(parts.first) ?? 0,
         variantOptionIdA: optionA == 0 ? null : optionA,
         variantOptionIdB: optionB == 0 ? null : optionB,

@@ -2,6 +2,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../data/repositories/product_repository.dart';
 import '../../data/repositories/sales_repository.dart';
+import '../../models/refund.dart';
+import '../../models/sale.dart';
 import '../../models/user.dart';
 
 /// A single completed transaction, joining an [Order]'s resolved product
@@ -19,6 +21,9 @@ class TransactionRecord {
     required this.eventId,
     required this.paymentMethod,
     required this.userId,
+    this.status = OrderStatus.completed,
+    this.refund,
+    this.serverSaleId,
   });
 
   final int orderId;
@@ -31,6 +36,29 @@ class TransactionRecord {
   final int eventId;
   final String paymentMethod;
   final int userId;
+
+  /// Whether the sale was returned. A refunded sale always is; a sale can also
+  /// be returned without a refund, by a return recorded on the server.
+  final OrderStatus status;
+
+  /// The refund issued for this sale, if any. One per sale: the server refuses
+  /// a second.
+  final Refund? refund;
+
+  /// The server's id for the sale, which is what a refund addresses.
+  ///
+  /// Not [orderId]: for a sale rung up on this device that is a number made up
+  /// from the clock, and the server has no sale by it. Null until the server
+  /// has confirmed the sale.
+  final int? serverSaleId;
+
+  /// Whether the server holds this sale and knows its id.
+  bool get onServer => serverSaleId != null;
+
+  /// Where the refund button belongs on this row: only a sale the server holds
+  /// that is neither returned nor already refunded can still be refunded.
+  bool get isRefundable =>
+      onServer && status != OrderStatus.returned && refund == null;
 }
 
 class OrdersState {
@@ -116,6 +144,10 @@ class OrdersCubit extends Cubit<OrdersState> {
 
   Future<void> _loadRecords() async {
     final sales = await _salesRepository.listSales();
+    final refundByServerSaleId = {
+      for (final refund in await _salesRepository.listRefunds())
+        refund.saleId: refund,
+    };
     final labels = await _productLabels();
 
     final records = <TransactionRecord>[
@@ -135,6 +167,11 @@ class OrdersCubit extends Cubit<OrdersState> {
           eventId: sale.eventId,
           paymentMethod: sale.paymentMethod,
           userId: sale.soldById,
+          status: sale.orderStatus,
+          refund: sale.serverId == null
+              ? null
+              : refundByServerSaleId[sale.serverId],
+          serverSaleId: sale.serverId,
         ),
     ];
     records.sort((a, b) => b.timestamp.compareTo(a.timestamp));

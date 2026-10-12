@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/constants/colors.dart';
 
@@ -11,6 +12,11 @@ class FloatingLabelTextField extends StatefulWidget {
     this.keyboardType = TextInputType.text,
     this.validator,
     this.prefixIcon,
+    this.onChanged,
+    this.enabled = true,
+    this.errorText,
+    this.helperText,
+    this.inputFormatters,
   });
 
   final String labelText;
@@ -19,6 +25,21 @@ class FloatingLabelTextField extends StatefulWidget {
   final TextInputType keyboardType;
   final FormFieldValidator<String>? validator;
   final IconData? prefixIcon;
+  final ValueChanged<String>? onChanged;
+
+  /// False greys the field and stops input, for while a request that uses its
+  /// value is in flight.
+  final bool enabled;
+
+  /// A message under the field, drawn in the error colour with the error
+  /// border. Inline, next to the input, rather than in a SnackBar.
+  final String? errorText;
+
+  /// Quiet guidance under the field. Replaced by [errorText] when there is one.
+  final String? helperText;
+
+  /// For limiting what can be typed, e.g. a length the server will accept.
+  final List<TextInputFormatter>? inputFormatters;
 
   @override
   State<FloatingLabelTextField> createState() => _FloatingLabelTextFieldState();
@@ -48,76 +69,86 @@ class _FloatingLabelTextFieldState extends State<FloatingLabelTextField> {
     final colorScheme = theme.colorScheme;
     final radius = BorderRadius.circular(8);
 
-    return SizedBox(
-      height: 56,
-      child: TextFormField(
-        controller: widget.controller,
-        obscureText: _isObscured,
-        keyboardType: widget.keyboardType,
-        validator: widget.validator,
-        cursorColor: colorScheme.primary,
-        style: theme.textTheme.bodyLarge?.copyWith(color: AppColors.text),
-        decoration: InputDecoration(
-          labelText: widget.labelText,
-          floatingLabelBehavior: FloatingLabelBehavior.auto,
-          floatingLabelAlignment: FloatingLabelAlignment.start,
-          alignLabelWithHint: false,
-          filled: false,
-          prefixIcon: widget.prefixIcon == null
-              ? null
-              : Icon(widget.prefixIcon, color: Colors.black45),
-          suffixIcon: widget.obscureText
-              ? IconButton(
-                  tooltip: _isObscured ? 'Show password' : 'Hide password',
-                  onPressed: () {
-                    setState(() {
-                      _isObscured = !_isObscured;
-                    });
-                  },
-                  icon: Icon(
-                    _isObscured
-                        ? Icons.visibility_off_outlined
-                        : Icons.visibility_outlined,
-                    color: Colors.black45,
-                  ),
-                )
-              : null,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 14,
-            vertical: 18,
-          ),
-          labelStyle: theme.textTheme.bodyLarge?.copyWith(
-            color: Colors.black54,
-            fontSize: 15,
-            fontWeight: FontWeight.w500,
-          ),
-          floatingLabelStyle: theme.textTheme.bodyMedium?.copyWith(
-            color: colorScheme.primary,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-          ),
-          border: OutlineInputBorder(
-            borderRadius: radius,
-            borderSide: const BorderSide(color: _restingBorderColor),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: radius,
-            borderSide: const BorderSide(color: _restingBorderColor),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: radius,
-            borderSide: BorderSide(color: colorScheme.primary, width: 1.8),
-          ),
-          errorBorder: OutlineInputBorder(
-            borderRadius: radius,
-            borderSide: BorderSide(color: colorScheme.error, width: 1.2),
-          ),
-          focusedErrorBorder: OutlineInputBorder(
-            borderRadius: radius,
-            borderSide: BorderSide(color: colorScheme.error, width: 1.6),
-          ),
+    final hasNote = widget.errorText != null || widget.helperText != null;
+    final field = TextFormField(
+      controller: widget.controller,
+      obscureText: _isObscured,
+      keyboardType: widget.keyboardType,
+      validator: widget.validator,
+      onChanged: widget.onChanged,
+      enabled: widget.enabled,
+      inputFormatters: widget.inputFormatters,
+      cursorColor: colorScheme.primary,
+      style: theme.textTheme.bodyLarge?.copyWith(color: AppColors.text),
+      decoration: InputDecoration(
+        labelText: widget.labelText,
+        errorText: widget.errorText,
+        helperText: widget.helperText,
+        helperMaxLines: 2,
+        errorMaxLines: 2,
+        floatingLabelBehavior: FloatingLabelBehavior.auto,
+        floatingLabelAlignment: FloatingLabelAlignment.start,
+        alignLabelWithHint: false,
+        filled: false,
+        prefixIcon: widget.prefixIcon == null
+            ? null
+            : Icon(widget.prefixIcon, color: Colors.black45),
+        suffixIcon: widget.obscureText
+            ? IconButton(
+                tooltip: _isObscured ? 'Show password' : 'Hide password',
+                onPressed: () {
+                  setState(() {
+                    _isObscured = !_isObscured;
+                  });
+                },
+                icon: Icon(
+                  _isObscured
+                      ? Icons.visibility_off_outlined
+                      : Icons.visibility_outlined,
+                  color: Colors.black45,
+                ),
+              )
+            : null,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 18,
+        ),
+        labelStyle: theme.textTheme.bodyLarge?.copyWith(
+          color: Colors.black54,
+          fontSize: 15,
+          fontWeight: FontWeight.w500,
+        ),
+        floatingLabelStyle: theme.textTheme.bodyMedium?.copyWith(
+          color: colorScheme.primary,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: radius,
+          borderSide: const BorderSide(color: _restingBorderColor),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: radius,
+          borderSide: const BorderSide(color: _restingBorderColor),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: radius,
+          borderSide: BorderSide(color: colorScheme.primary, width: 1.8),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: radius,
+          borderSide: BorderSide(color: colorScheme.error, width: 1.2),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: radius,
+          borderSide: BorderSide(color: colorScheme.error, width: 1.6),
         ),
       ),
     );
+
+    // Pinned to 56 only while there is nothing under it; a note needs the
+    // room, and a fixed height would clip it. The same SizedBox either way, so
+    // a note appearing does not rebuild the field and drop its focus.
+    return SizedBox(height: hasNote ? null : 56, child: field);
   }
 }

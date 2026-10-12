@@ -198,8 +198,9 @@ class SaleUploadService {
       return SaleUploadResult(uploaded: 0, skipped: skipped);
     }
 
+    final Object? reply;
     try {
-      await _auth.api.post(
+      reply = await _auth.api.post(
         '/api/bazaar/event/$eventId/batch-sale/',
         body: {'sales': payload},
         // The client uuid on every row makes a repeat harmless.
@@ -232,8 +233,33 @@ class SaleUploadService {
       );
     }
 
-    await _sales.markSynced(sent.toSet());
+    await _sales.markSynced(
+      sent.toSet(),
+      serverIds: _serverIdsFrom(reply, sent),
+    );
     return SaleUploadResult(uploaded: sent.length, skipped: skipped);
+  }
+
+  /// The server's id for each sale just uploaded.
+  ///
+  /// The reply lists one result per sale in the order they were sent, and a
+  /// repeat of an earlier upload reports the existing sale's id the same way.
+  /// A reply that does not line up with what was sent yields nothing rather
+  /// than ids guessed onto the wrong sales.
+  static Map<String, int> _serverIdsFrom(Object? reply, List<String> sent) {
+    final results = reply is Map ? reply['batch_results'] : null;
+    if (results is! List || results.length != sent.length) {
+      return const {};
+    }
+    final ids = <String, int>{};
+    for (var i = 0; i < sent.length; i++) {
+      final row = results[i];
+      final id = row is Map ? (row['sale_id'] as num?)?.toInt() : null;
+      if (id != null) {
+        ids[sent[i]] = id;
+      }
+    }
+    return ids;
   }
 
   Future<Map<String, int>> _loadPaymentMethodIds() async {

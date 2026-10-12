@@ -46,7 +46,7 @@ class OrdersBazaarCardSkeleton extends StatelessWidget {
 ///
 /// Shaped to the real row: the customer over a time and payment line, the
 /// product over its variant, then unit price, quantity and total at the same
-/// 4/5/2/28/92/2 split and 10px vertical padding. The heading row above is the
+/// 4/5/2/28/92/2 split plus the 76px refund slot and 10px vertical padding. The heading row above is the
 /// real one and stays put.
 class OrderRowsSkeleton extends StatelessWidget {
   const OrderRowsSkeleton({super.key});
@@ -129,6 +129,9 @@ class _Row extends StatelessWidget {
               flex: 2,
               child: Center(child: SkeletonBar(width: 64, height: 12)),
             ),
+            // The refund slot, empty while loading, so the columns above sit
+            // where the real ones will.
+            const SizedBox(width: 76),
           ],
         ),
       ),
