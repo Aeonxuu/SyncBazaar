@@ -17,6 +17,7 @@ class FloatingLabelTextField extends StatefulWidget {
     this.errorText,
     this.helperText,
     this.inputFormatters,
+    this.autofocus = false,
   });
 
   final String labelText;
@@ -40,6 +41,9 @@ class FloatingLabelTextField extends StatefulWidget {
 
   /// For limiting what can be typed, e.g. a length the server will accept.
   final List<TextInputFormatter>? inputFormatters;
+
+  /// Takes focus when it first appears, bringing up the keyboard.
+  final bool autofocus;
 
   @override
   State<FloatingLabelTextField> createState() => _FloatingLabelTextFieldState();
@@ -78,12 +82,16 @@ class _FloatingLabelTextFieldState extends State<FloatingLabelTextField> {
       onChanged: widget.onChanged,
       enabled: widget.enabled,
       inputFormatters: widget.inputFormatters,
+      autofocus: widget.autofocus,
       cursorColor: colorScheme.primary,
       style: theme.textTheme.bodyLarge?.copyWith(color: AppColors.text),
       decoration: InputDecoration(
         labelText: widget.labelText,
         errorText: widget.errorText,
         helperText: widget.helperText,
+        // Quiet guidance, not content: the theme's default is as dark as the
+        // value being typed.
+        helperStyle: theme.textTheme.bodySmall?.copyWith(color: Colors.black45),
         helperMaxLines: 2,
         errorMaxLines: 2,
         floatingLabelBehavior: FloatingLabelBehavior.auto,

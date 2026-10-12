@@ -462,6 +462,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
       event: event,
       refunds: refunds,
       loadMethods: vendorMethods.catalog,
+      soldByName: _soldByName(record.userId),
     );
     if (refund == null) {
       return;

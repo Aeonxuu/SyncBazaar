@@ -29,6 +29,9 @@ class TransactionRecord {
     this.status = OrderStatus.completed,
     this.refund,
     this.serverSaleId,
+    this.productName,
+    this.variantDetail,
+    this.stockLabel,
   });
 
   final int orderId;
@@ -49,6 +52,18 @@ class TransactionRecord {
   /// The refund issued for this sale, if any. One per sale: the server refuses
   /// a second.
   final Refund? refund;
+
+  /// The product's own name, without its variant. Null when only the combined
+  /// [productLabel] is known.
+  final String? productName;
+
+  /// The variant on its own line: colour values bare, the rest named, joined
+  /// with a dot -- "Cloud White/Core Black/Gum · Size 38".
+  final String? variantDetail;
+
+  /// What goes back on the shelf, in a sentence: the product, then the parts
+  /// that tell two of it apart besides colour -- "Adidas Samba OG, Size 38".
+  final String? stockLabel;
 
   /// The server's id for the sale, which is what a refund addresses.
   ///
@@ -237,30 +252,39 @@ class OrdersCubit extends Cubit<OrdersState> {
     };
     final labels = await _productLabels();
 
-    final records = <TransactionRecord>[
-      for (final sale in sales)
-        TransactionRecord(
-          orderId: sale.id,
-          customerName: sale.customerName,
-          timestamp: sale.timestamp,
-          productLabel: labels.labelFor(
-            productId: sale.productId,
-            optionIdA: sale.variantOptionIdA,
-            optionIdB: sale.variantOptionIdB,
-          ),
-          unitPrice: sale.qty > 0 ? sale.total / sale.qty : sale.total,
-          quantity: sale.qty,
-          total: sale.total,
-          eventId: sale.eventId,
-          paymentMethod: sale.paymentMethod,
-          userId: sale.soldById,
-          status: sale.orderStatus,
-          refund: sale.serverId == null
-              ? null
-              : refundByServerSaleId[sale.serverId],
-          serverSaleId: sale.serverId,
+    TransactionRecord recordFor(Sale sale) {
+      final parts = labels.partsFor(
+        productId: sale.productId,
+        optionIdA: sale.variantOptionIdA,
+        optionIdB: sale.variantOptionIdB,
+      );
+      return TransactionRecord(
+        orderId: sale.id,
+        customerName: sale.customerName,
+        timestamp: sale.timestamp,
+        productLabel: labels.labelFor(
+          productId: sale.productId,
+          optionIdA: sale.variantOptionIdA,
+          optionIdB: sale.variantOptionIdB,
         ),
-    ];
+        productName: parts.name,
+        variantDetail: parts.variantDetail,
+        stockLabel: parts.stockLabel,
+        unitPrice: sale.qty > 0 ? sale.total / sale.qty : sale.total,
+        quantity: sale.qty,
+        total: sale.total,
+        eventId: sale.eventId,
+        paymentMethod: sale.paymentMethod,
+        userId: sale.soldById,
+        status: sale.orderStatus,
+        refund: sale.serverId == null
+            ? null
+            : refundByServerSaleId[sale.serverId],
+        serverSaleId: sale.serverId,
+      );
+    }
+
+    final records = [for (final sale in sales) recordFor(sale)];
     records.sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
     emit(
@@ -287,6 +311,7 @@ class OrdersCubit extends Cubit<OrdersState> {
     final products = await _productRepository.listProducts();
     final names = {for (final product in products) product.id: product.name};
     final options = <int, String>{};
+    final parts = <int, (String?, String)>{};
     for (final product in products) {
       final groups = await _productRepository.variantGroupsForProduct(
         product.id,
@@ -301,9 +326,14 @@ class OrdersCubit extends Cubit<OrdersState> {
         options[option.id] = groupName == null
             ? option.value
             : '$groupName ${option.value}';
+        parts[option.id] = (groupName, option.value);
       }
     }
-    return _ProductLabels(names: names, optionValues: options);
+    return _ProductLabels(
+      names: names,
+      optionValues: options,
+      optionParts: parts,
+    );
   }
 
   void filterByEvent(int? eventId) {
@@ -320,10 +350,54 @@ class OrdersCubit extends Cubit<OrdersState> {
 
 /// Product and option names, so a sale can say what was sold.
 class _ProductLabels {
-  const _ProductLabels({required this.names, required this.optionValues});
+  const _ProductLabels({
+    required this.names,
+    required this.optionValues,
+    this.optionParts = const {},
+  });
 
   final Map<int, String> names;
   final Map<int, String> optionValues;
+
+  /// Option id to its category and its value, for laying a variant out in
+  /// pieces instead of as one string.
+  final Map<int, (String?, String)> optionParts;
+
+  /// A colour is recognisable on its own ("Cloud White"), so it goes without
+  /// its category; "38" is not, so a size keeps its word.
+  static bool _isColour(String? group) {
+    final name = group?.trim().toLowerCase();
+    return name == 'color' || name == 'colour';
+  }
+
+  /// The product and its variant, laid out for a dialog rather than a table.
+  ({String name, String variantDetail, String stockLabel}) partsFor({
+    required int productId,
+    int? optionIdA,
+    int? optionIdB,
+  }) {
+    final name = names[productId] ?? 'Unknown product';
+    final detail = <String>[];
+    final apart = <String>[];
+    for (final id in [optionIdA, optionIdB]) {
+      final part = id == null ? null : optionParts[id];
+      if (part == null) {
+        continue;
+      }
+      final (group, value) = part;
+      if (_isColour(group) || group == null) {
+        detail.add(value);
+      } else {
+        detail.add('$group $value');
+        apart.add('$group $value');
+      }
+    }
+    return (
+      name: name,
+      variantDetail: detail.join(' · '),
+      stockLabel: [name, ...apart].join(', '),
+    );
+  }
 
   /// "Nike Air Max SC (Color Black, Size 42)".
   ///
