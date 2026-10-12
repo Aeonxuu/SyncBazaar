@@ -47,6 +47,7 @@ List<BazaarEvent> mapEventsResponse(
         status: statusFor(start, end),
         acceptedPaymentMethods: fallbackMethods,
         customOtherMethods: fallbackCustomMethods,
+        isFinalized: map['is_finalized'] == true,
       ),
     );
   }

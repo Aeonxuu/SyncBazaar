@@ -41,7 +41,10 @@ class ApprovalsRepository {
       try {
         final payload =
             await auth.api.get('/api/bazaar/event/$eventId/approval/') as List;
-        final rows = payload.cast<Map<String, dynamic>>();
+        final rows = payload
+            .cast<Map<String, dynamic>>()
+            .where(ApprovalApiMapper.isListable)
+            .toList();
         // The server raises its own empty request (type EC) the moment a
         // bazaar is created, and the pre-bazaar form then adds the real one
         // with the name, dates and stock. Both are pending, so the owner saw

@@ -1,6 +1,8 @@
+import '../../models/refund.dart';
 import '../../models/sale.dart';
 import '../../services/local_store.dart';
 import '../remote/api_client.dart';
+import '../remote/refund_api_mapper.dart';
 import '../remote/sale_api_mapper.dart';
 import 'auth_repository.dart';
 import 'event_repository.dart';
@@ -37,6 +39,13 @@ class SalesRepository {
 
   final List<Sale> _sales = [];
 
+  /// Refunds the server holds, newest data from the last load.
+  ///
+  /// Never queued or written to the device: a refund exists only once the
+  /// server has accepted it, so there is nothing local to lose and nothing to
+  /// upload. Joined to [_sales] by [Refund.saleId].
+  final List<Refund> _refunds = [];
+
   Future<void> addSale(Sale sale) async {
     await _restoreQueue();
     // Stamped here rather than at the till, which has no idea what it is
@@ -67,6 +76,13 @@ class SalesRepository {
   Future<List<Sale>> listSales() async {
     await _ensureLoaded();
     return _sales;
+  }
+
+  /// Every refund on the loaded bazaars, loaded together with the sales so one
+  /// refresh brings back both. Empty without a session.
+  Future<List<Refund>> listRefunds() async {
+    await _ensureLoaded();
+    return List<Refund>.unmodifiable(_refunds);
   }
 
   /// Re-reads the sales history, discarding what is held now.
@@ -112,6 +128,10 @@ class SalesRepository {
       for (final event in loaded) _fetchEventSales(auth, events, event.id),
     ]);
     final fetched = [for (final sales in perEvent) ...sales];
+    final perEventRefunds = await Future.wait([
+      for (final event in loaded) _fetchEventRefunds(auth, event.id),
+    ]);
+    final fetchedRefunds = [for (final refunds in perEventRefunds) ...refunds];
 
     // Restored first, so a sale queued before the last relaunch is counted as
     // pending below rather than being wiped by the clear.
@@ -125,7 +145,32 @@ class SalesRepository {
       ..clear()
       ..addAll(fetched)
       ..addAll(pending);
+    _refunds
+      ..clear()
+      ..addAll(fetchedRefunds);
     await _persistQueue();
+  }
+
+  /// One bazaar's refunds.
+  ///
+  /// A server that refuses or lacks the endpoint costs the refund rows, not
+  /// the sales: the history is worth showing without them. An unreachable
+  /// server is different -- that one rethrows, as the sales request beside it
+  /// already would have.
+  Future<List<Refund>> _fetchEventRefunds(
+    AuthRepository auth,
+    int eventId,
+  ) async {
+    try {
+      final payload =
+          await auth.api.get('/api/bazaar/event/$eventId/refund/') as List;
+      return RefundApiMapper.refundsFromPayload(payload, eventId: eventId);
+    } on ApiException catch (error) {
+      if (error.isOffline) {
+        rethrow;
+      }
+      return const [];
+    }
   }
 
   Future<List<Sale>> _fetchEventSales(

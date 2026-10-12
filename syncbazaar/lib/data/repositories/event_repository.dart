@@ -625,6 +625,7 @@ class EventRepository {
       status: BazaarStatus.ended,
       acceptedPaymentMethods: event.acceptedPaymentMethods,
       customOtherMethods: event.customOtherMethods,
+      isFinalized: true,
     );
   }
 

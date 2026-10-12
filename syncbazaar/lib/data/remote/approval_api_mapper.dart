@@ -13,6 +13,19 @@ import '../../models/approval_request.dart';
 class ApprovalApiMapper {
   const ApprovalApiMapper._();
 
+  /// Request codes the server raises for refunds. They are not for the
+  /// approvals screen: the app approves a refund-handler request itself the
+  /// moment it raises it, and approves a refund by password at the till.
+  static const Set<String> _refundCodes = {'RA', 'RF'};
+
+  /// Whether this row belongs in the approvals list.
+  ///
+  /// [fromJson] falls back to the statement-of-account type for a code it does
+  /// not know, which showed a refund request there as something to approve.
+  /// Callers drop rows this rejects before mapping them.
+  static bool isListable(Map<String, dynamic> json) =>
+      !_refundCodes.contains(json['request_type']);
+
   static ApprovalRequest fromJson(Map<String, dynamic> json) {
     return ApprovalRequest(
       id: (json['id'] as num).toInt(),

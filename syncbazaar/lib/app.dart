@@ -28,6 +28,7 @@ import 'data/repositories/auth_repository.dart';
 import 'data/repositories/event_repository.dart';
 import 'data/repositories/orders_repository.dart';
 import 'data/repositories/product_repository.dart';
+import 'data/repositories/refund_repository.dart';
 import 'data/repositories/sales_repository.dart';
 import 'data/repositories/settings_repository.dart';
 import 'data/repositories/vendor_payment_method_repository.dart';
@@ -87,6 +88,7 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
   late final ProductRepository _productRepository;
   late final SalesRepository _salesRepository;
   late final OrdersRepository _ordersRepository;
+  late final RefundRepository _refundRepository;
   late final ApprovalsRepository _approvalsRepository;
   late final SettingsRepository _settingsRepository;
   late final VendorPaymentMethodRepository _vendorPaymentMethodRepository;
@@ -118,6 +120,10 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
     // the combination it was sold from.
     _salesRepository = SalesRepository(auth: session, events: _eventRepository);
     _ordersRepository = OrdersRepository();
+    _refundRepository = RefundRepository(
+      auth: session,
+      sales: _salesRepository,
+    );
     // Null without a backend, so the in-memory build behaves exactly as before
     // and the POS has nothing to push to.
     _saleUploader = session == null
@@ -181,6 +187,7 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
         RepositoryProvider<ProductRepository>.value(value: _productRepository),
         RepositoryProvider<SalesRepository>.value(value: _salesRepository),
         RepositoryProvider<OrdersRepository>.value(value: _ordersRepository),
+        RepositoryProvider<RefundRepository>.value(value: _refundRepository),
         RepositoryProvider<SettingsRepository>.value(
           value: _settingsRepository,
         ),
