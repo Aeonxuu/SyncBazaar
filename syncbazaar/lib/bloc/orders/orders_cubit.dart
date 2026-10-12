@@ -1,10 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../data/remote/api_client.dart';
+import '../../data/repositories/event_repository.dart';
 import '../../data/repositories/product_repository.dart';
 import '../../data/repositories/sales_repository.dart';
 import '../../models/refund.dart';
 import '../../models/sale.dart';
 import '../../models/user.dart';
+import '../../services/sale_upload_service.dart';
 
 /// A single completed transaction, joining an [Order]'s resolved product
 /// label with its [Sale]'s financial figures — purely for display in the
@@ -67,7 +72,16 @@ class OrdersState {
     this.selectedEventId,
     this.paymentMethod = 'All',
     this.isLoading = false,
+    this.assignedEventIds,
   });
+
+  /// The bazaars the server says the signed-in employee is assigned to, read
+  /// when Orders last loaded. Null until it has been, or where there is no
+  /// server to ask.
+  ///
+  /// Fresher than the ids captured at sign-in, which miss a bazaar the person
+  /// was put on afterwards.
+  final List<int>? assignedEventIds;
 
   /// True while sales are being fetched. An empty [records] cannot say whether
   /// nothing was sold or the answer has not arrived, and the table greeted
@@ -78,10 +92,33 @@ class OrdersState {
   final int? selectedEventId;
   final String paymentMethod;
 
+  /// The bazaars [user] is assigned to, as best known: the server's answer from
+  /// the last load, else what sign-in recorded.
+  List<int> assignedFor(AppUser user) =>
+      assignedEventIds ?? user.assignedEventIdsEffective;
+
+  /// The same user with the freshest assignments, for asking what they may do.
+  AppUser withFreshAssignments(AppUser user) {
+    final fresh = assignedEventIds;
+    if (fresh == null || user.isAdminOrOwner) {
+      return user;
+    }
+    return user.copyWith(assignedEventIds: fresh);
+  }
+
+  /// What [user] may see.
+  ///
+  /// An employee sees every sale at the bazaars they are assigned to, not just
+  /// their own. Whoever is refunding a sale is rarely whoever rang it up -- the
+  /// refund handler is a colleague -- and a till where the person who can
+  /// approve a refund cannot see the sale is no use. Each row says who sold it,
+  /// and the sale's `sold_by` is untouched, so per-employee figures still
+  /// follow who actually made the sale.
   List<TransactionRecord> visibleRecords(AppUser user) {
     var result = records;
     if (user.role == UserRole.employee) {
-      result = result.where((r) => r.userId == user.id).toList();
+      final assigned = assignedFor(user).toSet();
+      result = result.where((r) => assigned.contains(r.eventId)).toList();
     }
     if (selectedEventId != null) {
       result = result.where((r) => r.eventId == selectedEventId).toList();
@@ -98,8 +135,10 @@ class OrdersState {
     String? paymentMethod,
     bool clearEvent = false,
     bool? isLoading,
+    List<int>? assignedEventIds,
   }) {
     return OrdersState(
+      assignedEventIds: assignedEventIds ?? this.assignedEventIds,
       isLoading: isLoading ?? this.isLoading,
       records: records ?? this.records,
       selectedEventId: clearEvent
@@ -111,11 +150,26 @@ class OrdersState {
 }
 
 class OrdersCubit extends Cubit<OrdersState> {
-  OrdersCubit(this._salesRepository, this._productRepository)
-    : super(const OrdersState());
+  /// [events] lets Orders ask the server which bazaars an employee is on, and
+  /// [uploader] lets it send sales that are still waiting. Both are absent in
+  /// the demo build and in tests that do not need them.
+  OrdersCubit(
+    this._salesRepository,
+    this._productRepository, {
+    EventRepository? events,
+    SaleUploadService? uploader,
+  }) : _events = events,
+       _uploader = uploader,
+       super(const OrdersState());
 
   final SalesRepository _salesRepository;
   final ProductRepository _productRepository;
+  final EventRepository? _events;
+  final SaleUploadService? _uploader;
+
+  /// Back to nothing, for when somebody signs out. What Orders held belongs to
+  /// the person who was signed in, including the bazaar they had picked.
+  void reset() => emit(const OrdersState());
 
   /// Builds the transaction history from sales.
   ///
@@ -140,9 +194,42 @@ class OrdersCubit extends Cubit<OrdersState> {
       emit(state.copyWith(isLoading: false));
       rethrow;
     }
+    // After the rows are on screen, never before: sending can take as long as
+    // the connection does, and the list should not wait on it.
+    unawaited(_sendWaitingSales());
+  }
+
+  /// Sends sales that never made it, then shows them with the ids the server
+  /// gave them.
+  ///
+  /// A sale is uploaded the moment it is rung, but that can fail -- most
+  /// simply by signing out before it lands -- and nothing else retries it. Until
+  /// it has reached the server it has no id the server knows, so it cannot be
+  /// refunded, and the person looking at it has no way to tell why. Opening
+  /// Orders is when they would notice, so it is when to try again.
+  Future<void> _sendWaitingSales() async {
+    final uploader = _uploader;
+    // Not before anyone has signed in: this cubit loads at launch, and there is
+    // no token to send anything with yet.
+    if (uploader == null || !(_events?.hasSession ?? true)) {
+      return;
+    }
+    try {
+      final waiting = await _salesRepository.listUnsyncedSales();
+      if (waiting.isEmpty) {
+        return;
+      }
+      final result = await uploader.uploadPending();
+      if (result.uploaded > 0 && !isClosed) {
+        await _loadRecords();
+      }
+    } catch (_) {
+      // Stays waiting, and is tried again next time.
+    }
   }
 
   Future<void> _loadRecords() async {
+    final assigned = await _freshAssignedEventIds();
     final sales = await _salesRepository.listSales();
     final refundByServerSaleId = {
       for (final refund in await _salesRepository.listRefunds())
@@ -176,7 +263,23 @@ class OrdersCubit extends Cubit<OrdersState> {
     ];
     records.sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
-    emit(state.copyWith(records: records, isLoading: false));
+    emit(
+      state.copyWith(
+        records: records,
+        isLoading: false,
+        assignedEventIds: assigned,
+      ),
+    );
+  }
+
+  /// The bazaars the server has the signed-in user on, or null to keep what was
+  /// known. A failure here costs freshness, not the list.
+  Future<List<int>?> _freshAssignedEventIds() async {
+    try {
+      return await _events?.fetchAssignedEventIds();
+    } on ApiException {
+      return null;
+    }
   }
 
   /// Product and option names, for rebuilding "what was sold" from a sale.

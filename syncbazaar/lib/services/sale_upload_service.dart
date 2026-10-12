@@ -92,7 +92,24 @@ class SaleUploadService {
   /// checkout path can ignore the result: an unreachable server is the normal
   /// state at a bazaar, not an error worth interrupting a queue of customers
   /// for. The unsynced flag is what remembers the work.
-  Future<SaleUploadResult> uploadPending() async {
+  Future<SaleUploadResult> uploadPending() {
+    // One at a time. A sale triggers an upload the moment it is rung, and a
+    // second trigger -- the Sync button, logging out, opening Orders -- can
+    // arrive while that one is still on the wire. Run side by side they send
+    // the same sales twice; the server's client uuid makes that harmless, but
+    // the second would also race the first to mark them synced. Chained, the
+    // second starts when the first is done and finds nothing left to send.
+    final previous = _running;
+    final next = (previous ?? Future<void>.value())
+        .catchError((_) {})
+        .then((_) => _uploadPending());
+    _running = next.then<void>((_) {}, onError: (_) {});
+    return next;
+  }
+
+  Future<void>? _running;
+
+  Future<SaleUploadResult> _uploadPending() async {
     final queued = await _sales.listUnsyncedSales();
     final here = _auth.api.baseUrl;
 

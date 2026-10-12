@@ -54,6 +54,7 @@ import 'ui/screens/pre_bazaar/pre_bazaar_screen.dart';
 import 'ui/screens/settings/settings_screen.dart';
 import 'ui/screens/staff/staff_screen.dart';
 import 'ui/widgets/confirmation_dialog.dart';
+import 'ui/widgets/loading_dialog.dart';
 import 'ui/widgets/navigation_rail.dart';
 
 class SyncBazaarApp extends StatefulWidget {
@@ -188,6 +189,8 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
         RepositoryProvider<SalesRepository>.value(value: _salesRepository),
         RepositoryProvider<OrdersRepository>.value(value: _ordersRepository),
         RepositoryProvider<RefundRepository>.value(value: _refundRepository),
+        // Null in the demo build, which has nowhere to send sales.
+        RepositoryProvider<SaleUploadService?>.value(value: _saleUploader),
         RepositoryProvider<SettingsRepository>.value(
           value: _settingsRepository,
         ),
@@ -222,8 +225,12 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
             ),
           ),
           BlocProvider(
-            create: (_) =>
-                OrdersCubit(_salesRepository, _productRepository)..load(),
+            create: (_) => OrdersCubit(
+              _salesRepository,
+              _productRepository,
+              events: _eventRepository,
+              uploader: _saleUploader,
+            )..load(),
           ),
           BlocProvider(
             create: (_) => ApprovalsCubit(
@@ -349,6 +356,13 @@ class _MainShellState extends State<MainShell> {
     context.read<SettingsCubit>()
       ..reset()
       ..load();
+    // Cleared first, for the same reason as the rest: the bazaar picked and the
+    // rows shown belong to whoever was signed in before. Loading also sends any
+    // sale left unsent by an earlier account and learns which bazaars this one
+    // is assigned to.
+    context.read<OrdersCubit>()
+      ..reset()
+      ..load();
   }
 
   /// Whether the Preparations form holds anything worth keeping, reported by
@@ -436,7 +450,30 @@ class _MainShellState extends State<MainShell> {
   /// hand the tablet back.
   Future<void> _confirmLogout() async {
     final auth = context.read<AuthCubit>();
-    final pending = await context.read<SalesRepository>().listUnsyncedSales();
+    final sales = context.read<SalesRepository>();
+    final events = context.read<EventRepository>();
+    final orders = context.read<OrdersCubit>();
+    final uploader = context.read<SaleUploadService?>();
+    var pending = await sales.listUnsyncedSales();
+
+    // Tried before asking. A sale is sent the moment it is rung, but signing
+    // out straight afterwards can cut that off -- the token is gone before the
+    // request leaves -- and the sale then sits unsent through the next
+    // person's session, without the id the server needs to refund it. Sending
+    // here, while the session is still valid, is the last chance to do it as
+    // the person who made it.
+    if (pending.isNotEmpty && uploader != null && mounted) {
+      final dialogNavigator = Navigator.of(context, rootNavigator: true);
+      showLoadingDialog(context, 'Sending sales…');
+      try {
+        await uploader.uploadPending().timeout(const Duration(seconds: 20));
+      } catch (_) {
+        // Whatever happened, the question below reports what is still unsent.
+      } finally {
+        dialogNavigator.pop();
+      }
+      pending = await sales.listUnsyncedSales();
+    }
     if (!mounted) {
       return;
     }
@@ -458,6 +495,13 @@ class _MainShellState extends State<MainShell> {
 
     if (confirmed == true) {
       await auth.logout();
+      // What the server told the last person is not the next person's picture:
+      // an employee is shown only their own bazaars, so the list held now would
+      // be the wrong one for the owner signing in next. Sales still unsent are
+      // kept, since they are the only copy of money already taken.
+      sales.clearSession();
+      events.invalidate();
+      orders.reset();
     }
   }
 

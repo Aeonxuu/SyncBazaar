@@ -93,6 +93,25 @@ class SalesRepository {
     return List<Refund>.unmodifiable(_refunds);
   }
 
+  /// Forgets what the server told the last person who was signed in, and keeps
+  /// what only this device knows.
+  ///
+  /// Called on logout. Without it the next account on the tablet inherits the
+  /// previous one's picture, and because loading is skipped once a vendor has
+  /// been loaded it never gets its own: a sale made elsewhere in between, or a
+  /// refund, would not appear until something forced a refresh.
+  ///
+  /// Sales still waiting to upload stay. They are the only copy of money
+  /// already in the till, they belong to the device rather than to whoever was
+  /// signed in, and each names who sold it, so they upload correctly under
+  /// whichever account sends them.
+  void clearSession() {
+    _sales.removeWhere((sale) => sale.synced);
+    _refunds.clear();
+    _loadedVendorId = null;
+    _load = null;
+  }
+
   /// Re-reads the sales history, discarding what is held now.
   Future<void> refresh() async {
     if (_auth?.vendorId == null) {

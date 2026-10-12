@@ -331,6 +331,43 @@ class EventRepository {
     }
   }
 
+  /// Whether anyone is signed in to a server. False in the demo build and
+  /// before login.
+  bool get hasSession => _auth?.vendorId != null;
+
+  /// Marks what is held as belonging to someone who has signed out, so the next
+  /// read fetches again.
+  ///
+  /// The server hands an employee only the bazaars they are assigned to, so a
+  /// list loaded for one employee is the wrong list for the owner who signs in
+  /// next on the same tablet.
+  void invalidate() {
+    _loadedVendorId = null;
+    _load = null;
+  }
+
+  /// The ids of the bazaars the server says [user] is assigned to, read now.
+  ///
+  /// For an employee the bazaar list is already scoped to their assignments, so
+  /// its ids are the answer -- and unlike the ids captured at sign-in they
+  /// include a bazaar they were put on afterwards. One request, nothing held:
+  /// this does not touch the loaded bazaars.
+  ///
+  /// Null where there is no server to ask, in which case the caller has only
+  /// the ids from sign-in.
+  Future<List<int>?> fetchAssignedEventIds() async {
+    final auth = _auth;
+    if (auth == null || auth.vendorId == null) {
+      return null;
+    }
+    final payload = await auth.api.get('/api/bazaar/event/') as List;
+    return [
+      for (final entry in payload.cast<Map<String, dynamic>>())
+        // A proposal is not a bazaar yet, the same rule the list itself uses.
+        if (entry['is_approved'] != false) (entry['id'] as num).toInt(),
+    ];
+  }
+
   /// Re-fetches bazaars and allocations, discarding what is held now.
   Future<void> refresh() async {
     if (_auth?.vendorId == null) {

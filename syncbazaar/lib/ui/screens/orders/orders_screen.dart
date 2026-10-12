@@ -5,6 +5,7 @@ import '../../../bloc/dashboard/dashboard_cubit.dart';
 import '../../../bloc/inventory/inventory_cubit.dart';
 import '../../../bloc/orders/orders_cubit.dart';
 import '../../../bloc/pos/pos_cubit.dart';
+import '../../../bloc/staff/staff_cubit.dart';
 import '../../../core/constants/colors.dart';
 import '../../../core/constants/motion.dart';
 import '../../../data/remote/api_client.dart';
@@ -23,6 +24,16 @@ import '../../../models/bazaar_event.dart';
 import '../../../models/user.dart';
 import '../../../core/utils/formatters.dart';
 
+/// The line under a customer's name: when, how it was paid, and who sold it.
+///
+/// "Sold by" is left off a sale that does not say, rather than printing a blank
+/// or a guess.
+String orderSubLine({
+  required String time,
+  required String method,
+  String? soldBy,
+}) => [time, method, if (soldBy != null) 'Sold by $soldBy'].join(' · ');
+
 class OrdersScreen extends StatefulWidget {
   const OrdersScreen({super.key, required this.user});
 
@@ -33,6 +44,11 @@ class OrdersScreen extends StatefulWidget {
 }
 
 class _OrdersScreenState extends State<OrdersScreen> {
+  /// Set on each build and read by the rows, which are built lazily by the list
+  /// and would otherwise each have to look the same two things up again.
+  late AppUser _actingUser = widget.user;
+  Map<int, String> _staffNames = const {};
+
   final TextEditingController _searchController = TextEditingController();
 
   /// Separate from the transaction search: this one filters the list of
@@ -84,6 +100,14 @@ class _OrdersScreenState extends State<OrdersScreen> {
           'All',
           ...state.records.map((r) => r.paymentMethod.trim()),
         }.where((value) => value.isNotEmpty).toList();
+
+        // The freshest assignments the server has given, for deciding who may
+        // refund, in place of the ones captured at sign-in.
+        _actingUser = state.withFreshAssignments(widget.user);
+        _staffNames = {
+          for (final person in context.watch<StaffCubit>().state)
+            person.id: person.name,
+        };
 
         final query = _searchController.text.trim().toLowerCase();
         var records = state.visibleRecords(widget.user);
@@ -323,8 +347,14 @@ class _OrdersScreenState extends State<OrdersScreen> {
                   // Time and payment method, not the date: every row in one
                   // bazaar shares the date, so repeating it down the column
                   // says nothing while the payment method -- which this
-                  // screen can filter by -- was not shown at all.
-                  '${_fmtTime(record.timestamp)} · ${record.paymentMethod}',
+                  // screen can filter by -- was not shown at all. Then who
+                  // sold it, since everyone assigned to the bazaar sees every
+                  // sale and the person refunding is rarely the seller.
+                  orderSubLine(
+                    time: _fmtTime(record.timestamp),
+                    method: record.paymentMethod,
+                    soldBy: _soldByName(record.userId),
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodySmall?.copyWith(
@@ -410,7 +440,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
     return RefundSlot(
       record: record,
       event: event,
-      user: widget.user,
+      user: _actingUser,
       refunds: context.read<RefundRepository>(),
       onRefund: () => _refund(record, event!),
     );
@@ -456,6 +486,14 @@ class _OrdersScreenState extends State<OrdersScreen> {
       kind: AppMessageKind.success,
       title: 'Refund issued',
     );
+  }
+
+  /// Who rang the sale up, or null where the sale does not say.
+  String? _soldByName(int userId) {
+    if (userId <= 0) {
+      return null;
+    }
+    return _staffNames[userId] ?? 'Employee #$userId';
   }
 
   static String _fmtTime(DateTime value) {

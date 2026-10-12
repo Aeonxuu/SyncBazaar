@@ -6,6 +6,7 @@ import '../../../../core/constants/motion.dart';
 import '../../../../data/repositories/refund_repository.dart';
 import '../../../../models/bazaar_event.dart';
 import '../../../../models/refund_access.dart';
+import '../../../../models/sale.dart' show OrderStatus;
 import '../../../../models/user.dart';
 
 /// The refund slot to the right of TOTAL. Fixed, on the header and on every
@@ -49,9 +50,18 @@ class RefundSlot extends StatelessWidget {
     }
     final event = this.event;
     if (!refunds.isRemote ||
-        !record.isRefundable ||
+        record.status == OrderStatus.returned ||
         event == null ||
         !canRefund(user, event)) {
+      return const SizedBox.shrink();
+    }
+    // Refundable in every way but one: the server has not got it yet. Said on
+    // the row, because a missing button looks like a missing permission and
+    // the person looking cannot tell the two apart.
+    if (!record.onServer) {
+      return const UnsentTag();
+    }
+    if (!record.isRefundable) {
       return const SizedBox.shrink();
     }
     return RefundButton(
@@ -84,6 +94,44 @@ class RefundedTag extends StatelessWidget {
           color: Colors.black54,
           fontWeight: FontWeight.w600,
           fontSize: 11,
+        ),
+      ),
+    );
+  }
+}
+
+/// Marks a sale the server has not received, so it cannot be refunded yet.
+///
+/// Amber, the app's "not final" colour, but quiet: the sale is real and the
+/// money is in the till, it just has not been sent. It clears itself once the
+/// sale uploads.
+class UnsentTag extends StatelessWidget {
+  const UnsentTag({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    const message =
+        'Not sent to the server yet. It can be refunded once it has been sent.';
+    return Semantics(
+      label: message,
+      child: ExcludeSemantics(
+        child: Tooltip(
+          message: message,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppColors.statusUpcoming.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              'Unsent',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: AppColors.statusUpcoming,
+                fontWeight: FontWeight.w600,
+                fontSize: 11,
+              ),
+            ),
+          ),
         ),
       ),
     );
