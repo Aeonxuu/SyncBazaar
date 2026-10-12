@@ -1,6 +1,11 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:file_saver/file_saver.dart';
 import 'package:flutter/foundation.dart';
 import 'package:gal/gal.dart';
+import 'package:path/path.dart' as p;
+
+import '../data/repositories/save_folder_repository.dart';
+import 'mac_file_writer.dart';
 
 /// Writes a rendered receipt to wherever the user will actually find it.
 ///
@@ -15,7 +20,11 @@ import 'package:gal/gal.dart';
 /// Returns a phrase for the confirmation dialog, since where the file went is
 /// the only thing the cashier needs to know and it differs by platform.
 class ReceiptSaver {
-  const ReceiptSaver();
+  const ReceiptSaver({
+    SaveFolderRepository folderRepository = const SaveFolderRepository(),
+  }) : _folderRepository = folderRepository;
+
+  final SaveFolderRepository _folderRepository;
 
   Future<String> save(Uint8List bytes, String fileName) async {
     if (!kIsWeb &&
@@ -23,6 +32,32 @@ class ReceiptSaver {
             defaultTargetPlatform == TargetPlatform.iOS)) {
       await Gal.putImageBytes(bytes, name: fileName);
       return 'Saved to Photos';
+    }
+
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.macOS) {
+      final initialDirectory = await _folderRepository.folderFor(
+        SaveDocumentKind.receipts,
+      );
+      final path = await FilePicker.platform.saveFile(
+        dialogTitle: 'Save $fileName',
+        fileName: '$fileName.png',
+        initialDirectory: initialDirectory,
+        // Not `bytes:` -- file_picker throws UnsupportedError if given bytes
+        // on macOS. It only returns the chosen path there, so the write
+        // below is on us.
+      );
+      if (path == null) {
+        // Not a failure -- the cashier backed out of the dialog. Treated the
+        // same as a completed save so the caller does not report an error
+        // over a receipt that already printed and rang up fine.
+        return 'Not saved';
+      }
+      await const MacFileWriter().write(path, bytes);
+      await _folderRepository.setFolderFor(
+        SaveDocumentKind.receipts,
+        p.dirname(path),
+      );
+      return 'Saved $fileName.png';
     }
 
     await FileSaver.instance.saveFile(

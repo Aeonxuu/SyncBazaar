@@ -19,6 +19,7 @@ import 'bloc/settings/payment_methods_cubit.dart';
 import 'bloc/settings/settings_cubit.dart';
 import 'bloc/staff/staff_cubit.dart';
 import 'bloc/sync/sync_cubit.dart';
+import 'ui/widgets/app_message.dart';
 import 'core/constants/colors.dart';
 import 'core/routing/app_router.dart';
 import 'core/theme/app_theme.dart';
@@ -240,9 +241,7 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
             create: (_) =>
                 PaymentMethodsCubit(_vendorPaymentMethodRepository)..load(),
           ),
-          BlocProvider(
-            create: (_) => CatalogCubit(_productRepository)..load(),
-          ),
+          BlocProvider(create: (_) => CatalogCubit(_productRepository)..load()),
           BlocProvider(
             create: (_) =>
                 PreBazaarCubit(_approvalsRepository, _eventRepository),
@@ -256,6 +255,7 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
           ),
         ],
         child: MaterialApp(
+          navigatorKey: appNavigatorKey,
           title: 'SyncBazaar',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.light,
@@ -325,12 +325,57 @@ class _MainShellState extends State<MainShell> {
   }
 
   void _loadForUser() {
-    context.read<DashboardCubit>().load(widget.user);
-    context.read<PosCubit>().load(widget.user);
+    // Reset before each load so nothing between login and the fetch
+    // resolving still shows the previous account's data -- the dashboard's
+    // KPIs, the POS product grid, and the nav rail's store name were all
+    // doing this, each for as long as their own load took.
+    context.read<DashboardCubit>()
+      ..reset()
+      ..load(widget.user);
+    context.read<PosCubit>()
+      ..reset()
+      ..load(widget.user);
     context.read<NotificationsCubit>().load();
+    // Who is on which bazaar. Only the Staff screen used to load this, which an
+    // employee never opens, so the till's seller picker had nobody to offer them.
+    context.read<StaffCubit>().load();
+    context.read<SettingsCubit>()
+      ..reset()
+      ..load();
   }
 
+  /// Whether the Preparations form holds anything worth keeping, reported by
+  /// the screen itself. Never disposed: the screen clears it as it goes, and
+  /// a child can outlive this State's dispose. Owned here because the rail that can abandon the form
+  /// sits outside it, the same reason the sale guard is checked here.
+  final ValueNotifier<bool> _preBazaarHasProgress = ValueNotifier(false);
+
   Future<void> _handleSectionSelect(AppSection section) async {
+    // The form lives only in the screen, so leaving it throws it away: a bazaar
+    // name, dates, a whole stock allocation, gone on one stray tap of the rail.
+    if (section != _section &&
+        _section == AppSection.preBazaar &&
+        _preBazaarHasProgress.value) {
+      final leave = await showConfirmationDialog(
+        context: context,
+        title: 'Leave Preparations?',
+        message:
+            'Your progress on this bazaar will not be saved. You will have to '
+            'start over.',
+        // Staying is the filled, focused choice: nobody opened this asking to
+        // lose their work, they tapped away by accident. Leaving is the
+        // outlined one, reachable but not the thing Enter does.
+        confirmLabel: 'Leave',
+        cancelLabel: 'Stay',
+        emphasis: ConfirmationEmphasis.cancel,
+        outlineQuietButton: true,
+        icon: Icons.edit_note_rounded,
+      );
+      if (!leave || !mounted) {
+        return;
+      }
+    }
+
     // Leaving the POS mid-sale discards the cart, and the rail is the easiest
     // way to do it by accident — one stray tap while a customer waits. Asked
     // here rather than inside the POS because the rail sits outside it and the
@@ -350,6 +395,8 @@ class _MainShellState extends State<MainShell> {
         context.read<DashboardCubit>().load(widget.user);
       case AppSection.pos:
         context.read<PosCubit>().load(widget.user);
+        // The roster can change on another device while this one is open.
+        context.read<StaffCubit>().load();
       case AppSection.orders:
         context.read<OrdersCubit>().load();
       case AppSection.approvals:
@@ -399,6 +446,7 @@ class _MainShellState extends State<MainShell> {
       confirmLabel: 'Log out',
       cancelLabel: 'Stay signed in',
       emphasis: ConfirmationEmphasis.cancel,
+      outlineQuietButton: true,
     );
 
     if (confirmed == true) {
@@ -535,35 +583,37 @@ class _MainShellState extends State<MainShell> {
                   BlocBuilder<NotificationsCubit, NotificationsState>(
                     builder: (context, notificationsState) =>
                         BlocBuilder<ApprovalsCubit, List<ApprovalRequest>>(
-                          builder: (context, pendingApprovals) => BlocBuilder<
-                            ReconciliationCubit,
-                            ReconciliationState
-                          >(
-                            builder: (context, reconciliationState) =>
-                                SideNavigationRail(
-                                  groups: _navGroups,
-                                  selected: section,
-                                  onSelect: _handleSectionSelect,
-                                  isCollapsed: _isNavCollapsed,
-                                  onToggle: () => setState(
-                                    () => _isNavCollapsed = !_isNavCollapsed,
-                                  ),
-                                  onLogout: _confirmLogout,
-                                  isSyncing: syncState.isSyncing,
-                                  onSync: () =>
-                                      context.read<SyncCubit>().syncNow(),
-                                  syncMessage: syncState.lastMessage,
-                                  badges: {
-                                    AppSection.notifications:
-                                        notificationsState.unreadCount,
-                                    if (widget.user.isAdminOrOwner)
-                                      AppSection.approvals:
-                                          pendingApprovals.length,
-                                    AppSection.postBazaar:
-                                        reconciliationState.pendingCount,
-                                  },
-                                ),
-                          ),
+                          builder: (context, pendingApprovals) =>
+                              BlocBuilder<
+                                ReconciliationCubit,
+                                ReconciliationState
+                              >(
+                                builder: (context, reconciliationState) =>
+                                    SideNavigationRail(
+                                      groups: _navGroups,
+                                      selected: section,
+                                      onSelect: _handleSectionSelect,
+                                      isCollapsed: _isNavCollapsed,
+                                      onToggle: () => setState(
+                                        () =>
+                                            _isNavCollapsed = !_isNavCollapsed,
+                                      ),
+                                      onLogout: _confirmLogout,
+                                      isSyncing: syncState.isSyncing,
+                                      onSync: () =>
+                                          context.read<SyncCubit>().syncNow(),
+                                      syncMessage: syncState.lastMessage,
+                                      badges: {
+                                        AppSection.notifications:
+                                            notificationsState.unreadCount,
+                                        if (widget.user.isAdminOrOwner)
+                                          AppSection.approvals:
+                                              pendingApprovals.length,
+                                        AppSection.postBazaar:
+                                            reconciliationState.pendingCount,
+                                      },
+                                    ),
+                              ),
                         ),
                   ),
             ),
@@ -584,6 +634,7 @@ class _MainShellState extends State<MainShell> {
       case AppSection.preBazaar:
         return PreBazaarScreen(
           user: widget.user,
+          hasProgress: _preBazaarHasProgress,
           onOpenApprovals: () => _handleSectionSelect(AppSection.approvals),
         );
       case AppSection.pos:

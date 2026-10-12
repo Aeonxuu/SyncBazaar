@@ -101,6 +101,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Approval Details'), findsOneWidget);
+
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
     expect(find.text('Approve'), findsOneWidget);
   });
 
@@ -196,6 +199,8 @@ void main() {
 
     // They may read it -- it is their own request.
     expect(find.text('Approval Details'), findsOneWidget);
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
     expect(find.text('Approve'), findsNothing);
     expect(find.text('Reject'), findsNothing);
     expect(
@@ -220,22 +225,71 @@ void main() {
     await tester.tap(find.text('STOCK REQUEST for Tech Quest'));
     await tester.pumpAndSettle();
 
+    // Reject is there from the first step; Approve waits until the products
+    // have been seen, so it cannot be pressed on a request only half read.
+    expect(find.text('Reject'), findsOneWidget);
+    expect(find.text('Approve'), findsNothing);
+
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+
     expect(find.text('Approve'), findsOneWidget);
     expect(find.text('Reject'), findsOneWidget);
+  });
+
+  testWidgets('the first step names the bazaar, the second lists the stock', (
+    tester,
+  ) async {
+    await pumpWith(
+      tester,
+      detailsWith([
+        {
+          'name': 'Nike Air Max SC',
+          'variant': 'Triple White, 36',
+          'price': 1900.0,
+          'qty': 4,
+        },
+      ]),
+    );
+
+    await tester.tap(find.text('STOCK REQUEST for Tech Quest'));
+    await tester.pumpAndSettle();
+
+    // Inside the dialog only: the list behind it prints the venue too.
+    Finder inDialog(String text) =>
+        find.descendant(of: find.byType(Dialog), matching: find.text(text));
+
+    expect(inDialog('Tech Quest'), findsOneWidget);
+    expect(inDialog('SM City Lucena'), findsOneWidget);
+    expect(inDialog('Nike Air Max SC'), findsNothing);
+
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+
+    expect(inDialog('Nike Air Max SC'), findsOneWidget);
+    expect(inDialog('Triple White, 36'), findsOneWidget);
+    expect(inDialog('1,900.00'), findsOneWidget);
+    expect(inDialog('SM City Lucena'), findsNothing);
+
+    // Back to the first step, not out of the dialog.
+    await tester.tap(find.text('Back'));
+    await tester.pumpAndSettle();
+    expect(inDialog('SM City Lucena'), findsOneWidget);
   });
 
   testWidgets('an unreadable item does not take the whole modal down', (
     tester,
   ) async {
-    // The table's other rows have four cells. A row built with a different
-    // number throws "Table contains irregular row lengths" while the dialog
-    // is building, and the tap silently does nothing.
+    // A dialog that throws while building never appears, so an entry that is
+    // not a map must be skipped rather than trusted.
     await pumpWith(tester, detailsWith(['not a map at all']));
 
     await tester.tap(find.text('STOCK REQUEST for Tech Quest'));
     await tester.pumpAndSettle();
 
     expect(find.text('Approval Details'), findsOneWidget);
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
     expect(find.text('Approve'), findsOneWidget);
   });
 }

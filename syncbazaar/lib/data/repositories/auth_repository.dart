@@ -134,6 +134,7 @@ class AuthRepository {
           role: userRoleFromApiCode(entry['role'] as String?),
           assignedEventIds:
               assignments[(entry['id'] as num).toInt()] ?? const [],
+          dateHired: AppUser.parseApiDate(entry['date_hired']),
         ),
     ];
 
@@ -219,24 +220,38 @@ class AuthRepository {
     );
   }
 
-  /// Confirms an account with the code emailed when it was created.
+  /// Confirms an account with the code emailed when it was created, and sets
+  /// its password in the same step.
   ///
-  /// Accounts are created unverified and login refuses an unverified account,
-  /// so without this an employee an owner has just added cannot sign in at all.
+  /// Account creation carries no password at all — a temporary one typed by
+  /// the admin who created the account would just be a second insecure
+  /// channel alongside this code, without adding any security, since
+  /// whoever can read the verification email can read both. This is the
+  /// only place a new account's password is ever set, and login refuses an
+  /// unverified account, so without this an employee an owner has just added
+  /// cannot sign in at all.
   ///
-  /// Returns null on success. Returns the server's own wording on failure,
-  /// which distinguishes a wrong code from an expired one, and the difference
-  /// decides whether the person retypes it or asks for a new one.
+  /// Returns null on success. Returns the server's own wording on failure —
+  /// a wrong code and an expired one both come back as the same generic
+  /// "Invalid email or code.", by design on the server's side, so there is
+  /// nothing to distinguish here the way [confirmPasswordReset] can.
   Future<String?> verifyAccount({
     required String email,
     required String code,
+    required String password,
   }) async {
     try {
       await _api.post(
         '/api/auth/verify-account/',
         body: {
           'email': email.trim().toLowerCase(),
+          // Confirmed against `VerifyAccountSerializer`: the field is `code`,
+          // and the server checks `password`/`password_confirm` match itself
+          // — both are sent even though the client already checked, since the
+          // server doesn't trust it either.
           'code': code.trim(),
+          'password': password,
+          'password_confirm': password,
         },
       );
       return null;
@@ -259,26 +274,79 @@ class AuthRepository {
     }
   }
 
+  /// Starts a self-service password reset by emailing a code, for anyone who
+  /// forgot their password rather than being locked out of a temporary one.
+  ///
+  /// Unlike [verifyAccount]/[resendVerification], this runs with no session:
+  /// the point of it is signing back in. Always returns null — a successful
+  /// request and an unknown email must look identical here, or the response
+  /// itself becomes a way to check whether an address has an account.
+  ///
+  Future<String?> requestPasswordReset({required String email}) async {
+    try {
+      await _api.post(
+        '/api/auth/request-password-reset/',
+        body: {'email': email.trim().toLowerCase()},
+      );
+    } on ApiException catch (error) {
+      // Only a real connectivity failure is reported — telling someone their
+      // code is on its way when the tablet has no signal is worse than the
+      // enumeration risk of staying silent about anything the server said.
+      if (error.isOffline) {
+        return error.message;
+      }
+    }
+    return null;
+  }
+
+  /// Finishes a reset started by [requestPasswordReset]: the code proves the
+  /// email is theirs, so this is also where the new password gets set.
+  ///
+  /// Returns null on success, the server's message on failure — a wrong code
+  /// and an expired one read differently here (unlike [verifyAccount], the
+  /// server does distinguish them for a reset).
+  Future<String?> confirmPasswordReset({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async {
+    try {
+      await _api.post(
+        '/api/auth/confirm-password-reset/',
+        body: {
+          'email': email.trim().toLowerCase(),
+          'code': code.trim(),
+          'new_password': newPassword,
+          'new_password_confirm': newPassword,
+        },
+      );
+      return null;
+    } on ApiException catch (error) {
+      return error.message;
+    }
+  }
+
   Future<AppUser> addUser({
     required String name,
     required String email,
     required UserRole role,
-    String? password,
+    DateTime? dateHired,
   }) async {
     final vendorId = this.vendorId;
     if (vendorId != null) {
       // Created through the vendor so the account is tied to it. Posting to
       // `/api/user/` instead makes a real, log-in-able account with no vendor:
       // invisible to the owner who just created it, and shown an empty app.
+      //
+      // No password: the account has none until [verifyAccount] sets one, so
+      // the person who owns it is the only one who ever types it in.
       await _api.post(
         '/api/core/vendor/$vendorId/employee/',
         body: {
           'email': email.trim().toLowerCase(),
           'name': name.trim(),
-          'password': (password != null && password.isNotEmpty)
-              ? password
-              : _defaultPassword,
           'role': role.apiCode,
+          if (dateHired != null) 'date_hired': AppUser.toApiDate(dateHired),
         },
       );
       // The create response omits the id, so the list is re-read to find the
@@ -293,32 +361,43 @@ class AuthRepository {
     final nextId = _users.isEmpty
         ? 1
         : _users.map((user) => user.id).reduce((a, b) => a > b ? a : b) + 1;
-    final created = AppUser(id: nextId, name: name, email: email, role: role);
+    final created = AppUser(
+      id: nextId,
+      name: name,
+      email: email,
+      role: role,
+      dateHired: dateHired,
+    );
     _users.add(created);
-    _passwordByUserId[nextId] = (password != null && password.isNotEmpty)
-        ? password
-        : _defaultPassword;
+    _passwordByUserId[nextId] = _defaultPassword;
     return created;
   }
 
+  /// Role is deliberately not editable here — confirmed with Amrei that this
+  /// is intentional on the backend, not a gap: changing a role after account
+  /// creation goes through contacting an admin directly, not this form.
   Future<void> updateUser({
     required int id,
     required String name,
     required String email,
-    required UserRole role,
-    String? password,
+    DateTime? dateHired,
   }) async {
+    final vendorId = this.vendorId;
     if (vendorId != null) {
-      // Only the fields the screen edits. A full replace would demand the
-      // password back, and this form does not ask for one unless it is being
-      // changed.
+      // Only the fields this screen actually edits. No password: the account
+      // holder is the only one who ever sets it, through account
+      // verification or a self-service reset, never through this form.
+      //
+      // `/api/user/<id>/` is being cut down to read-only, same reasoning as
+      // `deleteUser` -- this is the vendor-scoped replacement.
       await _api.patch(
-        '/api/user/$id/',
+        '/api/core/vendor/$vendorId/employee/$id/',
         body: {
           'name': name.trim(),
           'email': email.trim().toLowerCase(),
-          'role': role.apiCode,
-          if (password != null && password.isNotEmpty) 'password': password,
+          // Always sent, null included, so clearing the date in the form
+          // clears it on the server instead of silently keeping the old one.
+          'date_hired': dateHired == null ? null : AppUser.toApiDate(dateHired),
         },
       );
     }
@@ -331,18 +410,23 @@ class AuthRepository {
     _users[index] = current.copyWith(
       name: name,
       email: email,
-      role: role,
-      clearAssignedEventId: role != UserRole.employee,
+      dateHired: dateHired,
+      clearDateHired: dateHired == null,
     );
-    if (password != null && password.isNotEmpty) {
-      _passwordByUserId[id] = password;
-    }
     await _syncRememberedUserIfAffected(_users[index]);
   }
 
+  /// Throws [ApiException] on failure — in particular a 409 when the account
+  /// has recorded sales, which the server refuses to let vanish along with
+  /// the person who made them. The caller decides how to show that; this
+  /// just lets it through rather than swallowing it.
   Future<void> deleteUser(int id) async {
+    final vendorId = this.vendorId;
     if (vendorId != null) {
-      await _api.delete('/api/user/$id/');
+      // `/api/user/<id>/` is being cut down to read-only — deletion moved to
+      // the vendor-scoped endpoint, which also actually enforces
+      // admin/owner-only (the old one didn't check role at all).
+      await _api.delete('/api/core/vendor/$vendorId/employee/$id/');
     }
     _users.removeWhere((user) => user.id == id);
     _passwordByUserId.remove(id);

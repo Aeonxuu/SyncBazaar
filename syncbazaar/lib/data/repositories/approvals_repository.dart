@@ -41,9 +41,18 @@ class ApprovalsRepository {
       try {
         final payload =
             await auth.api.get('/api/bazaar/event/$eventId/approval/') as List;
+        final rows = payload.cast<Map<String, dynamic>>();
+        // The server raises its own empty request (type EC) the moment a
+        // bazaar is created, and the pre-bazaar form then adds the real one
+        // with the name, dates and stock. Both are pending, so the owner saw
+        // every proposal twice, the first as a blank "Bazaar #n". The blank
+        // one is dropped whenever a real request sits beside it.
+        final hasRealRequest = rows.any(
+          (j) => j['request_type'] != 'EC' && _isPending(j),
+        );
         pending.addAll(
-          payload
-              .cast<Map<String, dynamic>>()
+          rows
+              .where((j) => !(hasRealRequest && j['request_type'] == 'EC'))
               .map(ApprovalApiMapper.fromJson)
               .where((r) => r.status == ApprovalStatus.pending),
         );
@@ -59,6 +68,9 @@ class ApprovalsRepository {
     pending.sort((a, b) => a.id.compareTo(b.id));
     return pending;
   }
+
+  static bool _isPending(Map<String, dynamic> json) =>
+      ApprovalApiMapper.fromJson(json).status == ApprovalStatus.pending;
 
   /// Raises a request against the bazaar it proposes.
   Future<ApprovalRequest> add(ApprovalRequest request) async {
@@ -95,9 +107,31 @@ class ApprovalsRepository {
       return;
     }
 
-    await _auth!.api.patch(
+    final auth = _auth!;
+    await auth.api.patch(
       '/api/bazaar/event/${request.eventId}/approval/${request.id}/',
       body: ApprovalApiMapper.decisionBody(status),
     );
+
+    // The bazaar itself is approved by the server's own event-creation
+    // request (type EC), not by a field: `is_approved` is read-only on the
+    // event, so patching it is silently ignored. Approving the proposal has to
+    // approve that one too, or the stock lands on a bazaar that never goes live
+    // and the till shows nothing.
+    if (status == ApprovalStatus.approved) {
+      final rows =
+          await auth.api.get('/api/bazaar/event/${request.eventId}/approval/')
+              as List;
+      for (final row in rows.cast<Map<String, dynamic>>()) {
+        if (row['request_type'] == 'EC' &&
+            row['status'] == 'PD' &&
+            (row['id'] as num).toInt() != request.id) {
+          await auth.api.patch(
+            '/api/bazaar/event/${request.eventId}/approval/${row['id']}/',
+            body: ApprovalApiMapper.decisionBody(status),
+          );
+        }
+      }
+    }
   }
 }

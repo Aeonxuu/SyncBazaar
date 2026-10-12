@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import '../../widgets/app_message.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
@@ -19,8 +20,10 @@ import '../../widgets/confirmation_dialog.dart';
 import '../../widgets/product_thumbnail.dart';
 import '../../widgets/selectable_option_button.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../data/repositories/save_folder_repository.dart';
 import '../../../services/document_saver.dart';
 import '../../../services/inventory_workbook.dart';
+import 'widgets/inventory_skeletons.dart';
 import 'widgets/quick_edit_dialog.dart';
 
 /// Outline for unchecked boxes in the inventory table. Material's default is
@@ -242,7 +245,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
     List<InventoryRow> rows,
   ) async {
     setState(() => _exportingInventory = true);
-    final messenger = ScaffoldMessenger.of(context);
     try {
       final lines = [
         for (final row in rows)
@@ -264,20 +266,22 @@ class _InventoryScreenState extends State<InventoryScreen> {
         bytes: bytes,
         fileName: fileName,
         format: DocumentFormat.xlsx,
+        kind: SaveDocumentKind.inventory,
       );
       if (!mounted || where == null) {
         return;
       }
-      messenger.showSnackBar(
-        SnackBar(content: Text('$where (${lines.length} rows).')),
+      showAppMessage(
+        '$where (${lines.length} rows).',
+        kind: AppMessageKind.success,
+        title: 'Export saved',
       );
     } on StateError {
       if (!mounted) return;
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('The inventory export could not be written. Try again.'),
-          backgroundColor: AppColors.error,
-        ),
+      showAppMessage(
+        'The inventory export could not be written. Try again.',
+        kind: AppMessageKind.error,
+        title: 'Export failed',
       );
     } finally {
       if (mounted) setState(() => _exportingInventory = false);
@@ -299,7 +303,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildHeader(context),
+                    _buildHeader(context, rows),
                     const SizedBox(height: 20),
                     _buildKpiRow(context, state),
                     const SizedBox(height: 20),
@@ -328,7 +332,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
     );
   }
 
-  Widget _buildHeader(BuildContext context) {
+  Widget _buildHeader(BuildContext context, List<InventoryRow> rows) {
     return Row(
       children: [
         Expanded(
@@ -339,7 +343,41 @@ class _InventoryScreenState extends State<InventoryScreen> {
             ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
           ),
         ),
+        OutlinedButton.icon(
+          onPressed: _exportingInventory
+              ? null
+              : () => _exportInventory(context, rows),
+          icon: _exportingInventory
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.primary,
+                  ),
+                )
+              // Pointing up: this button sends data out, and a down arrow
+              // reads as incoming (a download) rather than outgoing.
+              : const Icon(Icons.file_upload_outlined, size: 18),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppColors.primary,
+            disabledForegroundColor: AppColors.primary.withValues(alpha: 0.45),
+            side: BorderSide(
+              color: _exportingInventory
+                  ? AppColors.primary.withValues(alpha: 0.45)
+                  : AppColors.primary,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 15.5),
+            minimumSize: const Size(0, 48),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(6),
+            ),
+          ),
+          label: Text(_exportingInventory ? 'Preparing…' : 'Export Inventory'),
+        ),
         if (widget.user.isAdminOrOwner) ...[
+          const SizedBox(width: 12),
           ElevatedButton.icon(
             onPressed: () => _showAddDialog(context),
             icon: const Icon(Icons.add_rounded, size: 18),
@@ -350,8 +388,10 @@ class _InventoryScreenState extends State<InventoryScreen> {
               // The one primary action on this screen, so it earns the
               // most generous target of anything in the header.
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              minimumSize: const Size(0, 48),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(6),
               ),
             ),
             label: const Text('Add Product'),
@@ -364,20 +404,26 @@ class _InventoryScreenState extends State<InventoryScreen> {
   Widget _buildKpiRow(BuildContext context, InventoryState state) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final cards = [
-          _InventoryKpiCard(
-            label: 'Total inventory volume',
-            value: formatCount(state.totalVolume),
-          ),
-          _InventoryKpiCard(
-            label: 'Inventory value',
-            value: formatPeso(state.inventoryValue),
-          ),
-          _InventoryKpiCard(
-            label: 'Inventory turnover',
-            value: state.inventoryTurnover.toStringAsFixed(2),
-          ),
-        ];
+        final cards = state.isLoading
+            ? const [
+                InventoryKpiSkeleton(),
+                InventoryKpiSkeleton(),
+                InventoryKpiSkeleton(),
+              ]
+            : [
+                _InventoryKpiCard(
+                  label: 'Total inventory volume',
+                  value: formatCount(state.totalVolume),
+                ),
+                _InventoryKpiCard(
+                  label: 'Inventory value',
+                  value: formatPeso(state.inventoryValue),
+                ),
+                _InventoryKpiCard(
+                  label: 'Inventory turnover',
+                  value: state.inventoryTurnover.toStringAsFixed(2),
+                ),
+              ];
         // Below ~720px three side-by-side cards squeeze their numbers into
         // ellipses, so stack them instead of letting the values truncate.
         if (constraints.maxWidth < 720) {
@@ -482,44 +528,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
           selected: _sort,
           onSelected: (sort) => setState(() => _sort = sort),
         ),
-        ElevatedButton.icon(
-          onPressed: _exportingInventory
-              ? null
-              : () => _exportInventory(context, _visibleRows(state)),
-          icon: _exportingInventory
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                )
-              // Pointing up: this button sends data out, and a down arrow
-              // reads as incoming (a download) rather than outgoing.
-              : const Icon(Icons.file_upload_outlined, size: 18),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.primary,
-            foregroundColor: Colors.white,
-            disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.45),
-            disabledForegroundColor: Colors.white,
-            elevation: 0,
-            // Matched to the filter tabs' own height (36.5, measured with a
-            // widget test) — `ElevatedButton` enforces a 48px minimum tap
-            // target on top of whatever padding says, so that has to be
-            // lifted too or the padding number alone does nothing.
-            padding: const EdgeInsets.symmetric(
-              horizontal: 14,
-              vertical: 15.5,
-            ),
-            minimumSize: Size.zero,
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-          label: Text(_exportingInventory ? 'Preparing…' : 'Export Inventory'),
-        ),
       ],
     );
   }
@@ -561,7 +569,16 @@ class _InventoryScreenState extends State<InventoryScreen> {
         const Divider(height: 1, color: _borderColor),
         Expanded(
           child: state.isLoading
-              ? const Center(child: CircularProgressIndicator())
+              ? ListView.separated(
+                  // Content-sized rather than counted off the real data,
+                  // which is empty right now -- enough rows to fill a
+                  // typical tablet viewport without scrolling.
+                  itemCount: 8,
+                  separatorBuilder: (_, __) =>
+                      const Divider(height: 1, color: _borderColor),
+                  itemBuilder: (context, _) =>
+                      InventoryRowSkeleton(canManage: canManage),
+                )
               : rows.isEmpty
               ? _buildEmptyState(context)
               : ListView.separated(
@@ -676,23 +693,16 @@ class _InventoryScreenState extends State<InventoryScreen> {
     required bool archived,
   }) async {
     final count = keys.length;
-    final messenger = ScaffoldMessenger.of(context);
     final cubit = context.read<InventoryCubit>();
     await cubit.setArchivedForKeys(keys, archived: archived);
     if (!mounted) return;
     setState(_selectedKeys.clear);
     final noun = count == 1 ? 'variant' : 'variants';
-    messenger.showSnackBar(
-      SnackBar(
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(milliseconds: 2600),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        content: Text(
-          archived
-              ? '$count $noun archived. Their stock can no longer be allocated to a bazaar.'
-              : '$count $noun restored.',
-        ),
-      ),
+    showAppMessage(
+      archived
+          ? '$count $noun archived. Their stock can no longer be allocated to a bazaar.'
+          : '$count $noun restored.',
+      kind: AppMessageKind.success,
     );
   }
 
@@ -711,7 +721,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
         ? names.join(', ')
         : '${names.take(3).join(', ')} and ${names.length - 3} more';
     final cubit = context.read<InventoryCubit>();
-    final messenger = ScaffoldMessenger.of(context);
 
     // The server cascades a delete through a product's bazaar allocations
     // and says nothing; only a recorded sale stops it. So the bazaars that
@@ -748,17 +757,12 @@ class _InventoryScreenState extends State<InventoryScreen> {
     setState(_selectedKeys.clear);
 
     if (outcome.isComplete) {
-      messenger.showSnackBar(
-        SnackBar(
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(milliseconds: 2600),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          content: Text(
-            outcome.total == 1
-                ? 'Deleted ${namesById.values.single}.'
-                : 'Deleted ${outcome.total} products.',
-          ),
-        ),
+      showAppMessage(
+        outcome.total == 1
+            ? 'Deleted ${namesById.values.single}.'
+            : 'Deleted ${outcome.total} products.',
+        kind: AppMessageKind.success,
+        title: 'Deleted',
       );
       return;
     }
@@ -1032,7 +1036,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
   }
 
   Future<void> _quickEdit(BuildContext context, InventoryRow row) async {
-    final messenger = ScaffoldMessenger.of(context);
     final cubit = context.read<InventoryCubit>();
     final label = [
       row.optionOneValue,
@@ -1049,13 +1052,10 @@ class _InventoryScreenState extends State<InventoryScreen> {
       variantPrices: cubit.variantPricesForProduct(row.product.id),
     );
     if (!mounted || message == null) return;
-    messenger.showSnackBar(
-      SnackBar(
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(milliseconds: 2600),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        content: Text(message),
-      ),
+    showAppMessage(
+      message,
+      kind: AppMessageKind.success,
+      title: 'Stock updated',
     );
   }
 
@@ -2236,8 +2236,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                   options: _brandOptions,
                   selected: _selectedBrand,
                   labelOf: (brand) => brand.name,
-                  onSelected: (brand) =>
-                      setState(() => _selectedBrand = brand),
+                  onSelected: (brand) => setState(() => _selectedBrand = brand),
                   hint: _loadingCatalogFilters ? 'Loading…' : 'None',
                   enabled: !_loadingCatalogFilters,
                 ),

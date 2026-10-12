@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/constants/colors.dart';
 import '../../core/constants/motion.dart';
+import 'action_buttons.dart';
 
 /// How serious the confirmation is, which decides the accent and the primary
 /// button's colour.
@@ -53,6 +54,7 @@ Future<bool> showConfirmationDialog({
   ConfirmationTone tone = ConfirmationTone.normal,
   ConfirmationEmphasis emphasis = ConfirmationEmphasis.confirm,
   IconData? icon,
+  bool outlineQuietButton = false,
 }) async {
   final result = await showDialog<bool>(
     context: context,
@@ -65,6 +67,7 @@ Future<bool> showConfirmationDialog({
       tone: tone,
       emphasis: emphasis,
       icon: icon,
+      outlineQuietButton: outlineQuietButton,
     ),
   );
   // Dismissing by tapping the barrier reads as backing out, so the absence of
@@ -115,6 +118,7 @@ class _ConfirmationDialog extends StatelessWidget {
     required this.tone,
     required this.emphasis,
     this.icon,
+    this.outlineQuietButton = false,
   });
 
   final String title;
@@ -134,6 +138,14 @@ class _ConfirmationDialog extends StatelessWidget {
   /// — discarding a half-rung sale loses work without deleting anything the
   /// cashier would call a thing. The tone still decides the colour.
   final IconData? icon;
+
+  /// Draws a border around the [ConfirmationEmphasis.cancel] quiet button, in
+  /// its own colour, instead of leaving it as bare text.
+  ///
+  /// Opt-in and per-call rather than a blanket style change: the other two
+  /// `emphasis: cancel` callers (discard-sale, delete-category) still want
+  /// the quiet button to read as quiet.
+  final bool outlineQuietButton;
 
   @override
   Widget build(BuildContext context) {
@@ -222,30 +234,36 @@ class _ConfirmationDialog extends StatelessWidget {
                   children: [
                     if (emphasis == ConfirmationEmphasis.confirm) ...[
                       if (cancelLabel != null) ...[
-                        _QuietButton(
+                        QuietActionButton(
                           label: cancelLabel!,
                           color: Colors.black54,
                           onPressed: () => Navigator.pop(context, false),
                         ),
                         const SizedBox(width: 12),
                       ],
-                      _FilledButton(
+                      FilledActionButton(
                         label: confirmLabel,
                         color: accent,
+                        // Enter picks this one and Esc dismisses, which is
+                        // what a keyboard user tries first. It is only ever
+                        // the safe choice when the dialog says so.
+                        autofocus: true,
                         onPressed: () => Navigator.pop(context, true),
                       ),
                     ] else ...[
-                      _QuietButton(
+                      QuietActionButton(
                         label: confirmLabel,
                         color: accent,
+                        outlined: outlineQuietButton,
                         onPressed: () => Navigator.pop(context, true),
                       ),
                       const SizedBox(width: 12),
-                      _FilledButton(
+                      FilledActionButton(
                         // A cancel-emphasis dialog is a two-way choice by
                         // definition; a notice never asks for it.
                         label: cancelLabel ?? 'Cancel',
                         color: AppColors.primary,
+                        autofocus: true,
                         onPressed: () => Navigator.pop(context, false),
                       ),
                     ],
@@ -256,65 +274,6 @@ class _ConfirmationDialog extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-/// The dialog's easy choice: filled, and focused so Enter picks it.
-///
-/// Secondary-action sizing from the design guidelines' button tiers — auto
-/// width, not stretched. A dialog action is not a primary CTA.
-class _FilledButton extends StatelessWidget {
-  const _FilledButton({
-    required this.label,
-    required this.color,
-    required this.onPressed,
-  });
-
-  final String label;
-  final Color color;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return ElevatedButton(
-      // Enter picks this one and Esc dismisses, which is what a keyboard user
-      // tries first. It is only ever the safe choice when the dialog says so.
-      autofocus: true,
-      onPressed: onPressed,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: color,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      ),
-      child: Text(label),
-    );
-  }
-}
-
-/// The dialog's deliberate choice: present and legible, but not the reflex.
-class _QuietButton extends StatelessWidget {
-  const _QuietButton({
-    required this.label,
-    required this.color,
-    required this.onPressed,
-  });
-
-  final String label;
-  final Color color;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return TextButton(
-      onPressed: onPressed,
-      style: TextButton.styleFrom(
-        foregroundColor: color,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      ),
-      child: Text(label),
     );
   }
 }

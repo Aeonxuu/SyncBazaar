@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/app_message.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -42,15 +43,10 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
         if (error == null) {
           return;
         }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(milliseconds: 3400),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-            content: Text(error),
-          ),
+        showAppMessage(
+          error,
+          kind: AppMessageKind.error,
+          title: 'Payment method',
         );
       },
       builder: (context, state) {
@@ -267,7 +263,6 @@ class _QrThumbnailState extends State<_QrThumbnail> {
     // on — the established rule in this codebase for a BuildContext that has
     // to survive an await, rather than calling back through `context` itself
     // once it might already be gone.
-    final messenger = ScaffoldMessenger.of(context);
     final cubit = context.read<PaymentMethodsCubit>();
     final picker = ImagePicker();
     // Capped in pixels but not re-encoded: `imageQuality` is a lossy JPEG
@@ -291,8 +286,10 @@ class _QrThumbnailState extends State<_QrThumbnail> {
     }
     if (!result.found) {
       setState(() => _busy = false);
-      messenger.showSnackBar(
-        SnackBar(content: Text(result.failureReason ?? 'No QR code found.')),
+      showAppMessage(
+        result.failureReason ?? 'No QR code found.',
+        kind: AppMessageKind.error,
+        title: 'No QR code found',
       );
       return;
     }

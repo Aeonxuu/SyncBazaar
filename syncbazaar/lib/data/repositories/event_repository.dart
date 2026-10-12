@@ -28,6 +28,13 @@ class EventRepository {
   int? _loadedVendorId;
   Future<void>? _load;
 
+  /// Cached from the last [_loadFromApi], so [listAllIncludingFinalized]
+  /// doesn't re-fetch the vendor's payment methods just to fall back to them.
+  (List<String>, List<BazaarPaymentMethod>) _paymentMethodsForFinalizedFetch = (
+    const ['CASH'],
+    const <BazaarPaymentMethod>[],
+  );
+
   final List<BazaarEvent> _events = [];
   final Map<int, Map<String, int>> _allocationsByEventId = {};
 
@@ -218,6 +225,10 @@ class EventRepository {
     await products.ensureLoaded();
 
     final methods = await _paymentMethods(auth);
+    _paymentMethodsForFinalizedFetch = methods;
+    // Finalized bazaars are deliberately left out of the default list -- it's
+    // what the till, Orders and the Reconciliation tab read, and none of them
+    // should be able to act on a bazaar whose stock has already been returned.
     final payload = await auth.api.get('/api/bazaar/event/') as List;
     _proposalEventIds
       ..clear()
@@ -234,27 +245,46 @@ class EventRepository {
       fallbackCustomMethods: methods.$2,
     );
 
-    _events
-      ..clear()
-      ..addAll(events);
+    // Every bazaar's stock is fetched before anything held is replaced, and
+    // together rather than one after another. The old loop cleared the maps
+    // first and filled them as it went, so one failed request part-way left
+    // some bazaars with no stock rows at all. The sale upload finds its stock
+    // row here, so it then reported those sales as "still waiting" for as long
+    // as the app stayed open, and only a restart cured it.
+    final stockPayloads = await Future.wait([
+      for (final event in events)
+        auth.api.get('/api/bazaar/event/${event.id}/stock/'),
+    ]);
 
-    _allocationsByEventId.clear();
-    _stockIdsByEventId.clear();
-    _soldByEventId.clear();
-    for (final event in events) {
-      final stock =
-          await auth.api.get('/api/bazaar/event/${event.id}/stock/') as List;
+    final allocations = <int, Map<String, int>>{};
+    final stockIdsByEvent = <int, Map<String, int>>{};
+    final soldByEvent = <int, Map<String, int>>{};
+    for (var i = 0; i < events.length; i++) {
+      final event = events[i];
       final stockIds = <String, int>{};
       final sold = <String, int>{};
-      _allocationsByEventId[event.id] = mapEventStockResponse(
-        stock,
+      allocations[event.id] = mapEventStockResponse(
+        stockPayloads[i] as List,
         allocationKeyForVariant: products.allocationKeyForVariant,
         stockIdByAllocationKey: stockIds,
         soldByAllocationKey: sold,
       );
-      _stockIdsByEventId[event.id] = stockIds;
-      _soldByEventId[event.id] = sold;
+      stockIdsByEvent[event.id] = stockIds;
+      soldByEvent[event.id] = sold;
     }
+
+    _events
+      ..clear()
+      ..addAll(events);
+    _allocationsByEventId
+      ..clear()
+      ..addAll(allocations);
+    _stockIdsByEventId
+      ..clear()
+      ..addAll(stockIdsByEvent);
+    _soldByEventId
+      ..clear()
+      ..addAll(soldByEvent);
   }
 
   /// The vendor's own payment methods, standing in for a per-bazaar choice.
@@ -314,6 +344,29 @@ class EventRepository {
     await _ensureLoaded();
     _refreshStatuses();
     return _sortedForDisplay(_events);
+  }
+
+  /// Every bazaar this vendor has ever run, finalized or not.
+  ///
+  /// Only Documents (the SOA Draft and List of Orders tabs) should call this:
+  /// a finalized bazaar's stock is already back in the warehouse, so nothing
+  /// that sells or reconciles against a bazaar -- the till, Orders, or the
+  /// Reconciliation tab -- should be seeing it. Those all read [listAll].
+  Future<List<BazaarEvent>> listAllIncludingFinalized() async {
+    await _ensureLoaded();
+    final auth = _auth;
+    if (auth == null || auth.vendorId == null) {
+      return listAll();
+    }
+    final payload =
+        await auth.api.get('/api/bazaar/event/?include_finalized=true') as List;
+    final events = mapEventsResponse(
+      payload,
+      statusFor: _statusFor,
+      fallbackMethods: _paymentMethodsForFinalizedFetch.$1,
+      fallbackCustomMethods: _paymentMethodsForFinalizedFetch.$2,
+    );
+    return _sortedForDisplay(events);
   }
 
   /// How many ended bazaars still have stock sitting at the stall rather
@@ -528,7 +581,11 @@ class EventRepository {
   Future<List<BazaarEvent>> listVisibleForUser(AppUser user) async {
     await _ensureLoaded();
     _refreshStatuses();
-    if (user.isAdminOrOwner) {
+    // With a server the list is already the caller's own: it returns an
+    // employee only the bazaars they are assigned to. Filtering again here by
+    // the ids captured at sign-in hid every bazaar assigned afterwards, and a
+    // refresh could not bring it back because the ids were the stale part.
+    if (user.isAdminOrOwner || _auth?.vendorId != null) {
       return _sortedForDisplay(_events);
     }
     final assignedEventIds = user.assignedEventIdsEffective.toSet();
@@ -793,40 +850,25 @@ class EventRepository {
     await _ensureLoaded();
     final auth = _auth;
     final products = _products;
+    var serverAllocations = allocationsByAllocationKey;
 
     if (auth != null && auth.vendorId != null && products != null) {
-      // Stock first. If a combination is short, this throws before the bazaar
-      // is marked approved -- leaving a proposal that can be decided again,
-      // rather than a live bazaar promising stock that is not there.
+      // The stock is already on the server. Deciding the request as approved
+      // makes it allocate what the proposal asked for and take that out of
+      // master stock, so posting rows here would allocate it twice. The rows
+      // are only read back, to learn their ids.
       final stockIds = <String, int>{};
-      for (final entry in allocationsByAllocationKey.entries) {
-        if (entry.value <= 0) {
-          continue;
-        }
-        final variantId = products.variantIdFor(entry.key);
-        if (variantId == null) {
-          continue;
-        }
-        final row =
-            await auth.api.post(
-                  '/api/bazaar/event/$eventId/stock/',
-                  body: {
-                    'event': eventId,
-                    'variant': variantId,
-                    'amount_allocated': entry.value,
-                    'amount_sold': 0,
-                  },
-                )
-                as Map<String, dynamic>;
-        stockIds[entry.key] = (row['id'] as num).toInt();
-      }
-      _stockIdsByEventId[eventId] = stockIds;
-      _soldByEventId[eventId] = {};
-
-      await auth.api.patch(
-        '/api/bazaar/event/$eventId/',
-        body: {'is_approved': true},
+      final sold = <String, int>{};
+      final stock =
+          await auth.api.get('/api/bazaar/event/$eventId/stock/') as List;
+      serverAllocations = mapEventStockResponse(
+        stock,
+        allocationKeyForVariant: products.allocationKeyForVariant,
+        stockIdByAllocationKey: stockIds,
+        soldByAllocationKey: sold,
       );
+      _stockIdsByEventId[eventId] = stockIds;
+      _soldByEventId[eventId] = sold;
     }
 
     final event = BazaarEvent(
@@ -841,9 +883,7 @@ class EventRepository {
     );
     _events.removeWhere((e) => e.id == eventId);
     _events.add(event);
-    _allocationsByEventId[eventId] = Map<String, int>.from(
-      allocationsByAllocationKey,
-    );
+    _allocationsByEventId[eventId] = Map<String, int>.from(serverAllocations);
     _proposalEventIds.remove(eventId);
     return event;
   }

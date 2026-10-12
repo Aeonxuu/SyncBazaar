@@ -35,6 +35,37 @@ Future<DateTimeRange?> showAppDateRangePicker({
   );
 }
 
+/// Picks one day, in the same calendar as [showAppDateRangePicker].
+///
+/// The range picker needs two taps even for a single day, which is wrong for a
+/// birthday or a hire date. Here one tap selects and Apply confirms. Returns
+/// null when dismissed.
+Future<DateTime?> showAppDatePicker({
+  required BuildContext context,
+  required DateTime firstDate,
+  required DateTime lastDate,
+  DateTime? initialDate,
+  String title = 'Select date',
+}) async {
+  final picked = await showDialog<DateTimeRange>(
+    context: context,
+    barrierColor: Colors.black.withValues(alpha: 0.45),
+    builder: (context) => _DateRangePickerDialog(
+      firstDate: _dateOnly(firstDate),
+      lastDate: _dateOnly(lastDate),
+      initialRange: initialDate == null
+          ? null
+          : DateTimeRange(
+              start: _dateOnly(initialDate),
+              end: _dateOnly(initialDate),
+            ),
+      title: title,
+      singleDate: true,
+    ),
+  );
+  return picked?.start;
+}
+
 DateTime _dateOnly(DateTime value) =>
     DateTime(value.year, value.month, value.day);
 
@@ -47,7 +78,11 @@ class _DateRangePickerDialog extends StatefulWidget {
     required this.lastDate,
     required this.initialRange,
     required this.title,
+    this.singleDate = false,
   });
+
+  /// One day instead of a span: a tap selects it outright.
+  final bool singleDate;
 
   final DateTime firstDate;
   final DateTime lastDate;
@@ -58,17 +93,77 @@ class _DateRangePickerDialog extends StatefulWidget {
   State<_DateRangePickerDialog> createState() => _DateRangePickerDialogState();
 }
 
+/// What the calendar body is showing. Picking goes year, then month, then day:
+/// a far-off date (a hire date years back) is three taps instead of hundreds
+/// on the previous-month arrow.
+enum _PickerView { days, months, years }
+
 class _DateRangePickerDialogState extends State<_DateRangePickerDialog> {
   late DateTime _visibleMonth;
   DateTime? _start;
   DateTime? _end;
+  _PickerView _view = _PickerView.days;
+  ScrollController? _yearScroll;
+
+  /// Height of the year and month views, so the dialog does not jump in size
+  /// when switching to and from a five- or six-row month.
+  static const _kPanelHeight = 264.0;
+  static const _kYearRowHeight = 48.0;
+
+  @override
+  void dispose() {
+    _yearScroll?.dispose();
+    super.dispose();
+  }
+
+  void _openYears() {
+    _yearScroll?.dispose();
+    final index = _visibleMonth.year - widget.firstDate.year;
+    // Three to a row. Scrolled so the current year lands a row or two down
+    // rather than flush against the top edge.
+    final offset = ((index ~/ 3) - 1) * _kYearRowHeight;
+    _yearScroll = ScrollController(
+      initialScrollOffset: offset < 0 ? 0 : offset,
+    );
+    setState(() => _view = _PickerView.years);
+  }
+
+  void _pickYear(int year) {
+    setState(() {
+      // Kept inside the allowed range: picking the newest year while the
+      // visible month is past the last allowed one would open a dead month.
+      var month = _visibleMonth.month;
+      if (year == widget.firstDate.year && month < widget.firstDate.month) {
+        month = widget.firstDate.month;
+      }
+      if (year == widget.lastDate.year && month > widget.lastDate.month) {
+        month = widget.lastDate.month;
+      }
+      _visibleMonth = DateTime(year, month);
+      _view = _PickerView.months;
+    });
+  }
+
+  void _pickMonth(int month) {
+    setState(() {
+      _visibleMonth = DateTime(_visibleMonth.year, month);
+      _view = _PickerView.days;
+    });
+  }
 
   @override
   void initState() {
     super.initState();
     _start = widget.initialRange?.start;
     _end = widget.initialRange?.end;
-    final anchor = _start ?? widget.firstDate;
+    // With nothing chosen, open on today, held inside the allowed range. It
+    // used to open on the earliest allowed day, which for a hire date meant
+    // January 1990.
+    final now = DateTime.now();
+    var today = DateTime(now.year, now.month, now.day);
+    if (today.isBefore(widget.firstDate)) today = widget.firstDate;
+    if (today.isAfter(widget.lastDate)) today = widget.lastDate;
+    final anchor = _start ?? today;
     _visibleMonth = DateTime(anchor.year, anchor.month);
   }
 
@@ -85,6 +180,13 @@ class _DateRangePickerDialogState extends State<_DateRangePickerDialog> {
   }
 
   void _selectDay(DateTime day) {
+    if (widget.singleDate) {
+      setState(() {
+        _start = day;
+        _end = day;
+      });
+      return;
+    }
     setState(() {
       final hasCompleteRange = _start != null && _end != null;
       // A third tap starts a new range, and a tap before the current start
@@ -136,9 +238,14 @@ class _DateRangePickerDialogState extends State<_DateRangePickerDialog> {
                   children: [
                     _buildMonthNav(theme),
                     const SizedBox(height: 14),
-                    _buildWeekdayHeader(theme),
-                    const SizedBox(height: 6),
-                    _buildMonthGrid(theme),
+                    if (_view == _PickerView.days) ...[
+                      _buildWeekdayHeader(theme),
+                      const SizedBox(height: 6),
+                      _buildMonthGrid(theme),
+                    ] else if (_view == _PickerView.months)
+                      _buildMonthPicker(theme)
+                    else
+                      _buildYearPicker(theme),
                   ],
                 ),
               ),
@@ -157,7 +264,11 @@ class _DateRangePickerDialogState extends State<_DateRangePickerDialog> {
     // selection, so the result of a tap is confirmed without looking away
     // from the grid.
     final String summary;
-    if (_start == null) {
+    if (widget.singleDate) {
+      summary = _start == null
+          ? 'Tap a day to select it'
+          : format.format(_start!);
+    } else if (_start == null) {
       summary = 'Tap a day to set the start date';
     } else if (_end == null) {
       summary = '${format.format(_start!)} — now pick the end date';
@@ -216,42 +327,165 @@ class _DateRangePickerDialogState extends State<_DateRangePickerDialog> {
   }
 
   Widget _buildMonthNav(ThemeData theme) {
+    final inYears = _view == _PickerView.years;
+    final inMonths = _view == _PickerView.months;
+
+    // The arrows step what the view is showing: months on the day grid, years
+    // on the month grid. The year list scrolls, so it has none.
+    final step = inMonths ? 12 : 1;
+    final canBack = inMonths
+        ? _visibleMonth.year > widget.firstDate.year
+        : _canGoBack;
+    final canForward = inMonths
+        ? _visibleMonth.year < widget.lastDate.year
+        : _canGoForward;
+
+    final title = inYears
+        ? 'Select year'
+        : inMonths
+        ? '${_visibleMonth.year}'
+        : DateFormat('MMMM y').format(_visibleMonth);
+
     return Row(
       children: [
-        _NavButton(
-          icon: Icons.chevron_left_rounded,
-          tooltip: 'Previous month',
-          onPressed: _canGoBack
-              ? () => setState(() {
-                  _visibleMonth = DateTime(
-                    _visibleMonth.year,
-                    _visibleMonth.month - 1,
-                  );
-                })
-              : null,
-        ),
+        if (inYears)
+          const SizedBox(width: 40)
+        else
+          _NavButton(
+            icon: Icons.chevron_left_rounded,
+            tooltip: inMonths ? 'Previous year' : 'Previous month',
+            onPressed: canBack
+                ? () => setState(() {
+                    _visibleMonth = DateTime(
+                      _visibleMonth.year,
+                      _visibleMonth.month - step,
+                    );
+                  })
+                : null,
+          ),
         Expanded(
-          child: Text(
-            DateFormat('MMMM y').format(_visibleMonth),
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w700,
+          // The title is the way in to the year list, and says so with a
+          // chevron: an unmarked heading is not read as a control.
+          child: Center(
+            child: InkWell(
+              onTap: inYears
+                  ? () => setState(() => _view = _PickerView.days)
+                  : _openYears,
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(width: 2),
+                    Icon(
+                      inYears
+                          ? Icons.expand_less_rounded
+                          : Icons.expand_more_rounded,
+                      size: 18,
+                      color: AppColors.primary,
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
-        _NavButton(
-          icon: Icons.chevron_right_rounded,
-          tooltip: 'Next month',
-          onPressed: _canGoForward
-              ? () => setState(() {
-                  _visibleMonth = DateTime(
-                    _visibleMonth.year,
-                    _visibleMonth.month + 1,
-                  );
-                })
-              : null,
-        ),
+        if (inYears)
+          const SizedBox(width: 40)
+        else
+          _NavButton(
+            icon: Icons.chevron_right_rounded,
+            tooltip: inMonths ? 'Next year' : 'Next month',
+            onPressed: canForward
+                ? () => setState(() {
+                    _visibleMonth = DateTime(
+                      _visibleMonth.year,
+                      _visibleMonth.month + step,
+                    );
+                  })
+                : null,
+          ),
       ],
+    );
+  }
+
+  Widget _buildYearPicker(ThemeData theme) {
+    final first = widget.firstDate.year;
+    final last = widget.lastDate.year;
+    final count = last - first + 1;
+    final selected = _start?.year;
+
+    return SizedBox(
+      height: _kPanelHeight,
+      child: GridView.builder(
+        controller: _yearScroll,
+        itemCount: count,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3,
+          mainAxisExtent: _kYearRowHeight,
+          mainAxisSpacing: 0,
+          crossAxisSpacing: 8,
+        ),
+        itemBuilder: (context, i) {
+          final year = first + i;
+          return _PeriodCell(
+            label: '$year',
+            isSelected: year == _visibleMonth.year,
+            // The year of the chosen date, when it is not the one in view, is
+            // ringed so it can be found again in a long list.
+            isMarked: selected == year && year != _visibleMonth.year,
+            onTap: () => _pickYear(year),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildMonthPicker(ThemeData theme) {
+    const names = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', //
+    ];
+    final year = _visibleMonth.year;
+
+    bool outOfRange(int month) {
+      final value = DateTime(year, month);
+      return value.isBefore(
+            DateTime(widget.firstDate.year, widget.firstDate.month),
+          ) ||
+          value.isAfter(DateTime(widget.lastDate.year, widget.lastDate.month));
+    }
+
+    return SizedBox(
+      height: _kPanelHeight,
+      child: GridView.builder(
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: 12,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3,
+          mainAxisExtent: 62,
+          crossAxisSpacing: 8,
+        ),
+        itemBuilder: (context, i) {
+          final month = i + 1;
+          return _PeriodCell(
+            label: names[i],
+            isSelected: month == _visibleMonth.month,
+            isDisabled: outOfRange(month),
+            onTap: () => _pickMonth(month),
+          );
+        },
+      ),
     );
   }
 
@@ -327,7 +561,9 @@ class _DateRangePickerDialogState extends State<_DateRangePickerDialog> {
     // The connecting band is drawn on the cell behind the endpoint circles, so
     // a selected range reads as one continuous shape instead of separate dots.
     BorderRadius? bandRadius;
-    if (isStart && _end != null) {
+    if (widget.singleDate) {
+      bandRadius = null;
+    } else if (isStart && _end != null) {
       bandRadius = const BorderRadius.horizontal(left: Radius.circular(20));
     } else if (isEnd && _start != null) {
       bandRadius = const BorderRadius.horizontal(right: Radius.circular(20));
@@ -436,6 +672,61 @@ class _DateRangePickerDialogState extends State<_DateRangePickerDialog> {
             child: const Text('Apply'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// One year or month in the picker's list: a roomy, flat target, filled when it
+/// is the one in view.
+class _PeriodCell extends StatelessWidget {
+  const _PeriodCell({
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+    this.isDisabled = false,
+    this.isMarked = false,
+  });
+
+  final String label;
+  final bool isSelected;
+  final bool isDisabled;
+  final bool isMarked;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: InkWell(
+        onTap: isDisabled ? null : onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: AnimatedContainer(
+          duration: AppMotion.feedback,
+          curve: AppMotion.easeOut,
+          height: 40,
+          width: double.infinity,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: isSelected ? AppColors.primary : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            border: isMarked
+                ? Border.all(color: AppColors.primary, width: 1.5)
+                : null,
+          ),
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: isDisabled
+                  ? Colors.black26
+                  : isSelected
+                  ? Colors.white
+                  : AppColors.text,
+              fontWeight: isSelected || isMarked
+                  ? FontWeight.w700
+                  : FontWeight.w500,
+            ),
+          ),
+        ),
       ),
     );
   }

@@ -174,6 +174,14 @@ class DashboardCubit extends Cubit<DashboardState> {
     }
   }
 
+  /// Drops back to the default (unloaded) state, synchronously.
+  ///
+  /// Called right before [load] on a fresh login. Without it, the KPIs and
+  /// top-product figures from whichever account was signed in before stay on
+  /// screen for the whole time [load]'s awaits take to resolve -- one
+  /// account's numbers shown under another account's session.
+  void reset() => emit(const DashboardState());
+
   Future<void> load(AppUser user) async {
     final rawEvents = await _eventRepository.listVisibleForUser(user);
     final events = rawEvents;

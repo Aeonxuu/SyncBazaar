@@ -38,7 +38,13 @@ class OrdersState {
     this.records = const [],
     this.selectedEventId,
     this.paymentMethod = 'All',
+    this.isLoading = false,
   });
+
+  /// True while sales are being fetched. An empty [records] cannot say whether
+  /// nothing was sold or the answer has not arrived, and the table greeted
+  /// everyone with "has not sold anything yet" for as long as the load took.
+  final bool isLoading;
 
   final List<TransactionRecord> records;
   final int? selectedEventId;
@@ -63,8 +69,10 @@ class OrdersState {
     int? selectedEventId,
     String? paymentMethod,
     bool clearEvent = false,
+    bool? isLoading,
   }) {
     return OrdersState(
+      isLoading: isLoading ?? this.isLoading,
       records: records ?? this.records,
       selectedEventId: clearEvent
           ? null
@@ -97,6 +105,16 @@ class OrdersCubit extends Cubit<OrdersState> {
   /// server. Every row is rebuilt from the catalogue now, so the history reads
   /// the same however old the sale is.
   Future<void> load() async {
+    emit(state.copyWith(isLoading: true));
+    try {
+      await _loadRecords();
+    } catch (_) {
+      emit(state.copyWith(isLoading: false));
+      rethrow;
+    }
+  }
+
+  Future<void> _loadRecords() async {
     final sales = await _salesRepository.listSales();
     final labels = await _productLabels();
 
@@ -121,7 +139,7 @@ class OrdersCubit extends Cubit<OrdersState> {
     ];
     records.sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
-    emit(state.copyWith(records: records));
+    emit(state.copyWith(records: records, isLoading: false));
   }
 
   /// Product and option names, for rebuilding "what was sold" from a sale.

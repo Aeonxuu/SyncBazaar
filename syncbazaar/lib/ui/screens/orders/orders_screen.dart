@@ -8,6 +8,8 @@ import '../../../core/constants/motion.dart';
 import '../../widgets/app_dropdown.dart';
 import '../../widgets/bazaar_search_field.dart';
 import '../../widgets/bazaar_status_filter_button.dart';
+import '../../widgets/skeleton.dart';
+import 'widgets/orders_skeletons.dart';
 import '../../../models/bazaar_event.dart';
 import '../../../models/user.dart';
 import '../../../core/utils/formatters.dart';
@@ -85,6 +87,10 @@ class _OrdersScreenState extends State<OrdersScreen> {
               )
               .toList();
         }
+
+        // Only while there is nothing to show; a reload over a populated table
+        // keeps the rows on screen rather than blanking them to grey.
+        final showSkeleton = state.isLoading && state.records.isEmpty;
 
         final eventName = state.selectedEventId == null
             ? null
@@ -167,12 +173,20 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 ],
               ),
               const SizedBox(height: 10),
-              Text(
-                '${records.length} order${records.length == 1 ? '' : 's'} found',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: Colors.black38),
-              ),
+              if (showSkeleton)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 2),
+                  child: SkeletonBreathing(
+                    child: SkeletonBar(width: 76, height: 11),
+                  ),
+                )
+              else
+                Text(
+                  '${records.length} order${records.length == 1 ? '' : 's'} found',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: Colors.black38),
+                ),
               const SizedBox(height: 16),
               Expanded(
                 child: Container(
@@ -181,7 +195,15 @@ class _OrdersScreenState extends State<OrdersScreen> {
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(color: const Color(0xFFEDEDF1)),
                   ),
-                  child: records.isEmpty
+                  child: showSkeleton
+                      ? Column(
+                          children: [
+                            _tableHeader(context),
+                            const Divider(height: 1, color: Color(0xFFEDEDF1)),
+                            const Expanded(child: OrderRowsSkeleton()),
+                          ],
+                        )
+                      : records.isEmpty
                       ? _emptyState(context)
                       : _transactionTable(context, records),
                 ),
@@ -402,6 +424,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
     return BlocBuilder<PosCubit, PosState>(
       builder: (context, state) {
         final theme = Theme.of(context);
+        final showSkeleton = state.isLoading && state.events.isEmpty;
         final query = _bazaarSearch.text.trim().toLowerCase();
         final visible = state.events.where((event) {
           if (_bazaarStatusFilter != null &&
@@ -461,15 +484,43 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 ],
               ),
               const SizedBox(height: 10),
-              Text(
-                '${visible.length} bazaar${visible.length == 1 ? '' : 's'} found',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: Colors.black38,
+              if (showSkeleton)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 2),
+                  child: SkeletonBreathing(
+                    child: SkeletonBar(width: 84, height: 11),
+                  ),
+                )
+              else
+                Text(
+                  '${visible.length} bazaar${visible.length == 1 ? '' : 's'} found',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: Colors.black38,
+                  ),
                 ),
-              ),
               const SizedBox(height: 16),
               Expanded(
-                child: visible.isEmpty
+                child: showSkeleton
+                    ? Semantics(
+                        label: 'Loading bazaars',
+                        child: ExcludeSemantics(
+                          child: GridView.builder(
+                            padding: EdgeInsets.zero,
+                            physics: const NeverScrollableScrollPhysics(),
+                            gridDelegate:
+                                const SliverGridDelegateWithMaxCrossAxisExtent(
+                                  maxCrossAxisExtent: 320,
+                                  mainAxisExtent: 152,
+                                  crossAxisSpacing: 16,
+                                  mainAxisSpacing: 16,
+                                ),
+                            itemCount: 6,
+                            itemBuilder: (_, __) =>
+                                const OrdersBazaarCardSkeleton(),
+                          ),
+                        ),
+                      )
+                    : visible.isEmpty
                     ? Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,

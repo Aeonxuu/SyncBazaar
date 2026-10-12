@@ -1,5 +1,10 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:file_saver/file_saver.dart';
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
+
+import '../data/repositories/save_folder_repository.dart';
+import 'mac_file_writer.dart';
 
 /// Writes an exported report somewhere the person who asked for it can find it.
 ///
@@ -20,7 +25,11 @@ import 'package:flutter/foundation.dart';
 /// receipt, where a dialog per sale would be unbearable, and is right here,
 /// where an export happens once at the end of a bazaar.
 class DocumentSaver {
-  const DocumentSaver();
+  const DocumentSaver({
+    SaveFolderRepository folderRepository = const SaveFolderRepository(),
+  }) : _folderRepository = folderRepository;
+
+  final SaveFolderRepository _folderRepository;
 
   /// Returns a phrase for the confirmation, or null if the user backed out of
   /// the save sheet. Null is not a failure and must not be reported as one.
@@ -28,6 +37,7 @@ class DocumentSaver {
     required Uint8List bytes,
     required String fileName,
     required DocumentFormat format,
+    required SaveDocumentKind kind,
   }) async {
     if (usesSaveSheet) {
       final path = await FileSaver.instance.saveAs(
@@ -37,9 +47,16 @@ class DocumentSaver {
         mimeType: format.mimeType,
       );
       // Null means the sheet was dismissed without choosing anywhere.
-      return path == null
-          ? null
-          : 'Saved $fileName.${format.extension}';
+      return path == null ? null : 'Saved $fileName.${format.extension}';
+    }
+
+    if (usesMacSaveDialog) {
+      return _saveOnMac(
+        bytes: bytes,
+        fileName: fileName,
+        format: format,
+        kind: kind,
+      );
     }
 
     await FileSaver.instance.saveFile(
@@ -53,9 +70,40 @@ class DocumentSaver {
         : 'Saved to Downloads as $fileName.${format.extension}';
   }
 
+  /// A native "Save As" dialog, like the mobile save sheet but for macOS.
+  ///
+  /// Opens on whichever folder [kind] was saved to last, via
+  /// [SaveFolderRepository], and remembers wherever the user points it this
+  /// time -- so a statement of account and an order list can each land in
+  /// their own folder without asking twice in the same run.
+  Future<String?> _saveOnMac({
+    required Uint8List bytes,
+    required String fileName,
+    required DocumentFormat format,
+    required SaveDocumentKind kind,
+  }) async {
+    final initialDirectory = await _folderRepository.folderFor(kind);
+    final path = await FilePicker.platform.saveFile(
+      dialogTitle: 'Save $fileName',
+      fileName: '$fileName.${format.extension}',
+      initialDirectory: initialDirectory,
+      // Not `bytes:` -- file_picker throws UnsupportedError if given bytes
+      // on macOS. It only returns the chosen path there, so the write below
+      // is on us.
+    );
+    // Null means the dialog was dismissed without choosing anywhere.
+    if (path == null) {
+      return null;
+    }
+    await const MacFileWriter().write(path, bytes);
+    await _folderRepository.setFolderFor(kind, p.dirname(path));
+    return 'Saved $fileName.${format.extension}';
+  }
+
   /// Only the mobile platforms, where the plain save has nowhere visible to put
-  /// a file. Desktop and web both land in Downloads already, and interrupting
-  /// those with a dialog would be a step backwards.
+  /// a file. Web still lands in Downloads with no folder concept to offer, and
+  /// macOS gets its own dialog below rather than this one -- see
+  /// [usesMacSaveDialog].
   ///
   /// Public so a test can assert the routing without going near a platform
   /// channel, which is the part that cannot be exercised here.
@@ -63,6 +111,12 @@ class DocumentSaver {
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS);
+
+  /// macOS only. Windows/Linux are not a build target for this app (see
+  /// CLAUDE.md), so they are left on the plain Downloads save rather than
+  /// wired up to a dialog nobody has tested.
+  static bool get usesMacSaveDialog =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.macOS;
 }
 
 /// The formats a report can be exported in.

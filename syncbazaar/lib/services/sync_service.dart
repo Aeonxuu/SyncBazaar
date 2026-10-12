@@ -65,8 +65,12 @@ class SyncService {
     // which is exactly the kind of thing nobody thinks to try during a bazaar.
     var refreshed = false;
     try {
-      await _settingsRepository.refresh();
-      await _productRepository.refresh();
+      // Venues and the catalogue do not depend on each other, so they go
+      // together; bazaars need the catalogue, and sales need the bazaars.
+      await Future.wait([
+        _settingsRepository.refresh(),
+        _productRepository.refresh(),
+      ]);
       await _eventRepository.refresh();
       await _salesRepository.refresh();
       refreshed = true;

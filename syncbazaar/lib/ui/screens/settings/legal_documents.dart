@@ -39,7 +39,8 @@ const String _updated = '10 September 2026';
 
 const InfoDocument privacyNotice = InfoDocument(
   title: 'Privacy notice',
-  summary: 'What SyncBazaar stores, where it is kept, and what it never collects',
+  summary:
+      'What SyncBazaar stores, where it is kept, and what it never collects',
   updated: _updated,
   sections: [
     InfoSection(

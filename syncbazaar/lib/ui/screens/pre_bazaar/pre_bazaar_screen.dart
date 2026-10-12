@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../../widgets/app_message.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -12,6 +13,7 @@ import '../../../bloc/orders/orders_cubit.dart';
 import '../../../bloc/pos/pos_cubit.dart';
 import '../../../bloc/pre_bazaar/pre_bazaar_cubit.dart';
 import '../../../bloc/staff/staff_cubit.dart';
+import '../../../data/remote/api_client.dart';
 import '../../../data/repositories/event_repository.dart';
 import '../../../services/staff_scheduling.dart';
 import '../../../data/repositories/product_repository.dart';
@@ -31,10 +33,15 @@ class PreBazaarScreen extends StatefulWidget {
     super.key,
     required this.user,
     required this.onOpenApprovals,
+    this.hasProgress,
   });
 
   final AppUser user;
   final VoidCallback onOpenApprovals;
+
+  /// Kept up to date with whether the form holds anything worth losing, so the
+  /// navigation outside this screen can ask before walking away from it.
+  final ValueNotifier<bool>? hasProgress;
 
   @override
   State<PreBazaarScreen> createState() => _PreBazaarScreenState();
@@ -58,6 +65,12 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
   final Set<int> _assignedEmployeeIds = {};
   List<Company> _locations = const [];
 
+  /// Guards the submit button against double-tap while a request is in
+  /// flight: the loading dialog is non-dismissible, but the button itself
+  /// stayed enabled underneath it, so a fast double tap could fire the
+  /// allocation request twice before the dialog even painted.
+  bool _isSubmitting = false;
+
   /// The vendor's own methods -- one list, not one per venue any more.
   List<PaymentMethodMeta> _vendorPaymentMethods = const [];
 
@@ -78,8 +91,30 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
     }
   }
 
+  /// Anything typed, picked or allocated. The venue is left out: it starts
+  /// pre-selected, so counting it would make every visit look like progress.
+  bool get _hasProgress =>
+      _eventName.text.trim().isNotEmpty ||
+      _dateRange != null ||
+      _step > 0 ||
+      _assignedEmployeeIds.isNotEmpty ||
+      _allocations.values.any((quantity) => quantity > 0);
+
+  void _reportProgress() {
+    final notifier = widget.hasProgress;
+    final dirty = _hasProgress;
+    if (notifier == null || notifier.value == dirty) {
+      return;
+    }
+    // After the frame, not during it: the notifier's owner may be building.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      notifier.value = dirty;
+    });
+  }
+
   @override
   void dispose() {
+    widget.hasProgress?.value = false;
     _eventName.removeListener(_onEventNameChanged);
     _eventName.dispose();
     _allocationSearch.dispose();
@@ -209,16 +244,31 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
     setState(() => _step = 1);
   }
 
+  /// The catch blocks around submit/publish used to say "check your
+  /// internet connection" for every failure, which was wrong for a
+  /// validation or server error and confusing when the wifi was fine. This
+  /// reads the real `ApiException.kind` so only an actual network/timeout
+  /// failure blames the connection.
+  String _submitErrorMessage(Object error) {
+    if (error is ApiException) {
+      if (error.isOffline) {
+        return 'Could not reach the server — check your internet '
+            'connection and try again.';
+      }
+      return error.message;
+    }
+    return 'Something went wrong. Please try again.';
+  }
+
   Future<void> _handleSubmit() async {
+    if (_isSubmitting) return;
     if (!widget.user.isAdminOrOwner) {
       if (!_isBazaarInfoComplete) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Complete bazaar name, venue, and dates before submitting.',
-              ),
-            ),
+          showAppMessage(
+            'Complete bazaar name, venue, and dates before submitting.',
+            kind: AppMessageKind.info,
+            title: 'Missing details',
           );
         }
         return;
@@ -250,16 +300,15 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
             .toList();
 
         if (selectedAllocations.isEmpty) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Add at least one allocated quantity before submitting.',
-              ),
-            ),
+          showAppMessage(
+            'Add at least one allocated quantity before submitting.',
+            kind: AppMessageKind.info,
+            title: 'No stock allocated',
           );
           return;
         }
 
+        final productRepository = context.read<ProductRepository>();
         final allocationItems = selectedAllocations.map((entry) {
           final meta = _allocationMetaByKey[entry.key];
           final product = meta?.product;
@@ -268,6 +317,12 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
             meta?.optionB?.value,
           ].whereType<String>().toList();
           return {
+            // What the server reads when the request is approved: it turns
+            // each item into stock, and rejects an item missing either key.
+            // Null in the no-server build, which has no variant ids and
+            // never sends this anywhere.
+            'variant_id': productRepository.variantIdFor(entry.key),
+            'quantity': entry.value,
             'name': product?.name ?? entry.key,
             'variant': variantValues.isEmpty ? '—' : variantValues.join(', '),
             // The raw number, not a formatted string: this goes into the
@@ -303,9 +358,9 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
 
         // Resolved before the submit, because the form is reset in between.
         final preBazaarCubit = context.read<PreBazaarCubit>();
-        final messenger = ScaffoldMessenger.of(context);
         final bazaarName = _eventName.text.trim();
 
+        setState(() => _isSubmitting = true);
         final dialogNavigator = Navigator.of(context, rootNavigator: true);
         showLoadingDialog(context, 'Submitting for approval…');
         try {
@@ -313,11 +368,21 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
             user: widget.user,
             detailsJson: details,
           );
-        } finally {
+        } catch (error) {
           dialogNavigator.pop();
+          if (mounted) setState(() => _isSubmitting = false);
+          if (!mounted) return;
+          showAppMessage(
+            _submitErrorMessage(error),
+            kind: AppMessageKind.error,
+            title: 'Could not submit',
+          );
+          return;
         }
+        dialogNavigator.pop();
 
         await _resetPreBazaarForm();
+        if (mounted) setState(() => _isSubmitting = false);
 
         // Deliberately not sent to Approvals any more. That screen decides
         // requests, and walking the requester into it handed an employee the
@@ -326,14 +391,14 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
         if (!mounted) {
           return;
         }
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text(
+        await showNoticeDialog(
+          context: context,
+          title: 'Submitted for approval',
+          message:
               '$bazaarName has been submitted for approval. '
               'You will be notified once it has been reviewed.',
-            ),
-            duration: const Duration(seconds: 5),
-          ),
+          buttonLabel: 'Okay',
+          icon: Icons.check_circle_outline_rounded,
         );
       }
       return;
@@ -341,12 +406,10 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
 
     if (!_isBazaarInfoComplete) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Complete bazaar name, venue, and dates before finishing.',
-            ),
-          ),
+        showAppMessage(
+          'Complete bazaar name, venue, and dates before finishing.',
+          kind: AppMessageKind.info,
+          title: 'Missing details',
         );
       }
       return;
@@ -367,7 +430,6 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
       // Publishing reloads four cubits and then resets the form; resolving
       // any of them through `context` afterwards risks a context that has
       // already moved on, which would drop the success message.
-      final messenger = ScaffoldMessenger.of(context);
       final staffCubit = context.read<StaffCubit>();
       final dashboardCubit = context.read<DashboardCubit>();
       final posCubit = context.read<PosCubit>();
@@ -378,12 +440,10 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
       final selectedMethods = _selectedLocationPaymentMethods;
       if (selectedMethods.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'This venue has no payment methods yet. Add them under Venues & Terms.',
-              ),
-            ),
+          showAppMessage(
+            'This venue has no payment methods yet. Add them under Venues & Terms.',
+            kind: AppMessageKind.info,
+            title: 'No payment methods',
           );
         }
         return;
@@ -399,6 +459,7 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
       if (!mounted) {
         return;
       }
+      setState(() => _isSubmitting = true);
       final dialogNavigator = Navigator.of(context, rootNavigator: true);
       showLoadingDialog(context, 'Publishing bazaar…');
       try {
@@ -408,12 +469,10 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
 
         if (!reserved) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                  'Unable to reserve stock. Please review allocations and try again.',
-                ),
-              ),
+            showAppMessage(
+              'Unable to reserve stock. Please review allocations and try again.',
+              kind: AppMessageKind.error,
+              title: 'Unable to reserve stock',
             );
           }
           return;
@@ -458,19 +517,24 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
         // server honours the role, an owner stops seeing the pending
         // wording without anything changing here.
         final pending = eventRepository.isProposal(createdEvent.id);
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text(
-              pending
-                  ? 'Bazaar submitted for approval. It will not appear in '
-                        'Sales until it is approved.'
-                  : 'Bazaar published successfully.',
-            ),
-            duration: Duration(seconds: pending ? 5 : 4),
-          ),
+        showAppMessage(
+          pending
+              ? 'Bazaar submitted for approval. It will not appear in '
+                    'Sales until it is approved.'
+              : 'Bazaar published successfully.',
+          kind: AppMessageKind.success,
         );
+      } catch (error) {
+        if (mounted) {
+          showAppMessage(
+            _submitErrorMessage(error),
+            kind: AppMessageKind.error,
+            title: 'Could not publish',
+          );
+        }
       } finally {
         dialogNavigator.pop();
+        if (mounted) setState(() => _isSubmitting = false);
       }
       await _resetPreBazaarForm();
     }
@@ -491,6 +555,7 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
 
   @override
   Widget build(BuildContext context) {
+    _reportProgress();
     final isAdminOrOwner = widget.user.isAdminOrOwner;
     final employees = context
         .select((StaffCubit cubit) => cubit.state)
@@ -622,7 +687,7 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
   Widget _buildFooter(BuildContext context, bool isAdminOrOwner) {
     final onDetails = _step == 0;
     final canContinue = _isBazaarInfoComplete;
-    final canSubmit = canContinue && _totalAllocated > 0;
+    final canSubmit = canContinue && _totalAllocated > 0 && !_isSubmitting;
 
     return Container(
       decoration: const BoxDecoration(
@@ -633,24 +698,36 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
       child: Row(
         children: [
           if (!onDetails)
-            TextButton.icon(
+            OutlinedButton.icon(
               onPressed: () => setState(() => _step = 0),
               icon: const Icon(Icons.arrow_back_rounded, size: 16),
-              style: TextButton.styleFrom(
-                foregroundColor: Colors.black54,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                side: const BorderSide(color: AppColors.primary),
                 padding: const EdgeInsets.symmetric(
                   horizontal: 14,
                   vertical: 10,
+                ),
+                minimumSize: const Size(0, 48),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(6),
                 ),
               ),
               label: const Text('Back'),
             ),
           const Spacer(),
-          TextButton(
+          OutlinedButton(
             onPressed: _resetPreBazaarForm,
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.black54,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.primary,
+              side: const BorderSide(color: AppColors.primary),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              minimumSize: const Size(0, 48),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(6),
+              ),
             ),
             child: const Text('Reset'),
           ),
@@ -668,8 +745,10 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
               disabledForegroundColor: Colors.white70,
               elevation: 0,
               padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+              minimumSize: const Size(0, 48),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(6),
               ),
             ),
             child: Text(

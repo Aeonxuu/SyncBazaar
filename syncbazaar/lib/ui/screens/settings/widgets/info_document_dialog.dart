@@ -151,7 +151,11 @@ class _InfoDocumentDialog extends StatelessWidget {
             splashRadius: 18,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints.tightFor(width: 32, height: 32),
-            icon: const Icon(Icons.close_rounded, size: 17, color: Colors.black45),
+            icon: const Icon(
+              Icons.close_rounded,
+              size: 17,
+              color: Colors.black45,
+            ),
           ),
         ],
       ),

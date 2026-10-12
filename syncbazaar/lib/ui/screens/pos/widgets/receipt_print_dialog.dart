@@ -4,6 +4,7 @@ import '../../../../core/constants/colors.dart';
 import '../../../../core/constants/motion.dart';
 import '../../../../models/receipt.dart';
 import '../../../../services/receipt_service.dart';
+import '../../../widgets/action_buttons.dart';
 import 'receipt_document.dart';
 
 /// Prints the receipt, then says so.
@@ -226,41 +227,31 @@ class _ReceiptPrintDialogState extends State<_ReceiptPrintDialog> {
         ];
       case _PrintPhase.done:
         return [
-          ElevatedButton(
+          FilledActionButton(
+            label: 'Close',
+            color: AppColors.primary,
             autofocus: true,
             onPressed: () => Navigator.pop(context),
-            style: _primaryButtonStyle,
-            child: const Text('Close'),
           ),
         ];
       case _PrintPhase.failed:
         return [
-          TextButton(
+          QuietActionButton(
+            label: 'Close',
+            color: Colors.black54,
+            outlined: true,
             onPressed: () => Navigator.pop(context),
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.black54,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            ),
-            child: const Text('Close'),
           ),
           const SizedBox(width: 12),
-          ElevatedButton(
+          FilledActionButton(
+            label: 'Try again',
+            color: AppColors.primary,
             autofocus: true,
             onPressed: _print,
-            style: _primaryButtonStyle,
-            child: const Text('Try again'),
           ),
         ];
     }
   }
-
-  static final ButtonStyle _primaryButtonStyle = ElevatedButton.styleFrom(
-    backgroundColor: AppColors.primary,
-    foregroundColor: Colors.white,
-    elevation: 0,
-    padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-  );
 }
 
 /// The 36×36 header chip, carrying the phase as both icon and colour.

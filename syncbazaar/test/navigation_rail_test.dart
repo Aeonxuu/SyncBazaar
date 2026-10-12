@@ -1,8 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:syncbazaar/bloc/settings/settings_cubit.dart';
 import 'package:syncbazaar/core/routing/app_router.dart';
 import 'package:syncbazaar/core/theme/app_theme.dart';
+import 'package:syncbazaar/data/repositories/settings_repository.dart';
 import 'package:syncbazaar/ui/widgets/navigation_rail.dart';
+
+/// The rail reads the store name off `SettingsCubit`, so every host here
+/// needs one above it -- a plain, no-session repository is enough since none
+/// of these tests care what the name actually is.
+Widget _withSettings(Widget child) {
+  return BlocProvider<SettingsCubit>(
+    create: (_) => SettingsCubit(SettingsRepository()),
+    child: child,
+  );
+}
 
 void main() {
   const ownerGroups = [
@@ -60,23 +73,25 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light,
-        home: Scaffold(
-          body: Row(
-            children: [
-              SideNavigationRail(
-                groups: groups,
-                selected: selected,
-                onSelect: (s) => tapped = s,
-                isCollapsed: collapsed,
-                onToggle: () {},
-                onLogout: () {},
-                badges: badges,
-                isSyncing: isSyncing,
-                syncMessage: syncMessage,
-                onSync: () {},
-              ),
-              const Expanded(child: SizedBox()),
-            ],
+        home: _withSettings(
+          Scaffold(
+            body: Row(
+              children: [
+                SideNavigationRail(
+                  groups: groups,
+                  selected: selected,
+                  onSelect: (s) => tapped = s,
+                  isCollapsed: collapsed,
+                  onToggle: () {},
+                  onLogout: () {},
+                  badges: badges,
+                  isSyncing: isSyncing,
+                  syncMessage: syncMessage,
+                  onSync: () {},
+                ),
+                const Expanded(child: SizedBox()),
+              ],
+            ),
           ),
         ),
       ),
@@ -112,22 +127,24 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light,
-        home: Scaffold(
-          body: Row(
-            children: [
-              SideNavigationRail(
-                groups: ownerGroups,
-                selected: AppSection.dashboard,
-                onSelect: (s) => tapped = s,
-                isCollapsed: false,
-                onToggle: () {},
-                onLogout: () {},
-                isSyncing: false,
-                syncMessage: 'Offline-ready',
-                onSync: () {},
-              ),
-              const Expanded(child: SizedBox()),
-            ],
+        home: _withSettings(
+          Scaffold(
+            body: Row(
+              children: [
+                SideNavigationRail(
+                  groups: ownerGroups,
+                  selected: AppSection.dashboard,
+                  onSelect: (s) => tapped = s,
+                  isCollapsed: false,
+                  onToggle: () {},
+                  onLogout: () {},
+                  isSyncing: false,
+                  syncMessage: 'Offline-ready',
+                  onSync: () {},
+                ),
+                const Expanded(child: SizedBox()),
+              ],
+            ),
           ),
         ),
       ),
@@ -227,22 +244,24 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light,
-        home: Scaffold(
-          body: Row(
-            children: [
-              SideNavigationRail(
-                groups: ownerGroups,
-                selected: AppSection.dashboard,
-                onSelect: (_) {},
-                isCollapsed: false,
-                onToggle: () {},
-                onLogout: () {},
-                isSyncing: true,
-                syncMessage: 'Syncing...',
-                onSync: () {},
-              ),
-              const Expanded(child: SizedBox()),
-            ],
+        home: _withSettings(
+          Scaffold(
+            body: Row(
+              children: [
+                SideNavigationRail(
+                  groups: ownerGroups,
+                  selected: AppSection.dashboard,
+                  onSelect: (_) {},
+                  isCollapsed: false,
+                  onToggle: () {},
+                  onLogout: () {},
+                  isSyncing: true,
+                  syncMessage: 'Syncing...',
+                  onSync: () {},
+                ),
+                const Expanded(child: SizedBox()),
+              ],
+            ),
           ),
         ),
       ),
@@ -278,22 +297,24 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: AppTheme.light,
-          home: Scaffold(
-            body: Row(
-              children: [
-                SideNavigationRail(
-                  groups: ownerGroups,
-                  selected: AppSection.dashboard,
-                  onSelect: (_) {},
-                  isCollapsed: collapsed,
-                  onToggle: () {},
-                  onLogout: () {},
-                  isSyncing: isSyncing,
-                  syncMessage: isSyncing ? 'Syncing...' : 'Offline-ready',
-                  onSync: () => syncs++,
-                ),
-                const Expanded(child: SizedBox()),
-              ],
+          home: _withSettings(
+            Scaffold(
+              body: Row(
+                children: [
+                  SideNavigationRail(
+                    groups: ownerGroups,
+                    selected: AppSection.dashboard,
+                    onSelect: (_) {},
+                    isCollapsed: collapsed,
+                    onToggle: () {},
+                    onLogout: () {},
+                    isSyncing: isSyncing,
+                    syncMessage: isSyncing ? 'Syncing...' : 'Offline-ready',
+                    onSync: () => syncs++,
+                  ),
+                  const Expanded(child: SizedBox()),
+                ],
+              ),
             ),
           ),
         ),

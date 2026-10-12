@@ -9,6 +9,7 @@ import '../../../../core/utils/formatters.dart';
 import '../../../../data/remote/api_client.dart';
 import '../../../../models/sale.dart' show ReferenceSource;
 import '../../../../services/qr_payment_service.dart';
+import '../../../widgets/action_buttons.dart';
 
 /// What the cashier ended up with.
 class QrPaymentResult {
@@ -659,37 +660,17 @@ class _QrAutoPaymentDialogState extends State<_QrAutoPaymentDialog> {
             runSpacing: 8,
             children: [
               if (_phase != _Phase.paid)
-                TextButton(
+                QuietActionButton(
+                  label: 'Cancel',
+                  color: Colors.black54,
+                  outlined: true,
                   onPressed: () => Navigator.pop(context, null),
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.black54,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 10,
-                    ),
-                  ),
-                  child: const Text('Cancel'),
                 ),
               if (_phase == _Phase.manual)
-                ElevatedButton(
+                FilledActionButton(
+                  label: 'Payment Received',
+                  color: AppColors.primary,
                   onPressed: manualIsBlocked ? null : _confirmManual,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    disabledBackgroundColor: AppColors.primary.withValues(
-                      alpha: 0.35,
-                    ),
-                    disabledForegroundColor: Colors.white,
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 22,
-                      vertical: 14,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  child: const Text('Payment Received'),
                 ),
             ],
           ),

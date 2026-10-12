@@ -1,5 +1,5 @@
-
 import 'package:flutter/material.dart';
+import '../../widgets/app_message.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../data/remote/api_client.dart';
@@ -15,7 +15,9 @@ import '../../../models/sale.dart' show ReferenceSource;
 import '../../../models/product_variant.dart';
 import '../../../models/user.dart';
 import '../../../data/repositories/product_repository.dart';
+import '../../widgets/action_buttons.dart';
 import '../../widgets/confirmation_dialog.dart';
+import '../../widgets/loading_dialog.dart';
 import '../../widgets/offline_data_notice.dart';
 import 'widgets/discard_sale_guard.dart';
 import '../../widgets/date_range_picker_dialog.dart';
@@ -32,7 +34,10 @@ import '../../widgets/bazaar_status_filter_button.dart';
 import '../../widgets/quantity_stepper.dart';
 import '../../widgets/product_thumbnail.dart';
 import '../../widgets/selectable_option_button.dart';
+import '../../widgets/skeleton.dart';
+import 'widgets/bazaar_card_skeleton.dart';
 import 'widgets/pos_product_card.dart';
+import 'widgets/seller_button.dart';
 import '../../../core/utils/formatters.dart';
 import 'widgets/confirm_sale_dialog.dart';
 import 'widgets/qr_auto_payment_dialog.dart';
@@ -65,6 +70,14 @@ class _PosScreenState extends State<PosScreen> {
   // null = no filter ("All"). A single control cycling through every state
   // beats 3 separate toggle buttons for a filter this small and secondary.
   BazaarStatus? _bazaarStatusFilter;
+
+  /// Product filters; null means "all". Held here, not in the cubit: they
+  /// narrow what the cashier is looking at and are not part of the sale.
+  String? _categoryFilter;
+  String? _brandFilter;
+
+  static const _allCategories = 'All categories';
+  static const _allBrands = 'All brands';
 
   void _cycleBazaarStatusFilter() {
     setState(() {
@@ -131,6 +144,9 @@ class _PosScreenState extends State<PosScreen> {
   }
 
   Widget _eventSelector(BuildContext context, PosState state) {
+    // Only while there is nothing to show; a reload over a populated list keeps
+    // the cards on screen rather than blanking them to grey.
+    final showSkeleton = state.isLoading && state.events.isEmpty;
     final query = _bazaarSearchController.text.trim().toLowerCase();
     final filteredEvents = state.events.where((event) {
       if (_bazaarStatusFilter != null && event.status != _bazaarStatusFilter) {
@@ -192,15 +208,41 @@ class _PosScreenState extends State<PosScreen> {
           const SizedBox(height: 10),
           // Visibility of system status: a quiet result count confirms the
           // search actually did something, without shouting about it.
-          Text(
-            '${filteredEvents.length} bazaar${filteredEvents.length == 1 ? '' : 's'} found',
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: Colors.black38),
-          ),
+          if (showSkeleton)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 2),
+              child: SkeletonBreathing(
+                child: SkeletonBar(width: 84, height: 11),
+              ),
+            )
+          else
+            Text(
+              '${filteredEvents.length} bazaar${filteredEvents.length == 1 ? '' : 's'} found',
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: Colors.black38),
+            ),
           const SizedBox(height: 16),
           Expanded(
-            child: filteredEvents.isEmpty
+            child: showSkeleton
+                ? Semantics(
+                    label: 'Loading bazaars',
+                    child: ExcludeSemantics(
+                      child: GridView.builder(
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: 4,
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              mainAxisSpacing: 16,
+                              crossAxisSpacing: 16,
+                              mainAxisExtent: 200,
+                            ),
+                        itemBuilder: (_, __) => const BazaarCardSkeleton(),
+                      ),
+                    ),
+                  )
+                : filteredEvents.isEmpty
                 ? Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -251,17 +293,42 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
+  /// Non-empty, unique labels in alphabetical order.
+  static List<String> _distinct(Iterable<String?> values) {
+    final unique = <String>{
+      for (final value in values)
+        if (value != null && value.trim().isNotEmpty) value.trim(),
+    }.toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return unique;
+  }
+
   Widget _productPanel(BuildContext context, PosState state) {
     // Non-null when the catalogue on screen came from storage rather than the
     // server. It matters more here than on the dashboard: a stale stock count
     // can be sold past, and the customer is standing at the counter.
     final servedFrom = context.read<AuthRepository>().api.servingCacheFrom;
     final query = _productSearchController.text.trim().toLowerCase();
-    final visibleProducts = query.isEmpty
-        ? state.products
-        : state.products
-              .where((p) => p.name.toLowerCase().contains(query))
-              .toList();
+
+    bool matchesCategory(Product p) =>
+        _categoryFilter == null || p.categoryName == _categoryFilter;
+    bool matchesBrand(Product p) =>
+        _brandFilter == null || p.brandName == _brandFilter;
+
+    // Each list offers only what the other filter still leaves, so no choice
+    // can lead to an empty grid (Hick's law: fewer, valid choices).
+    final categories = _distinct(
+      state.products.where(matchesBrand).map((p) => p.categoryName),
+    );
+    final brands = _distinct(
+      state.products.where(matchesCategory).map((p) => p.brandName),
+    );
+    final hasFilters = _categoryFilter != null || _brandFilter != null;
+
+    final visibleProducts = state.products
+        .where(matchesCategory)
+        .where(matchesBrand)
+        .where((p) => query.isEmpty || p.name.toLowerCase().contains(query))
+        .toList();
 
     final eventName = state.selectedEvent?.name ?? 'Bazaar';
 
@@ -288,6 +355,12 @@ class _PosScreenState extends State<PosScreen> {
                 if (!context.mounted) {
                   return;
                 }
+                // A different bazaar carries different products, so a filter
+                // from this one would hide things at the next.
+                setState(() {
+                  _categoryFilter = null;
+                  _brandFilter = null;
+                });
                 context.read<PosCubit>().backToEventSelection();
               },
             ),
@@ -345,7 +418,80 @@ class _PosScreenState extends State<PosScreen> {
             ),
           ],
         ),
-        if (query.isNotEmpty) ...[
+        if (categories.isNotEmpty || brands.isNotEmpty || hasFilters) ...[
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              if (categories.isNotEmpty || _categoryFilter != null)
+                SizedBox(
+                  width: 200,
+                  child: AppDropdown<String>(
+                    options: [_allCategories, ...categories],
+                    selected: _categoryFilter ?? _allCategories,
+                    labelOf: (label) => label,
+                    hint: _allCategories,
+                    leadingIcon: Icons.category_outlined,
+                    onSelected: (value) => setState(() {
+                      _categoryFilter = value == _allCategories ? null : value;
+                      // A brand the new category does not carry would leave
+                      // an empty grid with no visible cause, so it is dropped.
+                      final stillOffered = _distinct(
+                        state.products
+                            .where(
+                              (p) =>
+                                  _categoryFilter == null ||
+                                  p.categoryName == _categoryFilter,
+                            )
+                            .map((p) => p.brandName),
+                      );
+                      if (!stillOffered.contains(_brandFilter)) {
+                        _brandFilter = null;
+                      }
+                    }),
+                  ),
+                ),
+              if ((categories.isNotEmpty || _categoryFilter != null) &&
+                  (brands.isNotEmpty || _brandFilter != null))
+                const SizedBox(width: 10),
+              if (brands.isNotEmpty || _brandFilter != null)
+                SizedBox(
+                  width: 200,
+                  child: AppDropdown<String>(
+                    options: [_allBrands, ...brands],
+                    selected: _brandFilter ?? _allBrands,
+                    labelOf: (label) => label,
+                    hint: _allBrands,
+                    leadingIcon: Icons.sell_outlined,
+                    onSelected: (value) => setState(() {
+                      _brandFilter = value == _allBrands ? null : value;
+                      final stillOffered = _distinct(
+                        state.products
+                            .where(
+                              (p) =>
+                                  _brandFilter == null ||
+                                  p.brandName == _brandFilter,
+                            )
+                            .map((p) => p.categoryName),
+                      );
+                      if (!stillOffered.contains(_categoryFilter)) {
+                        _categoryFilter = null;
+                      }
+                    }),
+                  ),
+                ),
+              // Pushed to the trailing edge, and says what the filters did
+              // (visibility of system status).
+              const Spacer(),
+              if (query.isNotEmpty || hasFilters)
+                Text(
+                  '${visibleProducts.length} of ${state.products.length} products',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: Colors.black45),
+                ),
+            ],
+          ),
+        ] else if (query.isNotEmpty) ...[
           const SizedBox(height: 8),
           Text(
             '${visibleProducts.length} of ${state.products.length} products',
@@ -361,7 +507,9 @@ class _PosScreenState extends State<PosScreen> {
           child: visibleProducts.isEmpty
               ? Center(
                   child: Text(
-                    'No products match "${_productSearchController.text}".',
+                    query.isEmpty
+                        ? 'No products match the selected filters.'
+                        : 'No products match "${_productSearchController.text}".',
                     style: Theme.of(
                       context,
                     ).textTheme.bodyMedium?.copyWith(color: Colors.black45),
@@ -416,6 +564,45 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
+  /// Who is ringing up this sale, shown only where there is a choice.
+  ///
+  /// The people on the bazaar's roster plus whoever is signed in. With one
+  /// person there is nothing to pick, so the control is not drawn: a dropdown
+  /// with a single entry is noise on a screen used at speed.
+  Widget _sellerPicker(BuildContext context, PosState state) {
+    final event = state.selectedEvent;
+    if (event == null) {
+      return const SizedBox.shrink();
+    }
+    return BlocBuilder<StaffCubit, List<AppUser>>(
+      builder: (context, staff) {
+        final sellers = <AppUser>[
+          widget.user,
+          for (final person in staff)
+            if (person.id != widget.user.id &&
+                person.role == UserRole.employee &&
+                person.assignedEventIdsEffective.contains(event.id))
+              person,
+        ];
+        if (sellers.length < 2) {
+          return const SizedBox.shrink();
+        }
+        final selected = sellers.firstWhere(
+          (person) => person.id == (state.sellerId ?? widget.user.id),
+          orElse: () => widget.user,
+        );
+        return SellerButton(
+          sellers: sellers,
+          selected: selected,
+          onSelected: (person) => context.read<PosCubit>().selectSeller(
+            id: person.id,
+            name: person.name,
+          ),
+        );
+      },
+    );
+  }
+
   Widget _cartPanel(BuildContext context, PosState state) {
     // Not shown when the reference is collected at checkout: asking for it in
     // both places would have the cashier type it twice, and for a gateway
@@ -430,11 +617,18 @@ class _PosScreenState extends State<PosScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Current order',
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Current order',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              _sellerPicker(context, state),
+            ],
           ),
           const SizedBox(height: 8),
           Text(
@@ -672,12 +866,10 @@ class _PosScreenState extends State<PosScreen> {
                                       .read<PosCubit>()
                                       .incrementCartItem(i);
                                   if (!ok && context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          'Cannot exceed available stock for this item.',
-                                        ),
-                                      ),
+                                    showAppMessage(
+                                      'Cannot exceed available stock for this item.',
+                                      kind: AppMessageKind.info,
+                                      title: 'Stock limit',
                                     );
                                   }
                                 },
@@ -756,23 +948,26 @@ class _PosScreenState extends State<PosScreen> {
           Row(
             children: [
               Expanded(
-                child: TextButton(
+                child: QuietActionButton(
+                  label: 'Cancel',
+                  color: Colors.black54,
+                  outlined: true,
                   onPressed: state.cart.isEmpty
                       ? null
                       : () => context.read<PosCubit>().cancelDraft(),
-                  child: const Text('Cancel'),
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: ElevatedButton(
+                child: FilledActionButton(
+                  label: 'Finish',
+                  color: AppColors.primary,
                   onPressed: state.cart.isEmpty
                       ? null
                       : () async {
                           // Resolved before any await: completing a sale
                           // reloads three cubits, and the confirmation must
                           // still reach the user afterwards.
-                          final messenger = ScaffoldMessenger.of(context);
                           final posCubit = context.read<PosCubit>();
                           final dashboardCubit = context.read<DashboardCubit>();
                           final ordersCubit = context.read<OrdersCubit>();
@@ -783,24 +978,20 @@ class _PosScreenState extends State<PosScreen> {
                           if (!state.collectsReferenceAtCheckout &&
                               state.requiresPaymentExtraField &&
                               state.paymentExtraFieldValue.trim().isEmpty) {
-                            messenger.showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  '${state.selectedExtraFieldLabel ?? 'Additional field'} is required for selected payment method.',
-                                ),
-                              ),
+                            showAppMessage(
+                              '${state.selectedExtraFieldLabel ?? 'Additional field'} is required for selected payment method.',
+                              kind: AppMessageKind.info,
+                              title: 'Missing detail',
                             );
                             return;
                           }
                           if (!state.cashTenderedIsSufficient) {
-                            messenger.showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  state.cashTendered.trim().isEmpty
-                                      ? 'Enter the cash received before finishing the sale.'
-                                      : 'Cash received must cover ${formatPeso(state.total)}.',
-                                ),
-                              ),
+                            showAppMessage(
+                              state.cashTendered.trim().isEmpty
+                                  ? 'Enter the cash received before finishing the sale.'
+                                  : 'Cash received must cover ${formatPeso(state.total)}.',
+                              kind: AppMessageKind.info,
+                              title: 'Cash received',
                             );
                             return;
                           }
@@ -865,12 +1056,10 @@ class _PosScreenState extends State<PosScreen> {
                             user: widget.user,
                           );
                           if (receipt == null) {
-                            messenger.showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Some items are out of stock. Please review cart quantities.',
-                                ),
-                              ),
+                            showAppMessage(
+                              'Some items are out of stock. Please review cart quantities.',
+                              kind: AppMessageKind.info,
+                              title: 'Out of stock',
                             );
                             return;
                           }
@@ -885,31 +1074,12 @@ class _PosScreenState extends State<PosScreen> {
                               data: receipt,
                             );
                           }
-                          messenger.showSnackBar(
-                            SnackBar(
-                              backgroundColor: AppColors.success,
-                              behavior: SnackBarBehavior.floating,
-                              duration: const Duration(milliseconds: 1800),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              content: const Row(
-                                children: [
-                                  Icon(
-                                    Icons.check_circle_outline,
-                                    color: Colors.white,
-                                  ),
-                                  SizedBox(width: 10),
-                                  Text(
-                                    'Sale completed.',
-                                    style: TextStyle(color: Colors.white),
-                                  ),
-                                ],
-                              ),
-                            ),
+                          showAppMessage(
+                            'Sale completed.',
+                            kind: AppMessageKind.success,
+                            title: 'Sale completed',
                           );
                         },
-                  child: const Text('Finish'),
                 ),
               ),
             ],
@@ -952,7 +1122,6 @@ class _PosScreenState extends State<PosScreen> {
   /// against a dead element -- which is why the success message could
   /// silently go missing.
   Future<void> _deleteEvent(BuildContext context, BazaarEvent event) async {
-    final messenger = ScaffoldMessenger.of(context);
     final posCubit = context.read<PosCubit>();
     final dashboardCubit = context.read<DashboardCubit>();
     final inventoryCubit = context.read<InventoryCubit>();
@@ -961,7 +1130,11 @@ class _PosScreenState extends State<PosScreen> {
     // cannot happen only to fail afterwards is worse than saying so up front.
     final blocked = posCubit.state.deleteBlockedReason(event);
     if (blocked != null) {
-      messenger.showSnackBar(SnackBar(content: Text(blocked)));
+      showAppMessage(
+        blocked,
+        kind: AppMessageKind.info,
+        title: 'Cannot delete bazaar',
+      );
       return;
     }
 
@@ -974,27 +1147,49 @@ class _PosScreenState extends State<PosScreen> {
       confirmLabel: 'Delete',
       tone: ConfirmationTone.destructive,
     );
-    if (confirmed != true) {
+    if (confirmed != true || !context.mounted) {
       return;
     }
 
     // The success message used to be printed unconditionally. When the server
     // refused, the bazaar stayed in the list with nothing said about why, so a
     // delete that plainly had not happened looked like the screen was stale.
+    final dialogNavigator = Navigator.of(context, rootNavigator: true);
+    showLoadingDialog(context, 'Deleting bazaar…');
     try {
       await posCubit.deleteEventFromPos(user: widget.user, event: event);
+      await dashboardCubit.load(widget.user);
+      await inventoryCubit.load();
     } on ApiException catch (error) {
-      messenger.showSnackBar(SnackBar(content: Text(error.message)));
+      dialogNavigator.pop();
+      showAppMessage(
+        error.message,
+        kind: AppMessageKind.error,
+        title: 'Could not delete bazaar',
+      );
       return;
     } on StateError catch (error) {
-      messenger.showSnackBar(SnackBar(content: Text(error.message)));
+      dialogNavigator.pop();
+      showAppMessage(
+        error.message,
+        kind: AppMessageKind.error,
+        title: 'Could not delete bazaar',
+      );
       return;
     }
+    dialogNavigator.pop();
 
-    await dashboardCubit.load(widget.user);
-    await inventoryCubit.load();
-    messenger.showSnackBar(
-      const SnackBar(content: Text('Bazaar deleted successfully.')),
+    if (!context.mounted) {
+      return;
+    }
+    await showNoticeDialog(
+      context: context,
+      title: 'Bazaar deleted',
+      message:
+          '"${event.name}" was deleted and its stock returned to the '
+          'master inventory.',
+      buttonLabel: 'Okay',
+      icon: Icons.check_circle_outline_rounded,
     );
   }
 
@@ -1063,7 +1258,6 @@ class _PosScreenState extends State<PosScreen> {
     // nothing is resolved through a context that may have moved on.
     final cubit = context.read<PosCubit>();
     final productRepository = context.read<ProductRepository>();
-    final messenger = ScaffoldMessenger.of(context);
     final dashboardCubit = context.read<DashboardCubit>();
     final inventoryCubit = context.read<InventoryCubit>();
     // Everything about a finished bazaar is a record rather than a plan.
@@ -1124,52 +1318,66 @@ class _PosScreenState extends State<PosScreen> {
       return;
     }
 
-    final ok = await cubit.updateEventFromPos(
-      user: widget.user,
-      event: event,
-      name: result.name.isEmpty ? event.name : result.name,
-      startDate: result.range.start,
-      endDate: result.range.end,
-      newAllocations: result.allocations,
-    );
+    // Saving is several requests in a row (the bazaar, then each roster change,
+    // then a reload of the staff), and the dialog has already closed, so
+    // without this the screen sat unchanged until the result appeared.
+    final dialogNavigator = Navigator.of(context, rootNavigator: true);
+    showLoadingDialog(context, 'Saving bazaar…');
+    final bool ok;
+    try {
+      ok = await cubit.updateEventFromPos(
+        user: widget.user,
+        event: event,
+        name: result.name.isEmpty ? event.name : result.name,
+        startDate: result.range.start,
+        endDate: result.range.end,
+        newAllocations: result.allocations,
+      );
 
-    // Only the difference is written. Re-posting the whole roster would rely
-    // on the server rejecting duplicates, and removals would never happen at
-    // all -- a roster that can only grow cannot be corrected.
-    for (final id in originalRoster.difference(result.roster)) {
-      final assignmentId = assignmentIdByUserId[id];
-      if (assignmentId != null) {
-        await authRepository.unassignEmployeeFromBazaar(
+      // Only the difference is written. Re-posting the whole roster would rely
+      // on the server rejecting duplicates, and removals would never happen at
+      // all -- a roster that can only grow cannot be corrected.
+      for (final id in originalRoster.difference(result.roster)) {
+        final assignmentId = assignmentIdByUserId[id];
+        if (assignmentId != null) {
+          await authRepository.unassignEmployeeFromBazaar(
+            eventId: event.id,
+            assignmentId: assignmentId,
+            employeeId: id,
+          );
+        }
+      }
+      final added = result.roster.difference(originalRoster).toList();
+      if (added.isNotEmpty) {
+        await authRepository.assignEmployeesToBazaar(
           eventId: event.id,
-          assignmentId: assignmentId,
-          employeeId: id,
+          employeeIds: added,
         );
       }
+      await staffCubit.load();
+      // Still under the loader: these refresh what other screens show, and
+      // running them after it closed left a silent gap before the result.
+      if (ok) {
+        await dashboardCubit.load(widget.user);
+        await inventoryCubit.load();
+      }
+    } finally {
+      dialogNavigator.pop();
     }
-    final added = result.roster.difference(originalRoster).toList();
-    if (added.isNotEmpty) {
-      await authRepository.assignEmployeesToBazaar(
-        eventId: event.id,
-        employeeIds: added,
-      );
-    }
-    await staffCubit.load();
 
     if (!ok) {
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Unable to update bazaar. Check stock allocations and try again.',
-          ),
-        ),
+      showAppMessage(
+        'Unable to update bazaar. Check stock allocations and try again.',
+        kind: AppMessageKind.error,
+        title: 'Unable to update bazaar',
       );
       return;
     }
 
-    await dashboardCubit.load(widget.user);
-    await inventoryCubit.load();
-    messenger.showSnackBar(
-      const SnackBar(content: Text('Bazaar updated successfully.')),
+    showAppMessage(
+      'Bazaar updated successfully.',
+      kind: AppMessageKind.success,
+      title: 'Bazaar updated',
     );
   }
 
@@ -1486,12 +1694,10 @@ class _PosScreenState extends State<PosScreen> {
                                 return;
                               }
                               if (!added) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Cannot add more than available stock.',
-                                    ),
-                                  ),
+                                showAppMessage(
+                                  'Cannot add more than available stock.',
+                                  kind: AppMessageKind.info,
+                                  title: 'Stock limit',
                                 );
                                 return;
                               }

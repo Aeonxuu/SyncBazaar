@@ -341,9 +341,7 @@ class _CatalogPanelState<T> extends State<_CatalogPanel<T>> {
           const SizedBox(height: 8),
           Text(
             'None yet',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: Colors.black45,
-            ),
+            style: theme.textTheme.bodyMedium?.copyWith(color: Colors.black45),
           ),
         ],
       ),

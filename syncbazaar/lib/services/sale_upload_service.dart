@@ -27,6 +27,11 @@ Map<String, dynamic> saleUploadPayload({
     'quantity': sale.qty,
     'order_status': 'CM',
     'synced': true,
+    // Who made the sale, which is not always the account signed in: a shared
+    // tablet is used by whoever is at the stall. The batch endpoint has to
+    // honour this for per-employee figures to be right; until it does it still
+    // credits the signed-in user and ignores the field.
+    if (sale.soldById > 0) 'sold_by': sale.soldById,
     if (methodIds[sale.paymentMethod.trim().toUpperCase()] != null)
       'payment_method': methodIds[sale.paymentMethod.trim().toUpperCase()],
     if (reference.isNotEmpty) 'required_information': reference,
@@ -197,6 +202,8 @@ class SaleUploadService {
       await _auth.api.post(
         '/api/bazaar/event/$eventId/batch-sale/',
         body: {'sales': payload},
+        // The client uuid on every row makes a repeat harmless.
+        safeToRetry: true,
       );
     } on ApiException catch (error) {
       debugPrint(

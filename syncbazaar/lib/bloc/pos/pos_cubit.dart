@@ -75,7 +75,28 @@ class PosState {
     this.cashTendered = '',
     this.allocations = const {},
     this.eventIdsWithSales = const {},
+    this.isLoading = false,
+    this.sellerId,
+    this.sellerName,
   });
+
+  /// Who is ringing up the sale, when that is not whoever is signed in.
+  ///
+  /// One tablet is often shared by the people assigned to a bazaar, and each
+  /// sale has to be credited to the one who actually made it: employee
+  /// performance is measured from this. Null means the signed-in user, which is
+  /// the right answer whenever nobody has chosen otherwise.
+  final int? sellerId;
+
+  /// The chosen seller's name, carried with the id so the receipt can say it
+  /// without the cubit having to look a person up.
+  final String? sellerName;
+
+  /// True while the bazaar list is being fetched. Separate from [events]
+  /// because an empty list cannot say whether there are no bazaars or the
+  /// answer has not arrived, and the picker greeted everyone with "No bazaars
+  /// match" for as long as the request took.
+  final bool isLoading;
 
   final List<BazaarEvent> events;
   final BazaarEvent? selectedEvent;
@@ -261,8 +282,15 @@ class PosState {
     Map<String, int>? allocations,
     Set<int>? eventIdsWithSales,
     bool clearSelectedEvent = false,
+    bool? isLoading,
+    int? sellerId,
+    String? sellerName,
+    bool clearSeller = false,
   }) {
     return PosState(
+      isLoading: isLoading ?? this.isLoading,
+      sellerId: clearSeller ? null : (sellerId ?? this.sellerId),
+      sellerName: clearSeller ? null : (sellerName ?? this.sellerName),
       events: events ?? this.events,
       selectedEvent: clearSelectedEvent
           ? null
@@ -315,7 +343,24 @@ class PosCubit extends Cubit<PosState> {
   final VendorPaymentMethodRepository _vendorPaymentMethodRepository;
   List<PaymentMethodMeta> _basePaymentMethods = const [];
 
+  /// Drops back to the default state, synchronously.
+  ///
+  /// Called right before [load] on a fresh login, for the same reason as
+  /// `DashboardCubit.reset` -- without it the product grid keeps showing the
+  /// previous account's catalogue for however long `load`'s awaits take.
+  void reset() => emit(const PosState());
+
   Future<void> load(AppUser user) async {
+    emit(state.copyWith(isLoading: true));
+    try {
+      await _loadBazaars(user);
+    } catch (_) {
+      emit(state.copyWith(isLoading: false));
+      rethrow;
+    }
+  }
+
+  Future<void> _loadBazaars(AppUser user) async {
     final events = await _eventRepository.listVisibleForUser(user);
     final products = await _productRepository.listProducts();
     // The vendor's own methods, one list shared by every venue and bazaar --
@@ -349,6 +394,7 @@ class PosCubit extends Cubit<PosState> {
         eventIdsWithSales: soldEventIds,
         paymentMethods: methods,
         selectedPaymentMethod: methods.isEmpty ? 'CASH' : methods.first.name,
+        isLoading: false,
       ),
     );
   }
@@ -382,6 +428,12 @@ class PosCubit extends Cubit<PosState> {
                   imagePath: product.imagePath,
                   imageBytes: product.imageBytes,
                   status: product.status,
+                  // Carried across: the POS filters by these, and they were
+                  // dropped when the product was rebuilt for the till.
+                  categoryId: product.categoryId,
+                  categoryName: product.categoryName,
+                  brandId: product.brandId,
+                  brandName: product.brandName,
                 ),
           ];
 
@@ -391,6 +443,7 @@ class PosCubit extends Cubit<PosState> {
     );
     emit(
       state.copyWith(
+        clearSeller: true,
         selectedEvent: event,
         products: allowedProducts,
         paymentMethods: methods,
@@ -430,8 +483,20 @@ class PosCubit extends Cubit<PosState> {
   }
 
   void backToEventSelection() {
-    emit(state.copyWith(clearSelectedEvent: true, cart: const []));
+    emit(
+      state.copyWith(
+        clearSelectedEvent: true,
+        cart: const [],
+        // A different bazaar has a different roster; the choice does not carry.
+        clearSeller: true,
+      ),
+    );
   }
+
+  /// Credits the next sales to [id]. Kept after a sale completes, because the
+  /// same person usually keeps selling.
+  void selectSeller({required int id, required String name}) =>
+      emit(state.copyWith(sellerId: id, sellerName: name));
 
   // Switching method clears both per-method inputs: a reference number typed
   // for GCash means nothing once the customer decides to pay cash, and a
@@ -746,7 +811,7 @@ class PosCubit extends Cubit<PosState> {
         variantOptionIdA: item.variantOptionIdA,
         variantOptionIdB: item.variantOptionIdB,
         customerName: normalizeCustomerName(state.customerName),
-        soldById: user.id,
+        soldById: state.sellerId ?? user.id,
         employeeId: state.paymentExtraFieldValue,
         // Only where there is a reference to describe. A cash sale has none,
         // and marking one "manual" would suggest somebody typed something.
@@ -770,7 +835,7 @@ class PosCubit extends Cubit<PosState> {
           customerName: sale.customerName,
           productLabel: item.cartLabel,
           orderStatus: status,
-          userId: user.id,
+          userId: state.sellerId ?? user.id,
           paymentMethod: sale.paymentMethod,
           updatedAt: DateTime.now(),
           synced: false,
@@ -855,7 +920,7 @@ class PosCubit extends Cubit<PosState> {
       venueContact: venue?.contact ?? '',
       eventName: event.name,
       receiptNo: _receiptNo(at),
-      cashierName: user.name,
+      cashierName: state.sellerName ?? user.name,
       customerName: normalizeCustomerName(state.customerName),
       paymentMethod: state.selectedPaymentMethod,
       timestamp: at,

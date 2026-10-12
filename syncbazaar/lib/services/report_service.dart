@@ -1,5 +1,6 @@
 import '../data/remote/api_client.dart';
 import '../data/repositories/auth_repository.dart';
+import '../data/repositories/save_folder_repository.dart';
 import 'document_saver.dart';
 import 'orders_workbook.dart';
 
@@ -93,6 +94,7 @@ class ReportService {
     format: DocumentFormat.docx,
     fallbackName: 'SOA_${_slug(eventName)}',
     what: 'statement of account',
+    kind: SaveDocumentKind.soa,
   );
 
   /// Downloads the list of orders as a spreadsheet-friendly CSV.
@@ -108,6 +110,7 @@ class ReportService {
     format: DocumentFormat.csv,
     fallbackName: 'ListOfOrders_${_slug(eventName)}',
     what: 'list of orders',
+    kind: SaveDocumentKind.orderList,
   );
 
   /// Writes the order list as an Excel workbook, one sheet per payment method.
@@ -133,6 +136,7 @@ class ReportService {
         bytes: bytes,
         fileName: 'ListOfOrders_${_slug(eventName)}',
         format: DocumentFormat.xlsx,
+        kind: SaveDocumentKind.orderList,
       );
     } on StateError {
       throw const ReportException(
@@ -146,6 +150,7 @@ class ReportService {
     required DocumentFormat format,
     required String fallbackName,
     required String what,
+    required SaveDocumentKind kind,
   }) async {
     if (!isAvailable) {
       throw const ReportException(
@@ -163,6 +168,7 @@ class ReportService {
         // The server's own name, minus its extension, which file_saver adds.
         fileName: download.stem ?? fallbackName,
         format: format,
+        kind: kind,
       );
     } on ApiException catch (error) {
       throw reportFailure(error, what);

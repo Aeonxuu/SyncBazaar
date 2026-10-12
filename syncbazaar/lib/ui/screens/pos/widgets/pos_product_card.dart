@@ -74,7 +74,13 @@ class PosProductCard extends StatefulWidget {
   /// square (`AspectRatio(aspectRatio: 1)`), so the grid's own
   /// `mainAxisExtent` has to be `cardWidth + detailsHeight` for the two to
   /// add up exactly — see the call site in `pos_screen.dart`.
-  static const double detailsHeight = 128;
+  ///
+  /// 140, not 128: grown by the same 12px the Add-to-cart button below grew
+  /// by (32 -> 44), so the button's bottom edge stays exactly
+  /// `_contentInset` from the card's bottom edge and the nested-radius gap
+  /// stays equal on both axes. The `Spacer` above the button absorbs the
+  /// rest, same as before.
+  static const double detailsHeight = 140;
 
   @override
   State<PosProductCard> createState() => _PosProductCardState();
@@ -196,7 +202,14 @@ class _PosProductCardState extends State<PosProductCard> {
                         const Spacer(),
                         SizedBox(
                           width: double.infinity,
-                          height: 32,
+                          // 44, not the old 32 -- still the "selection
+                          // control" tier, not the dialogs' 48, but tall
+                          // enough to clear the ≥44px touch-target floor for
+                          // anything checkout-critical (section 4 of
+                          // DESIGN_GUIDELINES.md), which this card's button
+                          // very much is: the single most-tapped control in
+                          // the app.
+                          height: 44,
                           child: OutlinedButton.icon(
                             onPressed: widget.isEnabled ? widget.onTap : null,
                             style: OutlinedButton.styleFrom(

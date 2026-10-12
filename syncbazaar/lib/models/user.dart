@@ -32,6 +32,7 @@ class AppUser {
     required this.role,
     this.assignedEventId,
     this.assignedEventIds = const [],
+    this.dateHired,
   });
 
   final int id;
@@ -40,6 +41,10 @@ class AppUser {
   final UserRole role;
   final int? assignedEventId;
   final List<int> assignedEventIds;
+
+  /// When they started. Null where nobody has recorded it, which is every
+  /// account made before the field was editable.
+  final DateTime? dateHired;
 
   List<int> get assignedEventIdsEffective {
     if (assignedEventIds.isNotEmpty) {
@@ -62,6 +67,8 @@ class AppUser {
     List<int>? assignedEventIds,
     bool clearAssignedEventId = false,
     bool clearAssignedEventIds = false,
+    DateTime? dateHired,
+    bool clearDateHired = false,
   }) {
     final shouldClearAssignments =
         clearAssignedEventId || clearAssignedEventIds;
@@ -76,6 +83,7 @@ class AppUser {
       assignedEventIds: shouldClearAssignments
           ? const []
           : List<int>.from(assignedEventIds ?? this.assignedEventIds),
+      dateHired: clearDateHired ? null : (dateHired ?? this.dateHired),
     );
   }
 
@@ -86,6 +94,7 @@ class AppUser {
     'role': role.name,
     'assigned_event_id': assignedEventId,
     'assigned_event_ids': assignedEventIds,
+    'date_hired': dateHired?.toIso8601String(),
   };
 
   /// Builds a user from `POST /api/auth/login/`.
@@ -124,5 +133,24 @@ class AppUser {
         .whereType<num>()
         .map((value) => value.toInt())
         .toList(),
+    dateHired: parseApiDate(json['date_hired']),
   );
+
+  /// The API's `date_hired` is a bare `YYYY-MM-DD`; parsed as a local date so
+  /// it does not slide a day across a timezone.
+  static DateTime? parseApiDate(Object? raw) {
+    if (raw is! String || raw.isEmpty) {
+      return null;
+    }
+    final parsed = DateTime.tryParse(raw);
+    return parsed == null
+        ? null
+        : DateTime(parsed.year, parsed.month, parsed.day);
+  }
+
+  /// The form the API expects for a date field.
+  static String toApiDate(DateTime date) =>
+      '${date.year.toString().padLeft(4, '0')}-'
+      '${date.month.toString().padLeft(2, '0')}-'
+      '${date.day.toString().padLeft(2, '0')}';
 }

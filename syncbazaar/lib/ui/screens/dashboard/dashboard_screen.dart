@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/app_message.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../data/remote/api_client.dart';
@@ -63,12 +64,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// down is to find out what is true now, and silently keeping the old
   /// figures answers the opposite question.
   Future<void> _refresh(BuildContext context, DashboardCubit cubit) async {
-    final messenger = ScaffoldMessenger.of(context);
     try {
       await cubit.refreshFromServer(widget.user);
     } on ApiException catch (error) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('Could not refresh: ${error.message}')),
+      showAppMessage(
+        'Could not refresh: ${error.message}',
+        kind: AppMessageKind.error,
+        title: 'Could not refresh',
       );
     }
   }

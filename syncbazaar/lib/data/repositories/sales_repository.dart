@@ -104,33 +104,14 @@ class SalesRepository {
   Future<void> _loadFromApi(AuthRepository auth, EventRepository events) async {
     _paymentMethodNames = await _loadPaymentMethodNames(auth);
 
-    final fetched = <Sale>[];
-    for (final event in await events.loadedEvents()) {
-      // Two requests per bazaar: the server keeps the amount and the payment
-      // apart. Worth knowing as the history grows -- a vendor with a season of
-      // bazaars behind them pays for all of it on every load, and this is
-      // where a date filter or a single vendor-wide endpoint would go.
-      final sales =
-          await auth.api.get('/api/bazaar/event/${event.id}/sale/') as List;
-      if (sales.isEmpty) {
-        continue;
-      }
-      final payments =
-          await auth.api.get('/api/bazaar/event/${event.id}/payment/') as List;
-
-      fetched.addAll(
-        mapSalesResponse(
-          sales,
-          eventId: event.id,
-          paymentsPayload: payments,
-          allocationKeyForStockId: (stockId) => events.allocationKeyForStockId(
-            eventId: event.id,
-            stockId: stockId,
-          ),
-          paymentMethodNameById: (id) => _paymentMethodNames[id] ?? 'CASH',
-        ),
-      );
-    }
+    // One bazaar's sales and payments are fetched together with every other
+    // bazaar's, instead of a bazaar at a time. Two requests each, and a season
+    // of bazaars made the sync button wait on all of them in a row.
+    final loaded = await events.loadedEvents();
+    final perEvent = await Future.wait([
+      for (final event in loaded) _fetchEventSales(auth, events, event.id),
+    ]);
+    final fetched = [for (final sales in perEvent) ...sales];
 
     // Restored first, so a sale queued before the last relaunch is counted as
     // pending below rather than being wiped by the clear.
@@ -145,6 +126,28 @@ class SalesRepository {
       ..addAll(fetched)
       ..addAll(pending);
     await _persistQueue();
+  }
+
+  Future<List<Sale>> _fetchEventSales(
+    AuthRepository auth,
+    EventRepository events,
+    int eventId,
+  ) async {
+    final sales =
+        await auth.api.get('/api/bazaar/event/$eventId/sale/') as List;
+    if (sales.isEmpty) {
+      return const [];
+    }
+    final payments =
+        await auth.api.get('/api/bazaar/event/$eventId/payment/') as List;
+    return mapSalesResponse(
+      sales,
+      eventId: eventId,
+      paymentsPayload: payments,
+      allocationKeyForStockId: (stockId) =>
+          events.allocationKeyForStockId(eventId: eventId, stockId: stockId),
+      paymentMethodNameById: (id) => _paymentMethodNames[id] ?? 'CASH',
+    );
   }
 
   Future<Map<int, String>> _loadPaymentMethodNames(AuthRepository auth) async {

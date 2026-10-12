@@ -72,6 +72,7 @@ class OrdersWorkbook {
     'Customer Name',
     'Product',
   ];
+
   /// Header for the column qualifying the reference beside it.
   static const String referenceSourceColumn = 'Reference From';
 

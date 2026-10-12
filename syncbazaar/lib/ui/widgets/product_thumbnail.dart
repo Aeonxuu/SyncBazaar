@@ -2,7 +2,8 @@ import 'dart:typed_data';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_cache_manager/flutter_cache_manager.dart' show HttpExceptionWithStatus;
+import 'package:flutter_cache_manager/flutter_cache_manager.dart'
+    show HttpExceptionWithStatus;
 
 /// A product's image with a graceful placeholder fallback.
 ///
@@ -89,7 +90,11 @@ class ProductThumbnail extends StatelessWidget {
       final isRemote =
           path.startsWith('http://') || path.startsWith('https://');
       return isRemote
-          ? _RetryingNetworkImage(url: path, fit: fit, placeholder: _placeholder)
+          ? _RetryingNetworkImage(
+              url: path,
+              fit: fit,
+              placeholder: _placeholder,
+            )
           : Image.asset(
               path,
               fit: fit,
@@ -149,7 +154,10 @@ class _RetryingNetworkImage extends StatefulWidget {
 }
 
 class _RetryingNetworkImageState extends State<_RetryingNetworkImage> {
-  static const _retryDelays = [Duration(milliseconds: 500), Duration(milliseconds: 1500)];
+  static const _retryDelays = [
+    Duration(milliseconds: 500),
+    Duration(milliseconds: 1500),
+  ];
 
   int _attempt = 0;
 
