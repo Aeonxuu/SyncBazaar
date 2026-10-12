@@ -224,6 +224,27 @@ class RefundRepository {
     }
   }
 
+  /// Takes the refund handler's authority away when they have just been taken
+  /// off the bazaar. Returns whether anyone was revoked.
+  ///
+  /// The server does not do this itself yet: removing an employee from a
+  /// bazaar leaves their authorization active, so their password would still
+  /// approve refunds there. Called after the removal succeeds.
+  Future<bool> revokeHandlerIfRemoved(
+    int eventId,
+    Set<int> removedUserIds,
+  ) async {
+    if (removedUserIds.isEmpty || !isRemote) {
+      return false;
+    }
+    final current = await currentHandler(eventId);
+    if (current == null || !removedUserIds.contains(current.userId)) {
+      return false;
+    }
+    await revokeRefundHandler(eventId, current.authorizationId);
+    return true;
+  }
+
   AuthRepository _requireSession() {
     final auth = _auth;
     if (auth == null || !isRemote) {

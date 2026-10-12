@@ -6,6 +6,7 @@ import '../../../../data/repositories/settings_repository.dart';
 import '../../../../models/company.dart';
 import '../../../../models/user.dart';
 import '../../../widgets/app_dropdown.dart';
+import '../../../widgets/refund_handler_field.dart';
 import '../pre_bazaar_form_field.dart';
 
 /// Step 1: what the bazaar *is* — name, where, when, and who runs it.
@@ -30,6 +31,9 @@ class BazaarDetailsStep extends StatelessWidget {
     required this.onRemoveAssignedEmployee,
     required this.showEmployeeAssignment,
     this.schedulingConflicts = const {},
+    this.showRefundHandler = false,
+    this.refundHandlerId,
+    this.onRefundHandlerChanged,
   });
 
   final TextEditingController eventNameController;
@@ -48,6 +52,15 @@ class BazaarDetailsStep extends StatelessWidget {
   /// Employee id to the bazaar they are already working over these dates.
   /// Empty until the dates are chosen — there is nothing to clash with yet.
   final Map<int, String> schedulingConflicts;
+
+  /// Whether to offer the refund-handler choice. Only for the owner and admin:
+  /// an employee proposing a bazaar is not the one who decides who may refund.
+  final bool showRefundHandler;
+
+  /// The chosen handler's id, or null for nobody. Must be one of
+  /// [assignedEmployees]; the screen clears it when that person is removed.
+  final int? refundHandlerId;
+  final ValueChanged<int?>? onRefundHandlerChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -237,6 +250,14 @@ class BazaarDetailsStep extends StatelessWidget {
                   ),
               ],
             ),
+          if (showRefundHandler && onRefundHandlerChanged != null) ...[
+            const SizedBox(height: 20),
+            RefundHandlerField(
+              candidates: assignedEmployees,
+              selectedId: refundHandlerId,
+              onChanged: onRefundHandlerChanged!,
+            ),
+          ],
         ],
 
         // A quiet, always-present readout of what's still missing. It sits at

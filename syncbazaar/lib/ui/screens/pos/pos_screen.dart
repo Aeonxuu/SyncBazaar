@@ -15,10 +15,12 @@ import '../../../models/sale.dart' show ReferenceSource;
 import '../../../models/product_variant.dart';
 import '../../../models/user.dart';
 import '../../../data/repositories/product_repository.dart';
+import '../../../data/repositories/refund_repository.dart';
 import '../../widgets/action_buttons.dart';
 import '../../widgets/confirmation_dialog.dart';
 import '../../widgets/loading_dialog.dart';
 import '../../widgets/offline_data_notice.dart';
+import '../../widgets/refund_handler_field.dart';
 import 'widgets/discard_sale_guard.dart';
 import '../../widgets/date_range_picker_dialog.dart';
 import '../../widgets/custom_card.dart';
@@ -1207,6 +1209,7 @@ class _PosScreenState extends State<PosScreen> {
     final authRepository = context.read<AuthRepository>();
     final staffCubit = context.read<StaffCubit>();
     final settingsRepository = context.read<SettingsRepository>();
+    final refundRepository = context.read<RefundRepository>();
     final cubit = context.read<PosCubit>();
 
     final companies = await settingsRepository.listCompanies();
@@ -1218,6 +1221,16 @@ class _PosScreenState extends State<PosScreen> {
     final nameById = {for (final user in staffCubit.state) user.id: user.name};
     final allocations = await cubit.eventAllocations(event.id);
     final remaining = allocations.values.fold<int>(0, (sum, q) => sum + q);
+    final handlerSetup = await _refundHandlerSetup(
+      repository: refundRepository,
+      event: event,
+      rosteredIds: rostered.keys,
+      nameById: nameById,
+      employeeIds: {
+        for (final user in staffCubit.state)
+          if (user.role == UserRole.employee) user.id,
+      },
+    );
 
     if (!context.mounted) {
       return;
@@ -1234,6 +1247,7 @@ class _PosScreenState extends State<PosScreen> {
         remainingUnits: remaining,
         formatDate: _formatDate,
         deleteBlockedReason: state.deleteBlockedReason(event),
+        refundHandler: handlerSetup,
       ),
     );
 
@@ -1246,6 +1260,52 @@ class _PosScreenState extends State<PosScreen> {
       await _showEditEventDialog(context, state, event);
     } else if (choice == 'delete') {
       await _deleteEvent(context, event);
+    }
+  }
+
+  /// What the info dialog needs to offer the refund-handler choice, or null
+  /// where it should not be offered.
+  ///
+  /// Only the owner and admin choose who may refund, and only against a server:
+  /// the demo build has nobody to grant to. The people offered are those
+  /// rostered on this bazaar, who are employees; the current handler is added
+  /// if they are somehow no longer on it, so what the server holds is never
+  /// hidden by what the roster says.
+  Future<RefundHandlerSetup?> _refundHandlerSetup({
+    required RefundRepository repository,
+    required BazaarEvent event,
+    required Iterable<int> rosteredIds,
+    required Map<int, String> nameById,
+    required Set<int> employeeIds,
+  }) async {
+    if (!widget.user.isAdminOrOwner || !repository.isRemote) {
+      return null;
+    }
+    final candidates = <MapEntry<int, String>>[
+      for (final id in rosteredIds)
+        if (employeeIds.contains(id))
+          MapEntry(id, nameById[id] ?? 'Employee #$id'),
+    ];
+    try {
+      final current = await repository.currentHandler(event.id);
+      if (current != null && !candidates.any((c) => c.key == current.userId)) {
+        candidates.add(MapEntry(current.userId, current.userName));
+      }
+      return RefundHandlerSetup(
+        candidates: candidates,
+        currentId: current?.userId,
+        onChange: (userId) =>
+            repository.changeHandler(event.id, userId: userId),
+      );
+    } on ApiException catch (error) {
+      return RefundHandlerSetup(
+        candidates: candidates,
+        currentId: null,
+        onChange: (_) async {},
+        loadError: error.isOffline
+            ? 'Needs a connection to load.'
+            : error.message,
+      );
     }
   }
 
@@ -1322,7 +1382,9 @@ class _PosScreenState extends State<PosScreen> {
     // then a reload of the staff), and the dialog has already closed, so
     // without this the screen sat unchanged until the result appeared.
     final dialogNavigator = Navigator.of(context, rootNavigator: true);
+    final refundRepository = context.read<RefundRepository>();
     showLoadingDialog(context, 'Saving bazaar…');
+    String? revokeProblem;
     final bool ok;
     try {
       ok = await cubit.updateEventFromPos(
@@ -1337,6 +1399,7 @@ class _PosScreenState extends State<PosScreen> {
       // Only the difference is written. Re-posting the whole roster would rely
       // on the server rejecting duplicates, and removals would never happen at
       // all -- a roster that can only grow cannot be corrected.
+      final removedIds = <int>{};
       for (final id in originalRoster.difference(result.roster)) {
         final assignmentId = assignmentIdByUserId[id];
         if (assignmentId != null) {
@@ -1345,6 +1408,17 @@ class _PosScreenState extends State<PosScreen> {
             assignmentId: assignmentId,
             employeeId: id,
           );
+          removedIds.add(id);
+        }
+      }
+      // Taking someone off a bazaar does not take their refund authority with
+      // it -- the server leaves it active -- so a removed handler is revoked
+      // here. Only the owner and admin can read or revoke it.
+      if (removedIds.isNotEmpty && widget.user.isAdminOrOwner) {
+        try {
+          await refundRepository.revokeHandlerIfRemoved(event.id, removedIds);
+        } on ApiException catch (error) {
+          revokeProblem = error.message;
         }
       }
       final added = result.roster.difference(originalRoster).toList();
@@ -1370,6 +1444,20 @@ class _PosScreenState extends State<PosScreen> {
         'Unable to update bazaar. Check stock allocations and try again.',
         kind: AppMessageKind.error,
         title: 'Unable to update bazaar',
+      );
+      return;
+    }
+
+    if (revokeProblem != null) {
+      // Said plainly: until this is fixed, the person removed from the bazaar
+      // can still approve refunds at it.
+      showAppMessage(
+        'The bazaar was updated, but the refund handler removed from it could '
+        'not be revoked: $revokeProblem Their password can still approve '
+        'refunds here. Open the bazaar info and choose another handler, or '
+        'try again.',
+        kind: AppMessageKind.error,
+        title: 'Refund handler still active',
       );
       return;
     }
@@ -2258,6 +2346,31 @@ class _NumericCrossfade extends StatelessWidget {
   }
 }
 
+/// What the bazaar info dialog needs to offer the refund-handler choice.
+class RefundHandlerSetup {
+  const RefundHandlerSetup({
+    required this.candidates,
+    required this.currentId,
+    required this.onChange,
+    this.loadError,
+  });
+
+  /// The employees assigned to the bazaar, as id and name.
+  final List<MapEntry<int, String>> candidates;
+
+  /// The current handler's id, or null for nobody.
+  final int? currentId;
+
+  /// Makes [userId] the handler, or removes the handler for null. Throws an
+  /// [ApiException] when the server refuses, which the dialog shows in place.
+  final Future<void> Function(int? userId) onChange;
+
+  /// Why the current handler could not be read, if it could not. The choice is
+  /// then not offered: showing "None" over an unknown would invite a change
+  /// made against the wrong picture.
+  final String? loadError;
+}
+
 /// A bazaar's facts, and the two things that can be done to it.
 ///
 /// Public so the dialog can be exercised on its own; nothing else builds it.
@@ -2268,7 +2381,7 @@ class _NumericCrossfade extends StatelessWidget {
 /// decision. Delete rests as an outline and only turns red on hover, the same
 /// way a destructive row action does elsewhere: a panel of facts should not
 /// look hazardous while you are reading it.
-class BazaarInfoDialog extends StatelessWidget {
+class BazaarInfoDialog extends StatefulWidget {
   const BazaarInfoDialog({
     super.key,
     required this.event,
@@ -2277,6 +2390,7 @@ class BazaarInfoDialog extends StatelessWidget {
     required this.remainingUnits,
     required this.formatDate,
     this.deleteBlockedReason,
+    this.refundHandler,
   });
 
   final BazaarEvent event;
@@ -2288,6 +2402,11 @@ class BazaarInfoDialog extends StatelessWidget {
   /// Why this bazaar is protected from deletion, or null when it can go.
   final String? deleteBlockedReason;
 
+  /// The refund-handler choice, or null where this person cannot make it: only
+  /// the owner and admin decide who may refund, so an employee opening this
+  /// dialog is not shown it at all.
+  final RefundHandlerSetup? refundHandler;
+
   static const Map<BazaarStatus, Color> _statusColors = {
     BazaarStatus.ongoing: AppColors.statusOngoing,
     BazaarStatus.upcoming: AppColors.statusUpcoming,
@@ -2295,10 +2414,50 @@ class BazaarInfoDialog extends StatelessWidget {
   };
 
   @override
+  State<BazaarInfoDialog> createState() => _BazaarInfoDialogState();
+}
+
+class _BazaarInfoDialogState extends State<BazaarInfoDialog> {
+  late int? _handlerId = widget.refundHandler?.currentId;
+  bool _handlerBusy = false;
+  String? _handlerError;
+
+  /// Applies the pick at once: this dialog has no Save, and a choice that
+  /// looked made but was not sent would leave the wrong person able to refund.
+  /// The field shows the old choice again if the server refuses.
+  Future<void> _changeHandler(int? userId) async {
+    final setup = widget.refundHandler;
+    if (setup == null || userId == _handlerId) {
+      return;
+    }
+    setState(() {
+      _handlerBusy = true;
+      _handlerError = null;
+    });
+    try {
+      await setup.onChange(userId);
+      if (!mounted) return;
+      setState(() {
+        _handlerId = userId;
+        _handlerBusy = false;
+      });
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _handlerBusy = false;
+        _handlerError = error.isOffline
+            ? 'Changing the refund handler needs a connection.'
+            : error.message;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final statusColor = _statusColors[event.status] ?? AppColors.error;
-    final isEnded = event.status == BazaarStatus.ended;
+    final statusColor =
+        BazaarInfoDialog._statusColors[widget.event.status] ?? AppColors.error;
+    final isEnded = widget.event.status == BazaarStatus.ended;
 
     return Dialog(
       backgroundColor: Colors.white,
@@ -2321,14 +2480,14 @@ class BazaarInfoDialog extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          event.name,
+                          widget.event.name,
                           style: theme.textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.w700,
                           ),
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          venue,
+                          widget.venue,
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: Colors.black45,
                           ),
@@ -2362,7 +2521,7 @@ class BazaarInfoDialog extends StatelessWidget {
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
-                  event.status.name.toUpperCase(),
+                  widget.event.status.name.toUpperCase(),
                   style: TextStyle(
                     color: statusColor,
                     fontWeight: FontWeight.w700,
@@ -2374,29 +2533,48 @@ class BazaarInfoDialog extends StatelessWidget {
               _InfoRow(
                 label: 'Dates',
                 value:
-                    '${formatDate(event.startDate)} – '
-                    '${formatDate(event.endDate)}',
+                    '${widget.formatDate(widget.event.startDate)} – '
+                    '${widget.formatDate(widget.event.endDate)}',
               ),
               const SizedBox(height: 12),
               _InfoRow(
                 label: 'Staff',
-                value: staff.isEmpty ? 'Nobody assigned' : staff.join(', '),
+                value: widget.staff.isEmpty
+                    ? 'Nobody assigned'
+                    : widget.staff.join(', '),
                 // An unstaffed bazaar is a problem, not a blank. Said in the
                 // error colour so it is noticed here rather than on the
                 // morning it opens.
-                valueColor: staff.isEmpty ? AppColors.error : null,
+                valueColor: widget.staff.isEmpty ? AppColors.error : null,
               ),
+              if (widget.refundHandler != null) ...[
+                const SizedBox(height: 16),
+                if (widget.refundHandler!.loadError != null)
+                  _InfoRow(
+                    label: 'Refund handler',
+                    value: widget.refundHandler!.loadError!,
+                    valueColor: AppColors.error,
+                  )
+                else
+                  RefundHandlerField(
+                    candidates: widget.refundHandler!.candidates,
+                    selectedId: _handlerId,
+                    busy: _handlerBusy,
+                    errorText: _handlerError,
+                    onChanged: _changeHandler,
+                  ),
+              ],
               const SizedBox(height: 12),
               _InfoRow(
                 label: 'Payment',
-                value: event.acceptedPaymentMethods.isEmpty
+                value: widget.event.acceptedPaymentMethods.isEmpty
                     ? 'CASH'
-                    : event.acceptedPaymentMethods.join(' · '),
+                    : widget.event.acceptedPaymentMethods.join(' · '),
               ),
               const SizedBox(height: 12),
               _InfoRow(
                 label: isEnded ? 'Unreturned stock' : 'Stock left',
-                value: '${formatCount(remainingUnits)} units',
+                value: '${formatCount(widget.remainingUnits)} units',
               ),
               const SizedBox(height: 24),
               const Divider(height: 1, color: Color(0xFFEDEDF1)),
@@ -2407,10 +2585,10 @@ class BazaarInfoDialog extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   _QuietDeleteButton(
-                    onPressed: deleteBlockedReason == null
+                    onPressed: widget.deleteBlockedReason == null
                         ? () => Navigator.pop(context, 'delete')
                         : null,
-                    blockedReason: deleteBlockedReason,
+                    blockedReason: widget.deleteBlockedReason,
                   ),
                   const SizedBox(width: 8),
                   ElevatedButton.icon(

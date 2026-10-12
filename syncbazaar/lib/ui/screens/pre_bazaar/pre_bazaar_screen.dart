@@ -17,6 +17,7 @@ import '../../../data/remote/api_client.dart';
 import '../../../data/repositories/event_repository.dart';
 import '../../../services/staff_scheduling.dart';
 import '../../../data/repositories/product_repository.dart';
+import '../../../data/repositories/refund_repository.dart';
 import '../../../data/repositories/settings_repository.dart';
 import '../../../data/repositories/vendor_payment_method_repository.dart';
 import '../../../models/bazaar_event.dart';
@@ -63,6 +64,11 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
   final Map<String, int> _availableStockAtDraftStart = {};
   final Map<String, ProductAllocationItem> _allocationMetaByKey = {};
   final Set<int> _assignedEmployeeIds = {};
+
+  /// Who besides the owner may approve refunds here. Always one of
+  /// [_assignedEmployeeIds], or null for nobody; only the owner and admin
+  /// can set it, and it is granted on the server once the bazaar exists.
+  int? _refundHandlerId;
   List<Company> _locations = const [];
 
   /// Guards the submit button against double-tap while a request is in
@@ -163,6 +169,7 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
       _allocations.updateAll((_, __) => 0);
       _masterStockByItem.clear();
       _assignedEmployeeIds.clear();
+      _refundHandlerId = null;
     });
     await _syncLocationsFromRepository();
     await _syncStocksFromRepository();
@@ -431,6 +438,8 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
       // any of them through `context` afterwards risks a context that has
       // already moved on, which would drop the success message.
       final staffCubit = context.read<StaffCubit>();
+      final refundRepository = context.read<RefundRepository>();
+      final refundHandlerId = _refundHandlerId;
       final dashboardCubit = context.read<DashboardCubit>();
       final posCubit = context.read<PosCubit>();
       final inventoryCubit = context.read<InventoryCubit>();
@@ -504,6 +513,22 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
           );
         }
 
+        // After the roster, not before: the handler is one of the people just
+        // assigned. A failure here must not undo or hide a bazaar that now
+        // exists, so it is carried to the message below instead of thrown.
+        String? handlerProblem;
+        if (refundHandlerId != null &&
+            _assignedEmployeeIds.contains(refundHandlerId)) {
+          try {
+            await refundRepository.grantRefundHandler(
+              createdEvent.id,
+              refundHandlerId,
+            );
+          } on ApiException catch (error) {
+            handlerProblem = error.message;
+          }
+        }
+
         await dashboardCubit.load(widget.user);
         await posCubit.load(widget.user);
         await inventoryCubit.load();
@@ -517,13 +542,20 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
         // server honours the role, an owner stops seeing the pending
         // wording without anything changing here.
         final pending = eventRepository.isProposal(createdEvent.id);
-        showAppMessage(
-          pending
-              ? 'Bazaar submitted for approval. It will not appear in '
-                    'Sales until it is approved.'
-              : 'Bazaar published successfully.',
-          kind: AppMessageKind.success,
-        );
+        final outcome = pending
+            ? 'Bazaar submitted for approval. It will not appear in '
+                  'Sales until it is approved.'
+            : 'Bazaar published successfully.';
+        if (handlerProblem != null) {
+          showAppMessage(
+            '$outcome The refund handler could not be set: $handlerProblem '
+            'Choose one from the info button on the bazaar in Sales.',
+            kind: AppMessageKind.error,
+            title: 'Refund handler not set',
+          );
+        } else {
+          showAppMessage(outcome, kind: AppMessageKind.success);
+        }
       } catch (error) {
         if (mounted) {
           showAppMessage(
@@ -632,7 +664,16 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
                               setState(() => _assignedEmployeeIds.add(id)),
                           onRemoveAssignedEmployee: (id) => setState(() {
                             _assignedEmployeeIds.remove(id);
+                            // The handler is picked from the roster, so
+                            // taking them off it takes the pick with it.
+                            if (_refundHandlerId == id) {
+                              _refundHandlerId = null;
+                            }
                           }),
+                          showRefundHandler: isAdminOrOwner,
+                          refundHandlerId: _refundHandlerId,
+                          onRefundHandlerChanged: (id) =>
+                              setState(() => _refundHandlerId = id),
                           // Employees staff their own bazaars. Hiding this
                           // from them meant a bazaar an employee proposed
                           // arrived with nobody on it.
