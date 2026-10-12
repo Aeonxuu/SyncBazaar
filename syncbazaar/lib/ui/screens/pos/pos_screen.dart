@@ -1339,7 +1339,6 @@ class _PosScreenState extends State<PosScreen> {
       event.id,
     );
     final rostered = assignmentIdByUserId.keys.toSet();
-    final originalRoster = Set<int>.from(rostered);
     final eventsById = {
       for (final other in await eventRepository.listAll()) other.id: other,
     };
@@ -1399,35 +1398,25 @@ class _PosScreenState extends State<PosScreen> {
       // Only the difference is written. Re-posting the whole roster would rely
       // on the server rejecting duplicates, and removals would never happen at
       // all -- a roster that can only grow cannot be corrected.
-      final removedIds = <int>{};
-      for (final id in originalRoster.difference(result.roster)) {
-        final assignmentId = assignmentIdByUserId[id];
-        if (assignmentId != null) {
-          await authRepository.unassignEmployeeFromBazaar(
-            eventId: event.id,
-            assignmentId: assignmentId,
-            employeeId: id,
-          );
-          removedIds.add(id);
-        }
-      }
+      //
       // Taking someone off a bazaar does not take their refund authority with
       // it -- the server leaves it active -- so a removed handler is revoked
-      // here. Only the owner and admin can read or revoke it.
-      if (removedIds.isNotEmpty && widget.user.isAdminOrOwner) {
-        try {
-          await refundRepository.revokeHandlerIfRemoved(event.id, removedIds);
-        } on ApiException catch (error) {
-          revokeProblem = error.message;
-        }
-      }
-      final added = result.roster.difference(originalRoster).toList();
-      if (added.isNotEmpty) {
-        await authRepository.assignEmployeesToBazaar(
-          eventId: event.id,
-          employeeIds: added,
-        );
-      }
+      // too. Only the owner and admin can read or revoke it.
+      await authRepository.changeRoster(
+        eventId: event.id,
+        current: assignmentIdByUserId,
+        wanted: result.roster,
+        onRemoved: (removed) async {
+          if (!widget.user.isAdminOrOwner) {
+            return;
+          }
+          try {
+            await refundRepository.revokeHandlerIfRemoved(event.id, removed);
+          } on ApiException catch (error) {
+            revokeProblem = error.message;
+          }
+        },
+      );
       await staffCubit.load();
       // Still under the loader: these refresh what other screens show, and
       // running them after it closed left a silent gap before the result.

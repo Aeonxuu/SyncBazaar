@@ -220,6 +220,53 @@ class AuthRepository {
     );
   }
 
+  /// Moves a bazaar's roster from what it was to what was asked for, touching
+  /// only the people who differ.
+  ///
+  /// [current] is the roster as it was loaded, user id to assignment row id --
+  /// the row id is what the server deletes by. Anyone in it who is not in
+  /// [wanted] is taken off, by their own row and no other; anyone in [wanted]
+  /// who is not in it is added. Everyone else is left alone, so saving an edit
+  /// that did not touch the staff cannot disturb them.
+  ///
+  /// [onRemoved] runs with the people taken off, even if a later removal
+  /// fails, so whatever must follow a removal (revoking refund authority)
+  /// still happens for those already gone.
+  Future<({Set<int> removed, Set<int> added})> changeRoster({
+    required int eventId,
+    required Map<int, int> current,
+    required Set<int> wanted,
+    Future<void> Function(Set<int> removed)? onRemoved,
+  }) async {
+    final removed = <int>{};
+    try {
+      for (final entry in current.entries) {
+        if (wanted.contains(entry.key)) {
+          continue;
+        }
+        await unassignEmployeeFromBazaar(
+          eventId: eventId,
+          assignmentId: entry.value,
+          employeeId: entry.key,
+        );
+        removed.add(entry.key);
+      }
+    } finally {
+      if (removed.isNotEmpty) {
+        await onRemoved?.call(removed);
+      }
+    }
+
+    final added = wanted.difference(current.keys.toSet());
+    if (added.isNotEmpty) {
+      await assignEmployeesToBazaar(
+        eventId: eventId,
+        employeeIds: added.toList(),
+      );
+    }
+    return (removed: removed, added: added);
+  }
+
   /// Confirms an account with the code emailed when it was created, and sets
   /// its password in the same step.
   ///
