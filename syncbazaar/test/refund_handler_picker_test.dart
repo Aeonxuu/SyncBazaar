@@ -14,8 +14,13 @@ import 'package:syncbazaar/ui/screens/pos/pos_screen.dart';
 import 'package:syncbazaar/ui/screens/pre_bazaar/widgets/bazaar_details_step.dart';
 import 'package:syncbazaar/ui/widgets/refund_handler_field.dart';
 
+import 'support/load_app_fonts.dart';
+
 /// Choosing the one employee besides the owner who may approve refunds.
 void main() {
+  // The app's own font, so layouts are measured as they will really be.
+  setUpAll(loadAppFonts);
+
   const staff = [MapEntry(10, 'Via'), MapEntry(11, 'Missy')];
 
   Future<void> pumpField(
@@ -160,7 +165,6 @@ void main() {
                     venue: 'SM City Lucena',
                     staff: const ['Via', 'Missy'],
                     remainingUnits: 10,
-                    formatDate: (d) => '${d.month}/${d.day}',
                     refundHandler: setup,
                   ),
                 ),
@@ -188,7 +192,7 @@ void main() {
     testWidgets('an employee is not shown the choice', (tester) async {
       await open(tester);
 
-      expect(find.byType(RefundHandlerField), findsNothing);
+      expect(find.byType(RefundHandlerDropdown), findsNothing);
     });
 
     testWidgets('the owner sees it, set to the current handler', (
@@ -196,10 +200,10 @@ void main() {
     ) async {
       await open(tester, setup: setup(currentId: 10, onChange: (_) async {}));
 
-      expect(find.byType(RefundHandlerField), findsOneWidget);
+      expect(find.byType(RefundHandlerDropdown), findsOneWidget);
       expect(
         find.descendant(
-          of: find.byType(RefundHandlerField),
+          of: find.byType(RefundHandlerDropdown),
           matching: find.text('Via'),
         ),
         findsOneWidget,
@@ -222,7 +226,8 @@ void main() {
       );
 
       await openMenu(tester);
-      await tester.tap(find.text('Missy'));
+      // The menu is the last thing drawn; the same names are also staff tags.
+      await tester.tap(find.text('Missy').last);
       await tester.pump();
 
       expect(sent, [11]);
@@ -233,7 +238,7 @@ void main() {
       expect(find.byType(CircularProgressIndicator), findsNothing);
       expect(
         find.descendant(
-          of: find.byType(RefundHandlerField),
+          of: find.byType(RefundHandlerDropdown),
           matching: find.text('Missy'),
         ),
         findsOneWidget,
@@ -255,7 +260,8 @@ void main() {
       );
 
       await openMenu(tester);
-      await tester.tap(find.text('Missy'));
+      // The menu is the last thing drawn; the same names are also staff tags.
+      await tester.tap(find.text('Missy').last);
       await tester.pumpAndSettle();
 
       expect(
@@ -264,7 +270,7 @@ void main() {
       );
       expect(
         find.descendant(
-          of: find.byType(RefundHandlerField),
+          of: find.byType(RefundHandlerDropdown),
           matching: find.text('Via'),
         ),
         findsOneWidget,
@@ -284,7 +290,7 @@ void main() {
       );
 
       await openMenu(tester);
-      await tester.tap(find.text('Via'));
+      await tester.tap(find.text('Via').last);
       await tester.pumpAndSettle();
 
       expect(
@@ -304,7 +310,7 @@ void main() {
         ),
       );
 
-      expect(find.byType(RefundHandlerField), findsNothing);
+      expect(find.byType(RefundHandlerDropdown), findsNothing);
       expect(find.text('Needs a connection to load.'), findsOneWidget);
     });
   });

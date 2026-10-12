@@ -18,6 +18,8 @@ import '../../../data/repositories/product_repository.dart';
 import '../../../data/repositories/refund_repository.dart';
 import '../../widgets/action_buttons.dart';
 import '../../widgets/confirmation_dialog.dart';
+import '../../widgets/detail_rows.dart';
+import '../../widgets/info_hint.dart';
 import '../../widgets/loading_dialog.dart';
 import '../../widgets/offline_data_notice.dart';
 import '../../widgets/refund_handler_field.dart';
@@ -1245,7 +1247,6 @@ class _PosScreenState extends State<PosScreen> {
           for (final id in rostered.keys) nameById[id] ?? 'Employee #$id',
         ],
         remainingUnits: remaining,
-        formatDate: _formatDate,
         deleteBlockedReason: state.deleteBlockedReason(event),
         refundHandler: handlerSetup,
       ),
@@ -2364,12 +2365,15 @@ class RefundHandlerSetup {
 ///
 /// Public so the dialog can be exercised on its own; nothing else builds it.
 ///
-/// Deliberately quiet. It is read far more often than it is acted on, so the
-/// facts carry the weight and the actions sit at the bottom in the secondary
-/// tier -- full-width buttons here would make a reference card look like a
-/// decision. Delete rests as an outline and only turns red on hover, the same
-/// way a destructive row action does elsewhere: a panel of facts should not
-/// look hazardous while you are reading it.
+/// One surface: the dialog itself. The facts are label and value rows on a
+/// single axis, divided by hairlines, with nothing boxed inside anything else,
+/// and information that cannot be pressed is plain text rather than something
+/// that looks like a button. The only control in the body is the refund
+/// handler's dropdown, so it is the only thing that looks pressable.
+///
+/// Help is out of the way: a refund handler has an "i" that explains it when
+/// asked, and a bazaar that cannot be deleted has a padlock beside its name
+/// that says why, instead of a disabled button with its reason somewhere else.
 class BazaarInfoDialog extends StatefulWidget {
   const BazaarInfoDialog({
     super.key,
@@ -2377,7 +2381,6 @@ class BazaarInfoDialog extends StatefulWidget {
     required this.venue,
     required this.staff,
     required this.remainingUnits,
-    required this.formatDate,
     this.deleteBlockedReason,
     this.refundHandler,
   });
@@ -2386,7 +2389,6 @@ class BazaarInfoDialog extends StatefulWidget {
   final String venue;
   final List<String> staff;
   final int remainingUnits;
-  final String Function(DateTime) formatDate;
 
   /// Why this bazaar is protected from deletion, or null when it can go.
   final String? deleteBlockedReason;
@@ -2444,42 +2446,108 @@ class _BazaarInfoDialogState extends State<BazaarInfoDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final event = widget.event;
     final statusColor =
-        BazaarInfoDialog._statusColors[widget.event.status] ?? AppColors.error;
-    final isEnded = widget.event.status == BazaarStatus.ended;
+        BazaarInfoDialog._statusColors[event.status] ?? AppColors.error;
+    final isEnded = event.status == BazaarStatus.ended;
+    final blocked = widget.deleteBlockedReason;
+    final handlerSetup = widget.refundHandler;
+    final methods = event.acceptedPaymentMethods.isEmpty
+        ? const ['CASH']
+        : event.acceptedPaymentMethods;
+    final units = widget.remainingUnits;
 
     return Dialog(
-      backgroundColor: Colors.white,
-      // 14 — a modal floats above the page and earns a step more shape than
+      backgroundColor: AppColors.surface,
+      surfaceTintColor: Colors.transparent,
+      elevation: 3,
+      clipBehavior: Clip.antiAlias,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      // 14 -- a modal floats above the page and earns a step more shape than
       // the cards behind it.
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 420),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+        // The same width as the refund dialog, so the two read as one family.
+        constraints: const BoxConstraints(maxWidth: 520),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 16, 16, 16),
+              child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          widget.event.name,
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
+                        // As tall as the close button and centred in it, so
+                        // the title and the button share a middle line
+                        // whether or not a padlock sits beside the name.
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(minHeight: 32),
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 4,
+                            runAlignment: WrapAlignment.center,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Text(
+                                event.name,
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              if (blocked != null)
+                                InfoHint(
+                                  message: blocked,
+                                  icon: Icons.lock_outline_rounded,
+                                  semanticLabel: 'Cannot be deleted. $blocked',
+                                ),
+                              // The one coloured thing. Status is what changes
+                              // what can be done here, so it alone wears it.
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: statusColor.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  event.status.name.toUpperCase(),
+                                  style: TextStyle(
+                                    color: statusColor,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          widget.venue,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: Colors.black45,
-                          ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.storefront_outlined,
+                              size: 16,
+                              color: Colors.black38,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                widget.venue,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: Colors.black45,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -2493,157 +2561,115 @@ class _BazaarInfoDialogState extends State<BazaarInfoDialog> {
                       width: 32,
                       height: 32,
                     ),
+                    // Exactly 32, so its middle is the title's middle; the
+                    // default pads a tap target out to 48 and drops it lower.
+                    style: IconButton.styleFrom(
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
                     icon: const Icon(Icons.close_rounded, size: 18),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              // The one isolated element. Status is what changes what you can
-              // do here, so it is the only thing wearing colour.
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  widget.event.status.name.toUpperCase(),
-                  style: TextStyle(
-                    color: statusColor,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 11,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              _InfoRow(
-                label: 'Dates',
-                value:
-                    '${widget.formatDate(widget.event.startDate)} – '
-                    '${widget.formatDate(widget.event.endDate)}',
-              ),
-              const SizedBox(height: 12),
-              _InfoRow(
-                label: 'Staff',
-                value: widget.staff.isEmpty
-                    ? 'Nobody assigned'
-                    : widget.staff.join(', '),
-                // An unstaffed bazaar is a problem, not a blank. Said in the
-                // error colour so it is noticed here rather than on the
-                // morning it opens.
-                valueColor: widget.staff.isEmpty ? AppColors.error : null,
-              ),
-              if (widget.refundHandler != null) ...[
-                const SizedBox(height: 16),
-                if (widget.refundHandler!.loadError != null)
-                  _InfoRow(
-                    label: 'Refund handler',
-                    value: widget.refundHandler!.loadError!,
-                    valueColor: AppColors.error,
-                  )
-                else
-                  RefundHandlerField(
-                    candidates: widget.refundHandler!.candidates,
-                    selectedId: _handlerId,
-                    busy: _handlerBusy,
-                    errorText: _handlerError,
-                    onChanged: _changeHandler,
-                  ),
-              ],
-              const SizedBox(height: 12),
-              _InfoRow(
-                label: 'Payment',
-                value: widget.event.acceptedPaymentMethods.isEmpty
-                    ? 'CASH'
-                    : widget.event.acceptedPaymentMethods.join(' · '),
-              ),
-              const SizedBox(height: 12),
-              _InfoRow(
-                label: isEnded ? 'Unreturned stock' : 'Stock left',
-                value: '${formatCount(widget.remainingUnits)} units',
-              ),
-              const SizedBox(height: 24),
-              const Divider(height: 1, color: Color(0xFFEDEDF1)),
-              const SizedBox(height: 16),
-              // Auto-width and right-aligned: two occasional actions, not a
-              // pair of calls to action.
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  _QuietDeleteButton(
-                    onPressed: widget.deleteBlockedReason == null
-                        ? () => Navigator.pop(context, 'delete')
-                        : null,
-                    blockedReason: widget.deleteBlockedReason,
-                  ),
-                  const SizedBox(width: 8),
-                  ElevatedButton.icon(
-                    onPressed: () => Navigator.pop(context, 'edit'),
-                    icon: const Icon(Icons.edit_outlined, size: 16),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 10,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+            ),
+            const Divider(height: 1, color: AppColors.border),
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    DetailRow.text(
+                      label: 'Dates',
+                      value: formatDateRange(event.startDate, event.endDate),
                     ),
-                    label: const Text('Edit'),
+                    const _RowRule(),
+                    DetailRow.text(
+                      // "Stock left" is a fact about a live bazaar; on a
+                      // finished one the same number is a job nobody has done.
+                      label: isEnded ? 'Unreturned stock' : 'Stock left',
+                      value:
+                          '${formatCount(units)} '
+                          '${units == 1 ? 'unit' : 'units'}',
+                    ),
+                    const _RowRule(),
+                    DetailRow.text(label: 'Payment', value: methods.join(', ')),
+                    const _RowRule(),
+                    DetailRow.text(
+                      label: 'Staff',
+                      // An unstaffed bazaar is a problem, not a blank. Said in
+                      // the error colour so it is noticed here rather than on
+                      // the morning it opens.
+                      value: widget.staff.isEmpty
+                          ? 'Nobody assigned'
+                          : widget.staff.join(', '),
+                      valueColor: widget.staff.isEmpty ? AppColors.error : null,
+                    ),
+                    if (handlerSetup != null) ...[
+                      const _RowRule(),
+                      if (handlerSetup.loadError != null)
+                        DetailRow.text(
+                          label: 'Refund handler',
+                          value: handlerSetup.loadError!,
+                          valueColor: AppColors.error,
+                        )
+                      else
+                        DetailRow(
+                          label: 'Refund handler',
+                          hint:
+                              'Besides the owner, this person can approve '
+                              'refunds here.',
+                          // The dropdown is 44 tall: the label sits at its
+                          // middle rather than at the top of the row.
+                          controlHeight: 44,
+                          child: RefundHandlerDropdown(
+                            candidates: handlerSetup.candidates,
+                            selectedId: _handlerId,
+                            busy: _handlerBusy,
+                            errorText: _handlerError,
+                            onChanged: _changeHandler,
+                          ),
+                        ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            const Divider(height: 1, color: AppColors.border),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+              child: Row(
+                children: [
+                  // Offered only when it can be used. A bazaar that cannot be
+                  // deleted says why at the padlock by its name; a disabled
+                  // button with its reason elsewhere asks the person to connect
+                  // two things that should not have been apart.
+                  if (blocked == null)
+                    _QuietDeleteButton(
+                      onPressed: () => Navigator.pop(context, 'delete'),
+                    ),
+                  const Spacer(),
+                  FilledActionButton(
+                    label: 'Edit bazaar',
+                    color: AppColors.primary,
+                    onPressed: () => Navigator.pop(context, 'edit'),
                   ),
                 ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-/// Label above, value below, both left-aligned at the same x.
-///
-/// Stacked rather than set in a sentence: every value lands at one x and one
-/// weight, so the eye scans a column instead of reading four lines to find
-/// the one it wants.
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.label, required this.value, this.valueColor});
-
-  final String label;
-  final String value;
-  final Color? valueColor;
+/// The hairline between two rows of facts.
+class _RowRule extends StatelessWidget {
+  const _RowRule();
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label.toUpperCase(),
-          style: theme.textTheme.labelSmall?.copyWith(
-            color: Colors.black38,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.8,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          value,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            fontWeight: FontWeight.w600,
-            color: valueColor,
-          ),
-        ),
-      ],
-    );
-  }
+  Widget build(BuildContext context) =>
+      const Divider(height: 1, color: AppColors.border);
 }
 
 /// Rests neutral, turns red on hover.
@@ -2652,12 +2678,9 @@ class _InfoRow extends StatelessWidget {
 /// hazardous; one that never turns red gives no warning at the moment of
 /// intent. This does both, matching the row actions elsewhere in the app.
 class _QuietDeleteButton extends StatefulWidget {
-  const _QuietDeleteButton({required this.onPressed, this.blockedReason});
+  const _QuietDeleteButton({required this.onPressed});
 
-  /// Null disables the button, in which case [blockedReason] says why.
-  final VoidCallback? onPressed;
-
-  final String? blockedReason;
+  final VoidCallback onPressed;
 
   @override
   State<_QuietDeleteButton> createState() => _QuietDeleteButtonState();
@@ -2668,42 +2691,23 @@ class _QuietDeleteButtonState extends State<_QuietDeleteButton> {
 
   @override
   Widget build(BuildContext context) {
-    final blocked = widget.onPressed == null;
-    final color = blocked
-        ? Colors.black26
-        : (_hovered ? AppColors.error : Colors.black45);
-    // A disabled control has to account for itself, so the reason rides on the
-    // button rather than only appearing after someone presses it.
-    return Tooltip(
-      message: widget.blockedReason ?? '',
-      // An empty message would otherwise draw an empty tooltip.
-      triggerMode: blocked
-          ? TooltipTriggerMode.longPress
-          : TooltipTriggerMode.manual,
-      child: MouseRegion(
-        onEnter: (_) => setState(() => _hovered = true),
-        onExit: (_) => setState(() => _hovered = false),
-        child: AnimatedContainer(
-          duration: AppMotion.feedback,
-          curve: AppMotion.easeOut,
-          child: OutlinedButton.icon(
-            onPressed: widget.onPressed,
-            icon: Icon(Icons.delete_outline, size: 16, color: color),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: color,
-              side: BorderSide(
-                color: _hovered && !blocked
-                    ? AppColors.error
-                    : const Color(0xFFDCDCE3),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            label: Text('Delete', style: TextStyle(color: color)),
+    final color = _hovered ? AppColors.error : Colors.black45;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: OutlinedButton.icon(
+        onPressed: widget.onPressed,
+        icon: Icon(Icons.delete_outline, size: 16, color: color),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: color,
+          side: BorderSide(
+            color: _hovered ? AppColors.error : const Color(0xFFDCDCE3),
           ),
+          minimumSize: const Size(0, 48),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
         ),
+        label: Text('Delete bazaar', style: TextStyle(color: color)),
       ),
     );
   }

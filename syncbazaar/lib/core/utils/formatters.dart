@@ -53,3 +53,29 @@ String formatPercent(num value) {
 /// because a spreadsheet sorts those correctly and this format sorts as text.
 String formatDate(DateTime value) =>
     '${value.month}/${value.day}/${value.year}';
+
+/// `Oct 12 – 16, 2026`, `Oct 30 – Nov 2, 2026`, or `Dec 30, 2026 – Jan 2, 2027`.
+///
+/// A bazaar's run as one phrase, saying each thing once: the month is not
+/// repeated when both ends share it, nor the year when they share that. A
+/// single day reads as a date, not as a range from itself to itself.
+///
+/// Whole days only; the time of day on either end is ignored, the same way a
+/// bazaar's status is decided.
+String formatDateRange(DateTime start, DateTime end) {
+  final from = DateTime(start.year, start.month, start.day);
+  final to = DateTime(end.year, end.month, end.day);
+  final monthDay = DateFormat('MMM d');
+  final full = DateFormat('MMM d, y');
+
+  if (from == to) {
+    return full.format(from);
+  }
+  if (from.year == to.year && from.month == to.month) {
+    return '${monthDay.format(from)} – ${to.day}, ${to.year}';
+  }
+  if (from.year == to.year) {
+    return '${monthDay.format(from)} – ${full.format(to)}';
+  }
+  return '${full.format(from)} – ${full.format(to)}';
+}
