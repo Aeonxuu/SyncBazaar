@@ -471,19 +471,25 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
       setState(() => _isSubmitting = true);
       final dialogNavigator = Navigator.of(context, rootNavigator: true);
       showLoadingDialog(context, 'Publishing bazaar…');
+      // The result message is itself a dialog on the same navigator. Shown
+      // inside the try it lands on top of the loading dialog, so the pop in
+      // `finally` would close the message and leave "Publishing bazaar…"
+      // spinning forever. Hold it until the loading dialog is gone.
+      VoidCallback? showResult;
       try {
         final reserved = await productRepository.reserveStocksByAllocationKey(
           allocationsByAllocationKey,
         );
 
         if (!reserved) {
-          if (mounted) {
+          showResult = () {
+            if (!mounted) return;
             showAppMessage(
               'Unable to reserve stock. Please review allocations and try again.',
               kind: AppMessageKind.error,
               title: 'Unable to reserve stock',
             );
-          }
+          };
           return;
         }
 
@@ -546,27 +552,31 @@ class _PreBazaarScreenState extends State<PreBazaarScreen> {
             ? 'Bazaar submitted for approval. It will not appear in '
                   'Sales until it is approved.'
             : 'Bazaar published successfully.';
-        if (handlerProblem != null) {
-          showAppMessage(
-            '$outcome The refund handler could not be set: $handlerProblem '
-            'Choose one from the info button on the bazaar in Sales.',
-            kind: AppMessageKind.error,
-            title: 'Refund handler not set',
-          );
-        } else {
-          showAppMessage(outcome, kind: AppMessageKind.success);
-        }
+        showResult = () {
+          if (handlerProblem != null) {
+            showAppMessage(
+              '$outcome The refund handler could not be set: $handlerProblem '
+              'Choose one from the info button on the bazaar in Sales.',
+              kind: AppMessageKind.error,
+              title: 'Refund handler not set',
+            );
+          } else {
+            showAppMessage(outcome, kind: AppMessageKind.success);
+          }
+        };
       } catch (error) {
-        if (mounted) {
+        showResult = () {
+          if (!mounted) return;
           showAppMessage(
             _submitErrorMessage(error),
             kind: AppMessageKind.error,
             title: 'Could not publish',
           );
-        }
+        };
       } finally {
         dialogNavigator.pop();
         if (mounted) setState(() => _isSubmitting = false);
+        showResult?.call();
       }
       await _resetPreBazaarForm();
     }
