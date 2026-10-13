@@ -1,147 +1,125 @@
 # Refunds: build the app side
 
-Read `CLAUDE.md` and `DESIGN_GUIDELINES.md` first. Explore the code, then show me a plan and wait for my OK before writing code.
+Read `CLAUDE.md` and `DESIGN_GUIDELINES.md` first. Work on `feature/refunds`. Stop after each phase so I can test.
 
-Before branching: the working tree on `feature/vendor-payment-methods` has many uncommitted changes. Ask me whether to commit them first. Then work on a new branch `feature/refunds`.
+This brief replaces the earlier version. Your answers from the planning round still stand unless this file says otherwise:
+- Returned sales drop out of every money and unit sum (revenue, today, daily chart, average order value, top bazaar, busiest day, top product and variant, units sold). Total Orders and the completion rate keep counting them. The change to sales the server already marked Returned is intended. Never subtract refund rows.
+- Offline signal is `api.servingCacheFrom`, plus network errors in the dialog. No `connectivity_plus`.
+- The handler pick in `BazaarInfoDialog` applies immediately with an inline spinner and error.
+- A 400 "already refunded" on a repeated `client_uuid` counts as success after a reload.
+- After a failed grant, delete the stray RA request, best effort.
+- The `assignedEventIds`-at-login risk is accepted. Keep it in the test steps.
 
-## What we are building
+## The rules
 
-Only two passwords can approve a refund: the owner's (works on every bazaar, past and future, by default) and the password of that bazaar's "refund handler" (one employee per bazaar, works only on that bazaar). The owner and every employee assigned to the bazaar see the refund button. Whoever taps it, the refund only goes through when one of those two passwords is typed. So a cashier can call the handler or the owner over to type their password. Admins cannot refund, but they can assign the refund handler. Every refund returns the item to the bazaar's stock. The person confirms with their own password. Each refund then shows as a negative row in Orders, in the Dashboard's Recent Orders, and in the orders workbook export.
+- **Who approves.** Only two passwords approve a refund: the owner's (every bazaar, past and future) and the password of that bazaar's refund handler (one employee per bazaar, that bazaar only). Admins cannot refund but can choose the handler.
+- **Who taps.** The owner and every employee assigned to the bazaar see the refund button. Whoever taps it, the owner or handler types their own password on that tablet.
+- **Item comes back.** Every refund returns the item to the bazaar's stock (`return_item: true` always).
+- **Full refunds only.** The amount is always the sale total. One refund per sale.
+- **Until finalized.** Refunds are allowed until the bazaar is finalized. After that, no refund button.
+- **Exchanges.** A size exchange is a refund (reason "Wrong size") plus a new sale. Nothing extra to build.
+- **Online first, offline later.** Phases 1 to 5 are online only. Phase 6 adds offline approval with a cached password hash and is blocked on backend work. Keep approval behind one seam (`approveRefund` in `RefundRepository` and one password widget in the dialog) so phase 6 adds a path without reshaping the rest.
 
-## Approval method: password now, refund PIN later
+## Backend contract (as of `447d9a2`, Oct 1)
 
-Phases 1 to 4 use the login password and the online endpoint below, so refunds only work with a connection for now. The booth is often offline, and a pop-up can't ask a customer to come back another day, so phase 5 switches approval to a 6-digit refund PIN that the tablet can check offline. Phase 5 is blocked until Amrei ships the PIN endpoints (see `BACKEND_REQUEST_refunds.md`). Keep the approval step behind one seam (an `approveRefund` call in `RefundRepository` and one input widget in the dialog) so phase 5 swaps it without touching the rest.
-
-## Backend contract
-
-Source: `syncbazaar_backend`, commits `4541c11` to `447d9a2` (Oct 1). Use the same `/api/bazaar/` prefix the app already uses for sale endpoints. If the server behaves differently from what is written here, stop and tell me. Do not edit the backend repo.
+Same `/api/bazaar/` prefix as the sale endpoints. If the server behaves differently, stop and tell me. Do not edit the backend repo.
 
 ### Issue a refund
 
 `POST event/<event_pk>/sale/<sale_pk>/refund/`
 
-Body:
-- `amount`: decimal, greater than 0, not more than the sale total
-- `method`: ModeOfPayment id (required)
-- `reason`: optional, max 255 chars
-- `return_item`: bool. Always send `true`. It marks the sale Returned and puts the quantity back into the bazaar's stock. The server rejects it on a finalized bazaar, so refunds only happen on bazaars that are not finalized.
-- `authorizer_password`: required
-- `client_uuid`: optional, for idempotent retry
+Body: `amount` (sale total), `method` (ModeOfPayment id), `reason` (max 255), `return_item: true`, `authorizer_password`, `client_uuid`. Also send `reference` (see the dialog section). The server ignores it until Amrei adds the field, and starts storing it after, with no app change.
 
-201 returns the Refund: `id, sale, sale_return, amount, method, method_name, reason, issued_by, issued_by_name, authorized_by, authorized_by_name, customer_name, created_at, client_uuid`.
+201 returns `id, sale, sale_return, amount, method, method_name, reason, issued_by, issued_by_name, authorized_by, authorized_by_name, customer_name, created_at, client_uuid`.
 
 Errors:
-- 403 `{"error": "No refund authorization available for this event."}` means wrong password OR no permission. The server does not say which.
-- 400 `{"error": "This sale has already been refunded."}` (one refund per sale)
-- 400 `{"error": "Cannot return items on a finalized event."}`
-- 400 DRF field errors, for example amount above the sale total
+- 403 `{"error": "No refund authorization available for this event."}`: wrong password or no permission
+- 400 "This sale has already been refunded."
+- 400 "Cannot return items on a finalized event."
+- DRF field errors
 
-Who may call it: the vendor's owner, or a user assigned to the bazaar. If the caller is the owner or the bazaar's refund handler, their own password must match. Otherwise the server tries the password against the owners and that bazaar's refund handler, and records whoever matches as `authorized_by`. `issued_by` is always the logged-in user. This is how a cashier's refund gets approved by the handler or owner on the same tablet. The app does not need to know who the handler is to make this work.
+If the caller is the owner or the handler, their own password must match. Otherwise the server tries the password against the owners and that bazaar's handler and records the match as `authorized_by`. `issued_by` is always the logged-in user.
 
 ### List refunds
 
-`GET event/<pk>/refund/` returns a list of Refund objects. Sale JSON carries no refund info, so join refunds to sales by `sale` id.
+`GET event/<pk>/refund/`. Join to sales by `sale` id.
 
-### Refund handler (RefundAuthorization), one active per bazaar
+### Refund handler
 
-- `GET event/<pk>/refund-authorization/` (owner/admin only): `[{id, user, user_name, event, event_name, granted_at, granted_by, revoked_at, source_request}]`. Active means `revoked_at` is null.
-- `POST event/<pk>/refund-authorization/<auth_pk>/revoke/` (owner/admin only)
-- There is no direct grant endpoint yet. Granting is two calls:
-  1. `POST event/<pk>/approval/` with `{"request_type": "RA", "details_json": {"user_id": <id>}}`
-  2. `PATCH event/<pk>/approval/<new id>/` with `{"status": "AP"}` as owner/admin. This runs the grant. It returns 400 if another employee is already active.
+- `GET event/<pk>/refund-authorization/` (owner/admin): active means `revoked_at` is null
+- `POST event/<pk>/refund-authorization/<auth_pk>/revoke/` (owner/admin)
+- Grant (backend `ef7f3ef`, Oct 13): `POST event/<pk>/refund-authorization/` with `{"user_id": id}` (owner/admin). Returns 201 with the authorization, or 400 if the user isn't in the vendor, isn't assigned to the bazaar, or another handler is active. The old two-call RA flow still works but is no longer needed.
+- Sale JSON now carries `refund`: null or `{id, amount, created_at}` (backend `b9fda6b`).
+- The server now always returns the item and ignores `return_item`. It rejects a refund on a sale already Returned with 400 "Sale is already marked returned."
+- The server now auto-revokes a handler when their bazaar assignment is deleted.
 
-Wrap this in one repository method, `grantRefundHandler(eventId, userId)`, so a direct endpoint can replace it later. Changing the handler means revoke the current one, then grant the new one.
+Wrap these as `grantRefundHandler`, `revokeRefundHandler`, `currentHandler`, `changeHandler` in `RefundRepository`.
 
-## Known backend gaps (reported to Amrei, build around them)
+## Phases
 
-1. Route every "may this user see the refund button at this bazaar" check through one function, `canRefund(user, event)`. It returns true for the owner, true for an employee assigned to that bazaar, and false for admins. The server decides whether the typed password is allowed, so the app never checks who the handler is.
-2. The server does not yet check that an RA `user_id` is assigned to the bazaar, and does not revoke a handler who is removed from the bazaar. The app must cover both: only offer assigned employees, and revoke when the handler is unassigned.
-3. `approval_api_mapper.dart` maps unknown request codes to the SOA type. New codes `RA` and `RF` would show in Pending Approvals as statement-of-account requests. Fix that so they never appear as SOA. Our grant flow approves RA requests right away, and RF requests are out of scope, so filtering both out of Pending Approvals is fine.
+### Phase 1: data layer
+- `Refund` model, `refund_api_mapper.dart` (read `reference` if present)
+- `SalesRepository` also loads `event/<id>/refund/` and exposes `listRefunds()`
+- `RefundRepository` wired in `app.dart`, null without a backend
+- `approval_api_mapper.dart`: RA and RF are never SOA, and the repository skips them
+- `canRefund(user, event)`: owner true, assigned employee true, admin false, and false when the bazaar is finalized
+- Unit tests
 
-## UI
+### Phase 2: refund button and dialog
+- **Button.** Trailing 1:1 icon button right of TOTAL (`Icons.undo_rounded`, "Refund" tooltip and semantics, neutral style). Fixed column width.
+  - Shown when `canRefund` is true and the sale has no refund and is not Returned.
+  - A refunded sale shows a "Refunded" tag in that slot.
+  - Disabled offline, with "Refunds need a connection".
+- **Dialog.** Build it from `confirmation_dialog.dart`'s structure. Extend `FloatingLabelTextField` with `onChanged`, `enabled`, `errorText`, `helperText` (defaults unchanged).
+  - Sale summary: customer, product, payment method, time, total.
+  - Reason (required): chips for Wrong size, Defective, Changed mind, Other. Other opens a short text field. Send `reason` as the chip label, or `Other: <text>`.
+  - Refund via: always the sale's original method, shown read-only. Money goes back the way it came in (cash to cash, GCash to GCash), for record keeping and anti-money-laundering practice.
+  - Reference number: shown and required when Refund via is not Cash. Labelled with the method's extra-field label (the same one the POS uses, for example "GCash reference no."). Helper text: "Reference of the money sent back to the customer."
+  - Line: "The item goes back to this bazaar's stock."
+  - Password field labelled "Owner or refund handler password", helper "Ask the owner or this bazaar's refund handler to enter their password."
+  - Buttons: Cancel, and "Refund PHP <total>" in the destructive color, disabled until the reason and password (and reference, when needed) are filled.
+- **Behavior.**
+  - One `client_uuid` per dialog open.
+  - Loading state.
+  - On 403, clear the password and show "That password can't approve refunds at this bazaar."
+  - On success, close, name the approver (`authorized_by_name`) in the confirmation, then reload.
 
-### 1. Assigning the refund handler
+### Phase 3: refund handler picker
+- A "Refund handler" single-select under the assigned staff in the Preparations bazaar details step and in `BazaarInfoDialog`. Options: None plus assigned employees. Owner and admin only. Employees don't see it.
+- In Preparations, grant after `createEvent` and `assignEmployeesToBazaar` succeed.
+- Revoke when the handler is removed from the bazaar (the edit-bazaar save loop in `pos_screen.dart`). Removing the chosen employee in Preparations clears the pick.
 
-Places: the Preparations bazaar details step (staff assignment section), and `BazaarInfoDialog` in `pos_screen.dart` (the "i" button in Sales).
+### Phase 4: records
+- **Refund rows** are their own rows: `created_at` time, negative amount, status "Refunded", refund method, approver name. They carry the original sale's `soldById`, so `visibleRecords` stays unchanged.
+- **Orders screen:** refund rows sort by time. The total shows as `-PHP x` in the error color.
+- **Dashboard Recent Orders:** refund rows with a negative amount and "Refunded".
+- **Orders workbook:** the refund line goes on the sheet of the refund method, which is always the original sale's method, with negative unit price and total, status "Refunded", and the reference in the reference column.
+- **Revenue rule** as agreed above. A test pins that refund rows never reach a sum.
 
-Add a "Refund handler" single-select under the assigned staff list. Options: "None" plus the employees assigned to this bazaar. Only owners and admins can change it. Employees do not see this control.
+### Phase 5: refund receipt
+- After a successful refund, offer the same save and share flow as sale receipts (PNG via `RepaintBoundary`).
+- Title "REFUND". Show customer, product, original sale time and method, refund amount as negative, refund method and reference, reason, and approver name.
 
-Why a single-select and not a separate "Refund" button that opens a list: the server allows one handler per bazaar, and a single-select states that rule on sight. It also sits next to the staff list it draws from, so there is no extra screen.
+### Phase 6: offline approval with a cached password hash (blocked, do not start)
 
-Rules:
-- In Preparations the bazaar has no id until it is created. Send the grant after the bazaar and its staff assignments save.
-- If the handler is removed from the bazaar's staff, revoke the handler.
-- Owners already have refund rights everywhere. Admins cannot refund. List only employees as options.
+Starts after two things:
+- Amrei ships the backend items marked "offline" in `BACKEND_REQUEST_refunds.md`.
+- The unsent queue survives an app restart (local persistence). This is separate work.
 
-### 2. Refund button in Orders
+Design:
+- **Caching.** When the owner or any employee logs in on this tablet while online, and whenever an online refund succeeds, cache a verifier for the person whose password the server just accepted. On refund success that person is `authorized_by`.
+  - Verifier: PBKDF2-HMAC-SHA256 with a random 16-byte salt. Tune iterations so one check takes about 300 to 500 ms on the Xiaomi Pad 6.
+  - Store `{userId, salt, iterations, hash, cachedAt}` in `flutter_secure_storage`.
+  - Never store the password.
+- **Who counts offline.** The owner, and the bazaar's handler as last fetched from the server (cached per bazaar).
+- **Offline refund.** Hash the typed password with each candidate's salt and compare. On a match, save the refund locally with `authorized_by` and `authorized_at`, return the item to local stock, show the row, and queue it.
+- **Lockout.** 5 wrong tries blocks refunds for 5 minutes. Persist the counter.
+- **Expiry.** Delete a verifier when every bazaar it served has ended or been finalized, on explicit "remove offline access", or when the server reports a newer `password_changed_at` for that user.
+- **Sync.** Sales first, then refunds. A refund for an offline sale uses `sale_client_uuid`. A refund the server rejects stays visible as "Refund rejected by server" and notifies the owner, because the cash already went out.
+- **Limits to document:**
+  - A handler change made while offline reaches the tablet only on the next sync.
+  - A stolen tablet with extracted storage could be attacked offline. This is mitigated by the slow hash, encrypted storage, lockout, expiry and a minimum password length.
 
-In a bazaar's order table, add a trailing column to the right of TOTAL with a square (1:1) icon button. Use `Icons.undo_rounded` or similar, with a "Refund" tooltip and semantics label. Neutral style, not red.
+## Tests each phase
 
-- Show it only when `canRefund(user, event)` is true, the sale has no refund, the sale is not already Returned, and the bazaar is not finalized.
-- Keep the column width fixed on every row so totals stay aligned.
-- On a sale that already has a refund, show a small "Refunded" tag in that slot.
-- Until phase 5, disable the button when offline (`api.servingCacheFrom` is the signal), with the tooltip "Refunds need a connection". A network error in the dialog shows the same message. Do not queue refunds before phase 5.
-- Keep `OrdersState.visibleRecords` as it is. Employees still see only their own sales, so they refund their own sales and the handler or owner types the password on their tablet.
-
-### 3. Refund dialog
-
-Reuse `confirmation_dialog.dart` and `floating_label_text_field.dart` where they fit.
-
-Content:
-- Sale summary: customer, product, payment method, time, total
-- Amount: the full sale total, read-only. No partial refunds in this version.
-- Refund via: payment method dropdown, default the sale's original method
-- Reason: optional text
-- A plain line saying the item goes back to the bazaar's stock. No checkbox, `return_item` is always true.
-- Password: obscured field labelled "Owner or refund handler password", with helper text "Ask the owner or this bazaar's refund handler to enter their password."
-
-Buttons: Cancel, and "Refund PHP 1,900.00" (the real amount) in the destructive color, disabled until the password field has text.
-
-Behavior:
-- Generate one `client_uuid` when the dialog opens and reuse it on retry. The server currently answers a repeated `client_uuid` with 400 "already refunded". Treat that as success: reload, and if the refund is there, close the dialog normally.
-- Show a loading state while the request runs.
-- On 403, keep the dialog open, clear the password, and show inline: "That password can't approve refunds at this bazaar."
-- On other errors, show the server's message inline.
-- On success, close, show a confirmation message that names who approved it (`authorized_by_name`), and reload the bazaar's sales and refunds.
-
-### 4. Refunds in the records
-
-Each refund is its own row: timestamp is the refund's `created_at`, amount is negative, status is "Refunded". The original sale row keeps its positive total and shows as Returned, since every refund brings the item back. The money came in and then went out, so a column of totals sums to the cash actually on hand.
-
-- Orders screen: refund rows sort by time with the rest. Total shows as `-PHP 1,900.00` in the error color. Sub-line: refund time, refund method, and `authorized_by_name`.
-- Dashboard Recent Orders (`customer_history_card.dart`, built in `dashboard_cubit.dart`): refund rows with a negative amount and status "Refunded".
-- Orders workbook (`orders_workbook.dart`, exported from `post_bazaar_screen.dart`): a refund line goes on the sheet of the refund's method, with negative total and unit price, and status "Refunded". Sheet totals net out.
-- Dashboard revenue: Returned sales drop out of every money and unit sum (revenue, today, daily chart, average order value, top bazaar, busiest day, top product and variant, units sold). Total Orders and the completion rate still count them. Every refunded sale is Returned, so this also removes refunds from revenue. Do not subtract refund rows on top of that, or the refund counts twice. Refund rows are for display only, and a test pins that they never reach a sum. This also changes the numbers for sales the server already marked Returned. That is intended.
-- Leave `report_service.exportListOfOrders` (the server CSV) alone. Nothing in the UI calls it, and Amrei is updating the server report.
-
-Data layer: add a `Refund` model and an api mapper. Fetch refunds per bazaar next to sales in `SalesRepository._fetchEventSales`, or in a new `RefundRepository` wired in `app.dart`. Give `TransactionRecord` a kind (sale or refund), or add a separate record type, whichever reads cleaner.
-
-## Tests
-
-- Unit: refund mapper, revenue not double-counting refunds, the workbook refund line, `canRefund`, the approval mapper no longer turning RA/RF into SOA
-- Widget: refund dialog states (empty password, loading, 403, success)
-- Run `flutter analyze` and `flutter test`
-
-## Order of work
-
-Stop after each phase so I can test on macOS with `USE_BACKEND=true`.
-
-1. Data layer: Refund model, mapper, repository calls, grant/revoke methods, approval mapper fix
-2. Orders: refund column, dialog, refund rows
-3. Refund handler single-select in Preparations and the bazaar info dialog
-4. Records: dashboard rows and revenue rule, orders workbook
-5. Offline refunds with a refund PIN (blocked on backend, see below)
-
-## Phase 5: offline refunds with a refund PIN
-
-Start only after Amrei ships the PIN endpoints and after the sale queue survives an app restart (local persistence). A refund made offline must not vanish when the app closes.
-
-- **Setting a PIN.** Owner and employees can set a 6-digit refund PIN from their account, online, by confirming their login password. `POST /api/auth/refund-pin/` with `{password, pin}`.
-- **Downloading verifiers.** When a bazaar opens while online, fetch `GET event/<pk>/refund-verifiers/`: PIN hashes for the vendor's owners and the bazaar's active handler. Store them with `flutter_secure_storage`, scoped to that bazaar. Delete them on logout and when the bazaar is finalized or ends.
-- **Dialog.** Replace the password field with a 6-digit PIN pad labelled "Owner or refund handler PIN".
-- **Online.** Send `authorizer_pin` to the refund endpoint and let the server check it.
-- **Offline.** Hash the typed PIN with the stored salt and iterations and compare it to each stored verifier. On a match, record the refund locally with `authorized_by` set to that person and `authorized_at` set to now, return the item to local stock, show it in Orders, and queue it. Never store the PIN itself.
-- **Lockout.** After 5 wrong PINs on this tablet, block refunds for 5 minutes. Persist the counter so a restart does not reset it.
-- **Sync order.** Send queued sales first, then queued refunds. A refund for a sale made offline points to the sale by `sale_client_uuid`.
-- **Rejected at sync.** If the server refuses a queued refund (for example, the handler was revoked before the refund time), keep the row, mark it "Refund rejected by server", and notify the owner on next login. The cash already went out, so it must stay visible for the owner to settle.
-- **Known limitation to document.** A handler change made while the tablet is offline only reaches the tablet on its next sync.
+Run `flutter analyze` and `flutter test`. Unit tests for new logic, widget tests for dialog states. List manual macOS steps for `USE_BACKEND=true`, and say when a step needs the tablet.
