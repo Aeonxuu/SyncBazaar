@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import '../../core/utils/formatters.dart';
 import '../../models/brand.dart';
 import '../../models/category.dart';
 import '../../models/product.dart';
@@ -277,12 +278,12 @@ class ProductRepository {
     final created =
         await auth.api.post(
               '/api/core/vendor/$vendorId/category/',
-              body: {'name': name.trim()},
+              body: {'name': capitalizeWords(name)},
             )
             as Map<String, dynamic>;
     final category = Category(
       id: (created['id'] as num).toInt(),
-      name: created['name'] as String? ?? name.trim(),
+      name: created['name'] as String? ?? capitalizeWords(name),
     );
     _categories.add(category);
     return category;
@@ -298,12 +299,12 @@ class ProductRepository {
     final created =
         await auth.api.post(
               '/api/core/vendor/$vendorId/brand/',
-              body: {'name': name.trim()},
+              body: {'name': capitalizeWords(name)},
             )
             as Map<String, dynamic>;
     final brand = Brand(
       id: (created['id'] as num).toInt(),
-      name: created['name'] as String? ?? name.trim(),
+      name: created['name'] as String? ?? capitalizeWords(name),
     );
     _brands.add(brand);
     return brand;
@@ -322,12 +323,12 @@ class ProductRepository {
     final updated =
         await auth.api.patch(
               '/api/core/vendor/$vendorId/category/$id/',
-              body: {'name': name.trim()},
+              body: {'name': capitalizeWords(name)},
             )
             as Map<String, dynamic>;
     final category = Category(
       id: id,
-      name: updated['name'] as String? ?? name.trim(),
+      name: updated['name'] as String? ?? capitalizeWords(name),
     );
     final idx = _categories.indexWhere((c) => c.id == id);
     if (idx == -1) {
@@ -348,12 +349,12 @@ class ProductRepository {
     final updated =
         await auth.api.patch(
               '/api/core/vendor/$vendorId/brand/$id/',
-              body: {'name': name.trim()},
+              body: {'name': capitalizeWords(name)},
             )
             as Map<String, dynamic>;
     final brand = Brand(
       id: id,
-      name: updated['name'] as String? ?? name.trim(),
+      name: updated['name'] as String? ?? capitalizeWords(name),
     );
     final idx = _brands.indexWhere((b) => b.id == id);
     if (idx == -1) {

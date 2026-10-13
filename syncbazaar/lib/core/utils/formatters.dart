@@ -86,3 +86,14 @@ String formatDateRange(DateTime start, DateTime end) {
   }
   return '${full.format(from)} – ${full.format(to)}';
 }
+
+/// `sandals` -> `Sandals`, `bath and body` -> `Bath And Body`.
+///
+/// Raises the first letter of each word and touches nothing else, so `LEGO`
+/// and `McDonald's` survive. Category and brand names go through this before
+/// they are sent: the server keeps the casing it is given, so without it the
+/// same list shows `sandals` beside `Bags`.
+String capitalizeWords(String value) => value.trim().replaceAllMapped(
+  RegExp(r'(^|\s)(\S)'),
+  (m) => '${m[1]}${m[2]!.toUpperCase()}',
+);

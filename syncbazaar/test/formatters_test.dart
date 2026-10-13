@@ -100,4 +100,20 @@ void main() {
       );
     });
   });
+
+  group('capitalizeWords', () {
+    test('raises the first letter of every word', () {
+      expect(capitalizeWords('sandals'), 'Sandals');
+      expect(capitalizeWords('bath and body'), 'Bath And Body');
+    });
+
+    test('leaves the rest of each word alone', () {
+      expect(capitalizeWords('LEGO'), 'LEGO');
+      expect(capitalizeWords("mcDonald's"), "McDonald's");
+    });
+
+    test('trims the ends', () {
+      expect(capitalizeWords('  bags '), 'Bags');
+    });
+  });
 }
