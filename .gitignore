@@ -13,3 +13,7 @@ collected_code.md
 # so it lands in commits by accident rather than by intent.
 .DS_Store
 **/.DS_Store
+
+# Playwright MCP's console logs and snapshots, written wherever a browser
+# session was started from. Per-machine tooling output, not project source.
+.playwright-mcp/
