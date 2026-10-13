@@ -120,7 +120,16 @@ class InventoryCubit extends Cubit<InventoryState> {
   final EventRepository? _events;
   final SalesRepository _salesRepository;
 
+  /// Drops back to the default (loading) state, synchronously.
+  ///
+  /// `load` only ever `emit`ed once, at the end -- so calling it a second
+  /// time (switching accounts, then opening this tab) kept the previous
+  /// account's rows and KPIs on screen for however long the awaits below
+  /// took, `isLoading` included, since nothing had set it back to `true`.
+  void reset() => emit(const InventoryState());
+
   Future<void> load() async {
+    reset();
     final products = await _productRepository.listProducts();
     final archivedKeys = await _productRepository.archivedAllocationKeys();
 
@@ -232,7 +241,8 @@ class InventoryCubit extends Cubit<InventoryState> {
   /// (archive) should not be offered.
   bool get isRemote => _productRepository.isRemote;
 
-  Future<List<Category>> listCategories() => _productRepository.listCategories();
+  Future<List<Category>> listCategories() =>
+      _productRepository.listCategories();
 
   Future<List<Brand>> listBrands() => _productRepository.listBrands();
 

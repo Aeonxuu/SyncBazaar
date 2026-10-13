@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/app_message.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../bloc/staff/staff_cubit.dart';
@@ -11,7 +12,11 @@ import '../../../data/repositories/event_repository.dart';
 import '../../../models/bazaar_event.dart';
 import '../../../models/user.dart';
 import '../../widgets/confirmation_dialog.dart';
+import '../../widgets/date_range_picker_dialog.dart';
+import '../../widgets/loading_dialog.dart';
 import '../../widgets/selectable_option_button.dart';
+import '../../widgets/skeleton.dart';
+import 'widgets/staff_skeleton.dart';
 
 class StaffScreen extends StatefulWidget {
   const StaffScreen({super.key, required this.currentUser});
@@ -85,8 +90,25 @@ class _StaffScreenState extends State<StaffScreen> {
     }
     final theme = Theme.of(context);
 
+    final loadingNotifier = context.read<StaffCubit>().isLoading;
+
+    return ValueListenableBuilder<bool>(
+      valueListenable: loadingNotifier,
+      builder: (context, isLoading, _) =>
+          _buildScreen(context, theme, isLoading: isLoading),
+    );
+  }
+
+  Widget _buildScreen(
+    BuildContext context,
+    ThemeData theme, {
+    required bool isLoading,
+  }) {
     return BlocBuilder<StaffCubit, List<AppUser>>(
       builder: (context, users) {
+        // Only while there is nothing to show. A reload over a populated list
+        // keeps the rows on screen instead of blanking them to grey.
+        final showSkeleton = isLoading && users.isEmpty;
         // An owner manages employees only, so the role filter would be a
         // control with one possible answer. It is shown to admins alone.
         final base = widget.currentUser.role == UserRole.owner
@@ -128,14 +150,22 @@ class _StaffScreenState extends State<StaffScreen> {
                           ),
                         ),
                         const SizedBox(height: 4),
-                        Text(
-                          // Says the scope, so the list below never has to be
-                          // counted to know whether it is all of them.
-                          _describeScope(base.length, visible.length),
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: Colors.black45,
+                        if (showSkeleton)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 3),
+                            child: SkeletonBreathing(
+                              child: SkeletonBar(width: 72, height: 13),
+                            ),
+                          )
+                        else
+                          Text(
+                            // Says the scope, so the list below never has to be
+                            // counted to know whether it is all of them.
+                            _describeScope(base.length, visible.length),
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: Colors.black45,
+                            ),
                           ),
-                        ),
                       ],
                     ),
                   ),
@@ -156,8 +186,10 @@ class _StaffScreenState extends State<StaffScreen> {
                           horizontal: 16,
                           vertical: 12,
                         ),
+                        minimumSize: const Size(0, 48),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(6),
                         ),
                       ),
                       label: const Text('Add user'),
@@ -216,7 +248,19 @@ class _StaffScreenState extends State<StaffScreen> {
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(color: const Color(0xFFEDEDF1)),
                   ),
-                  child: visible.isEmpty
+                  child: showSkeleton
+                      ? Column(
+                          children: [
+                            _headerRow(context),
+                            const Divider(height: 1, color: Color(0xFFEDEDF1)),
+                            Expanded(
+                              child: StaffRowsSkeleton(
+                                showActions: widget.currentUser.isAdminOrOwner,
+                              ),
+                            ),
+                          ],
+                        )
+                      : visible.isEmpty
                       ? _emptyState(context, base.isEmpty)
                       : Column(
                           children: [
@@ -291,8 +335,12 @@ class _StaffScreenState extends State<StaffScreen> {
         children: [
           Expanded(flex: 5, child: Text('NAME', style: style)),
           Expanded(flex: 2, child: Text('ROLE', style: style)),
+          Expanded(flex: 2, child: Text('DATE HIRED', style: style)),
           Expanded(flex: 2, child: Text('BAZAARS', style: style)),
-          if (_isAdmin) const SizedBox(width: 80) else const SizedBox.shrink(),
+          if (widget.currentUser.isAdminOrOwner)
+            const SizedBox(width: 80)
+          else
+            const SizedBox.shrink(),
         ],
       ),
     );
@@ -347,6 +395,15 @@ class _StaffScreenState extends State<StaffScreen> {
           Expanded(flex: 2, child: _RoleBadge(role: user.role)),
           Expanded(
             flex: 2,
+            child: Text(
+              user.dateHired == null ? '—' : formatDate(user.dateHired!),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: user.dateHired == null ? Colors.black38 : AppColors.text,
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 2,
             // The count is the way in to the names. A bare number answers
             // "how many" and leaves "which" unanswered, and the ids behind it
             // were already loaded.
@@ -389,7 +446,7 @@ class _StaffScreenState extends State<StaffScreen> {
                     ),
                   ),
           ),
-          if (_isAdmin)
+          if (widget.currentUser.isAdminOrOwner)
             SizedBox(
               width: 80,
               child: Row(
@@ -426,13 +483,48 @@ class _StaffScreenState extends State<StaffScreen> {
     if (approved != true || !context.mounted) {
       return;
     }
-    await context.read<StaffCubit>().deleteUser(user.id);
+    final staff = context.read<StaffCubit>();
+    final dialogNavigator = Navigator.of(context, rootNavigator: true);
+    // Deleting goes to the server and then reloads the list, so the row sat
+    // there unchanged for a moment and looked like the tap did nothing.
+    showLoadingDialog(context, 'Deleting ${user.name}…');
+    ApiException? failure;
+    try {
+      await staff.deleteUser(user.id);
+    } on ApiException catch (error) {
+      failure = error;
+    } finally {
+      // Closed before any result is shown, so the loader is never left
+      // sitting behind the message.
+      dialogNavigator.pop();
+    }
+    if (failure != null) {
+      final error = failure;
+      if (!context.mounted) {
+        return;
+      }
+      // Most notably the 409 the server now sends back for someone with
+      // recorded sales -- worth showing verbatim, and as a dialog rather
+      // than a SnackBar: this changes what the admin does next (they came
+      // here to delete someone and now cannot), so it has to hold until
+      // read rather than risk being gone in four seconds like the SnackBar
+      // it replaced.
+      await showNoticeDialog(
+        context: context,
+        title: 'Could not delete user',
+        message: error.isOffline ? 'Cannot reach the server.' : error.message,
+        tone: ConfirmationTone.destructive,
+      );
+      return;
+    }
     if (!context.mounted) {
       return;
     }
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('User deleted.')));
+    showAppMessage(
+      'User deleted.',
+      kind: AppMessageKind.success,
+      title: 'User deleted',
+    );
   }
 
   Future<void> _showUserDialog(BuildContext context, {AppUser? user}) async {
@@ -441,7 +533,6 @@ class _StaffScreenState extends State<StaffScreen> {
     // stops being safe to use the instant `Navigator.pop` runs, which is
     // before its exit animation actually finishes.
     final staffCubit = context.read<StaffCubit>();
-    final messenger = ScaffoldMessenger.of(context);
 
     await showDialog<void>(
       context: context,
@@ -450,7 +541,6 @@ class _StaffScreenState extends State<StaffScreen> {
         user: user,
         currentUserRole: widget.currentUser.role,
         staffCubit: staffCubit,
-        messenger: messenger,
       ),
     );
   }
@@ -461,13 +551,11 @@ class _UserFormDialog extends StatefulWidget {
     required this.user,
     required this.currentUserRole,
     required this.staffCubit,
-    required this.messenger,
   });
 
   final AppUser? user;
   final UserRole currentUserRole;
   final StaffCubit staffCubit;
-  final ScaffoldMessengerState messenger;
 
   @override
   State<_UserFormDialog> createState() => _UserFormDialogState();
@@ -476,14 +564,12 @@ class _UserFormDialog extends StatefulWidget {
 class _UserFormDialogState extends State<_UserFormDialog> {
   late final TextEditingController _nameController;
   late final TextEditingController _emailController;
-  late final TextEditingController _passwordController;
   late UserRole _selectedRole;
   late final List<UserRole> _allowedRoles;
+  DateTime? _dateHired;
 
-  bool _obscurePassword = true;
   String? _nameError;
   String? _emailError;
-  String? _passwordError;
   String? _formError;
   bool _saving = false;
 
@@ -494,8 +580,8 @@ class _UserFormDialogState extends State<_UserFormDialog> {
     super.initState();
     _nameController = TextEditingController(text: widget.user?.name ?? '');
     _emailController = TextEditingController(text: widget.user?.email ?? '');
-    _passwordController = TextEditingController();
     _selectedRole = widget.user?.role ?? UserRole.employee;
+    _dateHired = widget.user?.dateHired;
     // An owner may only ever create/edit an employee — the backend itself
     // doesn't block a request setting role to owner, so this is the one
     // thing standing in the way. Only an admin sees the picker at all: with
@@ -510,14 +596,29 @@ class _UserFormDialogState extends State<_UserFormDialog> {
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
-    _passwordController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickDateHired() async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final picked = await showAppDatePicker(
+      context: context,
+      // Nobody has been hired in the future, and the calendar is the cheapest
+      // place to refuse it. The floor is generous rather than meaningful.
+      firstDate: DateTime(1990),
+      lastDate: today,
+      initialDate: _dateHired,
+      title: 'Date hired',
+    );
+    if (picked != null && mounted) {
+      setState(() => _dateHired = picked);
+    }
   }
 
   Future<void> _submit() async {
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
-    final password = _passwordController.text.trim();
 
     setState(() {
       _nameError = name.isEmpty ? 'Name is required.' : null;
@@ -526,12 +627,9 @@ class _UserFormDialogState extends State<_UserFormDialog> {
           : !_emailPattern.hasMatch(email)
           ? 'Enter a valid email address.'
           : null;
-      _passwordError = (!_isEdit && password.isEmpty)
-          ? 'Password is required.'
-          : null;
       _formError = null;
     });
-    if (_nameError != null || _emailError != null || _passwordError != null) {
+    if (_nameError != null || _emailError != null) {
       return;
     }
 
@@ -542,22 +640,23 @@ class _UserFormDialogState extends State<_UserFormDialog> {
           id: widget.user!.id,
           name: name,
           email: email,
-          role: _selectedRole,
-          password: password.isEmpty ? null : password,
+          dateHired: _dateHired,
         );
       } else {
         await widget.staffCubit.addUser(
           name: name,
           email: email,
           role: _selectedRole,
-          password: password,
+          dateHired: _dateHired,
         );
       }
     } on ApiException catch (error) {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _formError = error.isOffline ? 'Cannot reach the server.' : error.message;
+        _formError = error.isOffline
+            ? 'Cannot reach the server.'
+            : error.message;
       });
       return;
     } catch (_) {
@@ -571,25 +670,19 @@ class _UserFormDialogState extends State<_UserFormDialog> {
 
     if (!mounted) return;
     Navigator.pop(context);
-    widget.messenger.showSnackBar(
-      SnackBar(
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        content: Text(
-          _isEdit
-              ? 'User updated.'
-              // The one thing this dialog cannot promise: the account
-              // exists now, but the server refuses login until the new
-              // hire enters the code it emails them. The staff list has no
-              // way to read back whether that has happened yet — the
-              // API's own employee-list response doesn't include a
-              // verified flag — so naming the step here is the honest
-              // substitute for a progress indicator.
-              : '$name\'s account was created. They\'ll need to '
-                    'verify their email before they can log in.',
-        ),
-        duration: const Duration(milliseconds: 4200),
-      ),
+    showAppMessage(
+      _isEdit
+          ? 'User updated.'
+          // The one thing this dialog cannot promise: the account
+          // exists now, but the server refuses login until the new
+          // hire enters the code it emails them. The staff list has no
+          // way to read back whether that has happened yet -- the
+          // API's own employee-list response doesn't include a
+          // verified flag -- so naming the step here is the honest
+          // substitute for a progress indicator.
+          : '$name\'s account was created. They\'ll need to '
+                'verify their email before they can log in.',
+      kind: AppMessageKind.success,
     );
   }
 
@@ -628,9 +721,7 @@ class _UserFormDialogState extends State<_UserFormDialog> {
                       ),
                     ),
                     IconButton(
-                      onPressed: _saving
-                          ? null
-                          : () => Navigator.pop(context),
+                      onPressed: _saving ? null : () => Navigator.pop(context),
                       splashRadius: 18,
                       tooltip: 'Close',
                       icon: const Icon(
@@ -663,20 +754,47 @@ class _UserFormDialogState extends State<_UserFormDialog> {
                       ),
                     ),
                     const SizedBox(height: 14),
-                    _StaffFormField(
-                      label: 'Email',
-                      error: _emailError,
-                      child: TextField(
-                        controller: _emailController,
-                        keyboardType: TextInputType.emailAddress,
-                        style: Theme.of(context).textTheme.bodyMedium,
-                        decoration: _staffDialogFieldDecoration(
-                          hint: 'Enter email address',
-                          hasError: _emailError != null,
-                        ),
+                    // Editable only when creating, same as role below and for
+                    // the same reason: this is a sign-in identity, not a
+                    // profile detail. Changing it here would silently move
+                    // someone's login to a new, unverified address -- the
+                    // email is only ever supposed to change through the
+                    // account-verification/reset flows that actually confirm
+                    // the new one belongs to them.
+                    isEdit
+                        ? _StaffFormField(
+                            label: 'Email',
+                            child: _LockedFieldValue(
+                              value: _emailController.text,
+                            ),
+                          )
+                        : _StaffFormField(
+                            label: 'Email',
+                            error: _emailError,
+                            child: TextField(
+                              controller: _emailController,
+                              keyboardType: TextInputType.emailAddress,
+                              style: Theme.of(context).textTheme.bodyMedium,
+                              decoration: _staffDialogFieldDecoration(
+                                hint: 'Enter email address',
+                                hasError: _emailError != null,
+                              ),
+                            ),
+                          ),
+                    if (isEdit) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        'To change an email address, contact an admin.',
+                        style: Theme.of(
+                          context,
+                        ).textTheme.bodySmall?.copyWith(color: Colors.black45),
                       ),
-                    ),
-                    if (_allowedRoles.length > 1) ...[
+                    ],
+                    // Editable only when creating. Confirmed with the backend
+                    // team that changing a role after creation is deliberately
+                    // not self-service through this app -- it goes through
+                    // contacting an admin directly.
+                    if (!isEdit && _allowedRoles.length > 1) ...[
                       const SizedBox(height: 14),
                       _StaffFormField(
                         label: 'Role',
@@ -690,51 +808,51 @@ class _UserFormDialogState extends State<_UserFormDialog> {
                         ),
                       ),
                     ],
-                    const SizedBox(height: 14),
-                    _StaffFormField(
-                      label: isEdit ? 'New password (optional)' : 'Password',
-                      error: _passwordError,
-                      child: TextField(
-                        controller: _passwordController,
-                        obscureText: _obscurePassword,
-                        style: Theme.of(context).textTheme.bodyMedium,
-                        decoration:
-                            _staffDialogFieldDecoration(
-                              hint: isEdit
-                                  ? 'Enter new password'
-                                  : 'Enter password',
-                              hasError: _passwordError != null,
-                            ).copyWith(
-                              suffixIcon: IconButton(
-                                splashRadius: 16,
-                                onPressed: () => setState(
-                                  () => _obscurePassword = !_obscurePassword,
-                                ),
-                                icon: Icon(
-                                  _obscurePassword
-                                      ? Icons.visibility_off_outlined
-                                      : Icons.visibility_outlined,
-                                  size: 18,
-                                  color: Colors.black45,
-                                ),
-                              ),
-                            ),
-                      ),
-                    ),
                     if (isEdit) ...[
+                      const SizedBox(height: 14),
+                      _StaffFormField(
+                        label: 'Role',
+                        child: _LockedFieldValue(
+                          value: _selectedRole.name.toUpperCase(),
+                        ),
+                      ),
                       const SizedBox(height: 6),
                       Text(
-                        'Leave blank to keep the current password.',
-                        style: Theme.of(context).textTheme.bodySmall
-                            ?.copyWith(color: Colors.black45),
+                        'To change someone\'s role, contact an admin.',
+                        style: Theme.of(
+                          context,
+                        ).textTheme.bodySmall?.copyWith(color: Colors.black45),
+                      ),
+                    ],
+                    const SizedBox(height: 14),
+                    _StaffFormField(
+                      label: 'Date hired (optional)',
+                      child: _DatePickField(
+                        value: _dateHired,
+                        hint: 'Select date',
+                        onTap: _saving ? null : _pickDateHired,
+                        onClear: _saving || _dateHired == null
+                            ? null
+                            : () => setState(() => _dateHired = null),
+                      ),
+                    ),
+                    if (!isEdit) ...[
+                      const SizedBox(height: 14),
+                      Text(
+                        'They will get an email to verify the account and '
+                        'set their own password before they can sign in.',
+                        style: Theme.of(
+                          context,
+                        ).textTheme.bodySmall?.copyWith(color: Colors.black45),
                       ),
                     ],
                     if (_formError != null) ...[
                       const SizedBox(height: 10),
                       Text(
                         _formError!,
-                        style: Theme.of(context).textTheme.bodySmall
-                            ?.copyWith(color: AppColors.error),
+                        style: Theme.of(
+                          context,
+                        ).textTheme.bodySmall?.copyWith(color: AppColors.error),
                       ),
                     ],
                   ],
@@ -746,15 +864,19 @@ class _UserFormDialogState extends State<_UserFormDialog> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    TextButton(
-                      onPressed: _saving
-                          ? null
-                          : () => Navigator.pop(context),
-                      style: TextButton.styleFrom(
-                        foregroundColor: Colors.black54,
+                    OutlinedButton(
+                      onPressed: _saving ? null : () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.primary,
+                        side: const BorderSide(color: AppColors.primary),
                         padding: const EdgeInsets.symmetric(
                           horizontal: 14,
                           vertical: 10,
+                        ),
+                        minimumSize: const Size(0, 48),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(6),
                         ),
                       ),
                       child: const Text('Cancel'),
@@ -774,8 +896,10 @@ class _UserFormDialogState extends State<_UserFormDialog> {
                           horizontal: 18,
                           vertical: 12,
                         ),
+                        minimumSize: const Size(0, 48),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(6),
                         ),
                       ),
                       child: _saving
@@ -1027,6 +1151,120 @@ InputDecoration _staffFieldDecoration({required String hint}) =>
 
 /// Label above input, error below — the Add/Edit user dialog's field
 /// recipe, matching `_FormField` in the product form.
+/// A form field's value with editing turned off, for a fact this dialog
+/// shows but never lets you change (email or role once a user exists).
+///
+/// Styled like the ordinary inputs beside it -- same neutral fill, same
+/// radius -- so it still reads as a form row, plus a trailing lock glyph so
+/// "why can't I click into this" is answered by looking at it rather than
+/// by discovering it through a failed tap. The caption beneath each use
+/// says what to do about it; the lock is what makes looking for that
+/// caption feel necessary in the first place.
+/// A field that opens the calendar instead of taking typed text.
+///
+/// Dressed as the text inputs beside it (same fill, radius and 44px height),
+/// so it reads as one more field rather than a different kind of control.
+class _DatePickField extends StatelessWidget {
+  const _DatePickField({
+    required this.value,
+    required this.hint,
+    required this.onTap,
+    required this.onClear,
+  });
+
+  final DateTime? value;
+  final String hint;
+  final VoidCallback? onTap;
+
+  /// Null hides the clear button.
+  final VoidCallback? onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: AppColors.inputFill,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 44),
+          padding: const EdgeInsets.only(left: 12, right: 4),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  value == null ? hint : formatDate(value!),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: value == null ? Colors.black38 : AppColors.text,
+                  ),
+                ),
+              ),
+              if (onClear != null)
+                IconButton(
+                  onPressed: onClear,
+                  tooltip: 'Clear date',
+                  splashRadius: 16,
+                  icon: const Icon(
+                    Icons.close_rounded,
+                    size: 16,
+                    color: Colors.black45,
+                  ),
+                )
+              else
+                const Padding(
+                  padding: EdgeInsets.only(right: 8),
+                  child: Icon(
+                    Icons.calendar_today_outlined,
+                    size: 16,
+                    color: Colors.black45,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LockedFieldValue extends StatelessWidget {
+  const _LockedFieldValue({required this.value});
+
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+      decoration: BoxDecoration(
+        color: AppColors.inputFill,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              value,
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: Colors.black54),
+            ),
+          ),
+          const SizedBox(width: 8),
+          const Icon(
+            Icons.lock_outline_rounded,
+            size: 16,
+            color: Colors.black38,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _StaffFormField extends StatelessWidget {
   const _StaffFormField({required this.label, required this.child, this.error});
 

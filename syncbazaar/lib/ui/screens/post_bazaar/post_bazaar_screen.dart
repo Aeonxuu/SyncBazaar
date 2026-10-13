@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import '../../widgets/app_message.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/constants/colors.dart';
+import '../../../core/constants/motion.dart';
 import '../../../data/repositories/event_repository.dart';
 import '../../../data/repositories/product_repository.dart';
 import '../../../data/repositories/sales_repository.dart';
@@ -17,8 +19,11 @@ import '../../../services/report_service.dart';
 import '../../../models/bazaar_event.dart';
 import '../../../models/product.dart';
 import '../../../models/user.dart';
+import '../../../models/refund.dart';
 import '../../../models/sale.dart';
+import '../../widgets/action_buttons.dart';
 import '../../widgets/confirmation_dialog.dart';
+import 'widgets/documentation_skeleton.dart';
 import '../../../core/utils/formatters.dart';
 
 class PostBazaarScreen extends StatefulWidget {
@@ -60,10 +65,12 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
     final reportService = ReportService(auth: context.read<AuthRepository>());
 
     final sales = await salesRepository.listSales();
+    final refunds = await salesRepository.listRefunds();
     final products = await productRepository.listProducts();
     final events = await eventRepository.listAll();
+    final documentEvents = await eventRepository.listAllIncludingFinalized();
     final allocationsByEventId = <int, Map<String, int>>{};
-    for (final event in events) {
+    for (final event in documentEvents) {
       allocationsByEventId[event.id] = await eventRepository
           .allocationsForEventByAllocationKey(event.id);
     }
@@ -72,7 +79,7 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
     // measured against is already gone by the time this screen opens.
     final reports = <int, ReconciliationReport>{};
     if (reportService.isAvailable) {
-      for (final event in events) {
+      for (final event in documentEvents) {
         try {
           final report = await reportService.reconciliation(event.id);
           if (report != null) {
@@ -117,11 +124,13 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
         ),
     ];
     final extraFieldLabelsByEventId = {
-      for (final event in events)
+      for (final event in documentEvents)
         event.id: _extraFieldLabels(event, basePaymentMethods),
     };
 
-    final eventNameById = {for (final event in events) event.id: event.name};
+    final eventNameById = {
+      for (final event in documentEvents) event.id: event.name,
+    };
     final companies = await settingsRepository.listCompanies();
     final companyById = {for (final company in companies) company.id: company};
     final companyNameById = {
@@ -129,23 +138,25 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
     };
     return _PostBazaarData(
       sales: sales,
+      refunds: refunds,
       products: products,
       events: events,
+      documentEvents: documentEvents,
       allocationsByEventId: allocationsByEventId,
       reconciliationByEventId: reports,
       optionLabelById: optionLabelById,
       extraFieldLabelsByEventId: extraFieldLabelsByEventId,
       eventNameById: eventNameById,
       locationNameByEventId: {
-        for (final event in events)
+        for (final event in documentEvents)
           event.id: companyNameById[event.companyId] ?? 'Unknown venue',
       },
       incentivePercentByEventId: {
-        for (final event in events)
+        for (final event in documentEvents)
           event.id: companyById[event.companyId]?.incentivePercent ?? 10,
       },
       bufferPercentByEventId: {
-        for (final event in events)
+        for (final event in documentEvents)
           event.id: companyById[event.companyId]?.bufferPercent ?? 10,
       },
     );
@@ -183,6 +194,11 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
       for (final product in data.products) product.id: product.name,
     };
 
+    final saleByServerId = {
+      for (final sale in data.sales)
+        if (sale.serverId != null) sale.serverId!: sale,
+    };
+
     return [
       for (final sale in data.sales.where((sale) => sale.eventId == event.id))
         OrderLine(
@@ -198,7 +214,46 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
           total: sale.total,
           returned: sale.orderStatus == OrderStatus.returned,
         ),
+      // A refund is a line of its own, after the sale it undoes: the money came
+      // in and then went out, and both are on the sheet. Negative, on the sheet
+      // of the method it went back by, which is always the sale's own.
+      for (final refund in data.refunds.where(
+        (refund) => refund.eventId == event.id,
+      ))
+        _refundLine(
+          data,
+          refund,
+          saleByServerId[refund.saleId],
+          productNameById,
+        ),
     ];
+  }
+
+  OrderLine _refundLine(
+    _PostBazaarData data,
+    Refund refund,
+    Sale? sale,
+    Map<int, String> productNameById,
+  ) {
+    return OrderLine(
+      date: refund.createdAt,
+      customerName: normalizeCustomerName(
+        refund.customerName.isNotEmpty
+            ? refund.customerName
+            : sale?.customerName,
+      ),
+      product: sale == null
+          ? 'Unknown product'
+          : _productLabel(data, sale, productNameById),
+      paymentMethod: refund.methodName.isNotEmpty
+          ? refund.methodName
+          : (sale?.paymentMethod ?? ''),
+      reference: refund.reference,
+      quantity: sale?.qty ?? 1,
+      total: -refund.amount,
+      returned: false,
+      refunded: true,
+    );
   }
 
   /// `Nike Air Max SC (Color Black, Size 42)` — the same wording the cart and
@@ -224,14 +279,15 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
     final salesRepository = context.read<SalesRepository>();
     final productRepository = context.read<ProductRepository>();
     final eventRepository = context.read<EventRepository>();
-    final messenger = ScaffoldMessenger.of(context);
     try {
       await productRepository.refresh();
       await eventRepository.refresh();
       await salesRepository.refresh();
     } on ApiException catch (error) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('Could not refresh: ${error.message}')),
+      showAppMessage(
+        'Could not refresh: ${error.message}',
+        kind: AppMessageKind.error,
+        title: 'Could not refresh',
       );
     }
     if (!mounted) {
@@ -311,7 +367,7 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
                   return _loadFailed(context, snapshot.error!);
                 }
                 if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const DocumentationListSkeleton();
                 }
                 final data = snapshot.data!;
                 if (_selectedReconciliationEventId == null &&
@@ -343,12 +399,12 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
   }
 
   Widget _soaDraft(BuildContext context, _PostBazaarData data) {
-    if (data.events.isEmpty) {
+    if (data.documentEvents.isEmpty) {
       return _emptyState('No bazaar events found.');
     }
 
     return _eventGrid(
-      events: data.events,
+      events: data.documentEvents,
       locationNameByEventId: data.locationNameByEventId,
       compactCardLayout: true,
       onOpenDetails: (event) => _openSoaDetails(context, data, event),
@@ -356,12 +412,12 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
   }
 
   Widget _ordersExport(BuildContext context, _PostBazaarData data) {
-    if (data.events.isEmpty) {
+    if (data.documentEvents.isEmpty) {
       return _emptyState('No bazaar events found.');
     }
 
     return _eventGrid(
-      events: data.events,
+      events: data.documentEvents,
       locationNameByEventId: data.locationNameByEventId,
       compactCardLayout: true,
       onOpenDetails: (event) => _openOrdersDetails(context, data, event),
@@ -405,6 +461,9 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
     // came back from a stall, so a bazaar still selling has nothing to count --
     // its stock is on a table somewhere, not returned. Listing every bazaar
     // here invited someone to return stock out from under a live till.
+    // `data.events` already leaves out finalized bazaars -- it's the
+    // non-finalized query the till and Orders read too -- so this only needs
+    // to narrow it down to the ones that have ended.
     final ended = data.events
         .where((event) => event.status == BazaarStatus.ended)
         .toList();
@@ -516,7 +575,7 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
               ),
             ),
           ),
-          const Divider(height: 18),
+          const SizedBox(height: 6),
           _receiptRow(
             context,
             label: 'Units to return',
@@ -839,7 +898,7 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
           label: 'Buffer (${formatPercent(bufferPct)})',
           value: formatPeso(buffer),
         ),
-        const Divider(height: 18),
+        const SizedBox(height: 6),
         // The one emphasised figure. It is the money that actually changes
         // hands, and the reason the document exists -- the app can show the
         // total even though the template cannot yet.
@@ -987,78 +1046,95 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
   }) async {
     await showDialog<void>(
       context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.5),
-      builder: (dialogContext) => Dialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(_kCardRadius),
-        ),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 400),
+      barrierColor: Colors.black.withValues(alpha: 0.45),
+      builder: (dialogContext) {
+        final theme = Theme.of(dialogContext);
+        // Flat: no elevation tint and no panels inside panels. Structure comes
+        // from hairlines and spacing alone, in the same header / body / footer
+        // frame as the app's other dialogs.
+        return Dialog(
+          backgroundColor: AppColors.surface,
+          surfaceTintColor: Colors.transparent,
+          elevation: 3,
+          clipBehavior: Clip.antiAlias,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
           child: TweenAnimationBuilder<double>(
-            tween: Tween(begin: 0.96, end: 1),
-            duration: const Duration(milliseconds: 220),
-            curve: Curves.easeOutCubic,
+            tween: Tween(begin: 0.97, end: 1),
+            duration: AppMotion.entrance,
+            curve: AppMotion.easeOut,
             builder: (context, value, child) => Transform.scale(
               scale: value,
-              child: Opacity(opacity: value, child: child),
+              child: Opacity(opacity: value.clamp(0, 1), child: child),
             ),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 440),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 22, 24, 18),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                title,
-                                style: Theme.of(dialogContext)
-                                    .textTheme
-                                    .titleMedium
-                                    ?.copyWith(fontWeight: FontWeight.w700),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                subtitle,
-                                style: Theme.of(dialogContext)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.copyWith(color: Colors.black54),
-                              ),
-                            ],
+                        Text(
+                          title,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
-                        IconButton(
-                          onPressed: () => Navigator.of(dialogContext).pop(),
-                          tooltip: 'Close',
-                          // Trimmed off the default 8pt so the icon sits on
-                          // the dialog's 24pt margin rather than 8pt inside
-                          // it, which reads as a lopsided right edge.
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints.tightFor(
-                            width: 40,
-                            height: 40,
+                        const SizedBox(height: 4),
+                        Text(
+                          subtitle,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: Colors.black54,
                           ),
-                          icon: const Icon(Icons.close_rounded, size: 20),
                         ),
                       ],
                     ),
-                    const Divider(height: 24),
-                    ...content,
-                    if (footer != null) ...[const SizedBox(height: 24), footer],
-                  ],
-                ),
+                  ),
+                  const Divider(height: 1, color: AppColors.border),
+                  Flexible(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(24, 18, 24, 18),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: content,
+                      ),
+                    ),
+                  ),
+                  const Divider(height: 1, color: AppColors.border),
+                  // Always present, so there is one obvious way out. Close is
+                  // quiet and on the left of the primary, which sits at the
+                  // trailing edge where the eye and thumb finish.
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 14, 24, 16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        QuietActionButton(
+                          label: 'Close',
+                          color: AppColors.primary,
+                          // Outline only, no fill: reads as a real choice next
+                          // to the filled primary without competing with it.
+                          outlined: true,
+                          onPressed: () => Navigator.of(dialogContext).pop(),
+                        ),
+                        if (footer != null) ...[
+                          const SizedBox(width: 12),
+                          footer,
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -1099,8 +1175,13 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
               fontWeight: emphasize ? FontWeight.w700 : FontWeight.w600,
             );
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      decoration: BoxDecoration(
+        border: emphasize
+            ? null
+            : const Border(bottom: BorderSide(color: AppColors.border)),
+      ),
       child: Row(
         children: [
           Expanded(child: Text(label, style: labelStyle)),
@@ -1193,8 +1274,10 @@ class _InteractiveCardState extends State<_InteractiveCard> {
 class _PostBazaarData {
   const _PostBazaarData({
     required this.sales,
+    required this.refunds,
     required this.products,
     required this.events,
+    required this.documentEvents,
     required this.allocationsByEventId,
     required this.optionLabelById,
     required this.extraFieldLabelsByEventId,
@@ -1206,8 +1289,20 @@ class _PostBazaarData {
   });
 
   final List<Sale> sales;
+
+  /// Refunds on those sales, for the order list's refund lines.
+  final List<Refund> refunds;
   final List<Product> products;
+
+  /// Bazaars still working -- upcoming, ongoing, or ended but not finalized.
+  /// What the Reconciliation tab reads: nothing here should be sellable or
+  /// still holding stock at a stall that has already been finalized.
   final List<BazaarEvent> events;
+
+  /// Every bazaar the vendor has run, finalized ones included. What SOA
+  /// Draft and List of Orders read -- a bazaar's statement and order export
+  /// stay reachable long after its stock is back in the warehouse.
+  final List<BazaarEvent> documentEvents;
   final Map<int, Map<String, int>> allocationsByEventId;
 
   /// The server's own count of what each bazaar started with, sold and has
@@ -1263,16 +1358,13 @@ class _ExportButtonState extends State<_ExportButton> {
     try {
       final where = await widget.onExport();
       if (!mounted || where == null) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(where)));
+      showAppMessage(where, kind: AppMessageKind.success, title: 'Saved');
     } on ReportException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error.message),
-          backgroundColor: AppColors.error,
-        ),
+      showAppMessage(
+        error.message,
+        kind: AppMessageKind.error,
+        title: 'Export failed',
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -1291,9 +1383,18 @@ class _ExportButtonState extends State<_ExportButton> {
               child: CircularProgressIndicator(strokeWidth: 2),
             )
           : Icon(widget.icon),
+      // The same tall primary as every other dialog footer (48px), so it is
+      // as easy to hit as the buttons elsewhere in the app.
       style: ElevatedButton.styleFrom(
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
+        disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.4),
+        disabledForegroundColor: Colors.white,
+        elevation: 0,
+        minimumSize: const Size(0, 48),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
       ),
       label: Text(_busy ? 'Preparing…' : widget.label),
     );
@@ -1318,12 +1419,12 @@ class _LeftoverLine {
 
 /// Confirms, then returns a bazaar's leftover stock to master inventory.
 ///
-/// Its own widget for the same reason exports have one, and one more: the
-/// server cannot yet refuse a second return. Its guard tests an `is_finalized`
-/// field that does not exist on the model, so `hasattr` is always false and
-/// finalizing twice adds the leftovers to the warehouse twice. Until that
-/// lands, this being un-pressable while it runs -- and gone once it has -- is
-/// the only thing standing between a slow connection and inflated stock.
+/// Its own widget for the same reason exports have one: the server now
+/// refuses a second finalize (`is_finalized` is a real field there, and
+/// `BazaarFinalizeApiView` checks it), but this stays un-pressable while it
+/// runs -- and gone once it has -- as a second guard against a slow
+/// connection letting the button be hit twice before the first response
+/// lands.
 /// Count as a pill, matching the side rail's own badge — the same number
 /// (`ReconciliationCubit`), so the two are drawn the same way on purpose.
 class _ReconciliationCountBadge extends StatelessWidget {
@@ -1384,7 +1485,6 @@ class _ReturnStockButtonState extends State<_ReturnStockButton> {
     }
 
     setState(() => _busy = true);
-    final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
     try {
       final where = await widget.onReturn();
@@ -1392,20 +1492,22 @@ class _ReturnStockButtonState extends State<_ReturnStockButton> {
       // stock again, and nothing server-side would stop it.
       if (mounted) setState(() => _done = true);
       navigator.pop();
-      messenger.showSnackBar(SnackBar(content: Text(where)));
+      showAppMessage(
+        where,
+        kind: AppMessageKind.success,
+        title: 'Stock returned',
+      );
       await widget.onDone();
     } on ApiException catch (error) {
       if (!mounted) return;
       setState(() => _busy = false);
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            error.isOffline
-                ? 'Cannot reach the server, so nothing was returned. '
-                      'Try again when you have a connection.'
-                : 'The stock could not be returned. ${error.message}',
-          ),
-        ),
+      showAppMessage(
+        error.isOffline
+            ? 'Cannot reach the server, so nothing was returned. '
+                  'Try again when you have a connection.'
+            : 'The stock could not be returned. ${error.message}',
+        kind: AppMessageKind.error,
+        title: 'Stock not returned',
       );
     }
   }
@@ -1421,9 +1523,18 @@ class _ReturnStockButtonState extends State<_ReturnStockButton> {
               child: CircularProgressIndicator(strokeWidth: 2),
             )
           : const Icon(Icons.inventory_2_outlined),
+      // The same tall primary as every other dialog footer (48px), so it is
+      // as easy to hit as the buttons elsewhere in the app.
       style: ElevatedButton.styleFrom(
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
+        disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.4),
+        disabledForegroundColor: Colors.white,
+        elevation: 0,
+        minimumSize: const Size(0, 48),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
       ),
       label: Text(_busy ? 'Returning…' : 'Return stock'),
     );

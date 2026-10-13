@@ -17,6 +17,7 @@ class BazaarEvent {
     required this.status,
     this.acceptedPaymentMethods = const ['CASH'],
     this.customOtherMethods = const [],
+    this.isFinalized = false,
   });
 
   final int id;
@@ -27,4 +28,12 @@ class BazaarEvent {
   final BazaarStatus status;
   final List<String> acceptedPaymentMethods;
   final List<BazaarPaymentMethod> customOtherMethods;
+
+  /// Whether the bazaar has been closed out and its stock returned to the
+  /// warehouse. Refunds stop here: a refund puts the item back into the
+  /// bazaar's stock, and there is no stock left to put it into.
+  ///
+  /// False unless the server said otherwise, since the default event list
+  /// leaves finalized bazaars out and a locally built event is never one.
+  final bool isFinalized;
 }

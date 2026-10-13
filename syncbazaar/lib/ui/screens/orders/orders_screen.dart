@@ -1,16 +1,69 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../bloc/dashboard/dashboard_cubit.dart';
+import '../../../bloc/inventory/inventory_cubit.dart';
 import '../../../bloc/orders/orders_cubit.dart';
 import '../../../bloc/pos/pos_cubit.dart';
+import '../../../bloc/staff/staff_cubit.dart';
 import '../../../core/constants/colors.dart';
 import '../../../core/constants/motion.dart';
+import '../../../data/remote/api_client.dart';
+import '../../../data/repositories/event_repository.dart';
+import '../../../data/repositories/refund_repository.dart';
+import '../../../data/repositories/vendor_payment_method_repository.dart';
+import '../../widgets/app_message.dart';
+import '../../../data/repositories/settings_repository.dart';
+import '../../../models/company.dart';
+import '../../../models/receipt.dart';
+import '../../../models/refund.dart';
+import '../../../services/refund_receipt_builder.dart';
+import 'widgets/refund_receipt_dialog.dart';
 import '../../widgets/app_dropdown.dart';
 import '../../widgets/bazaar_search_field.dart';
 import '../../widgets/bazaar_status_filter_button.dart';
+import '../../widgets/skeleton.dart';
+import 'widgets/orders_skeletons.dart';
+import 'widgets/refund_dialog.dart';
+import 'widgets/refund_slot.dart';
 import '../../../models/bazaar_event.dart';
 import '../../../models/user.dart';
 import '../../../core/utils/formatters.dart';
+
+/// The line under a customer's name: when, how it was paid, and who sold it.
+///
+/// "Sold by" is left off a sale that does not say, rather than printing a blank
+/// or a guess.
+String orderSubLine({
+  required String time,
+  required String method,
+  String? soldBy,
+}) => [time, method, if (soldBy != null) 'Sold by $soldBy'].join(' · ');
+
+/// The line under a refund's customer: when the money went back, by what, and
+/// whose password approved it.
+String refundSubLine({
+  required String time,
+  required String method,
+  String? approvedBy,
+}) => [
+  time,
+  method,
+  if (approvedBy != null && approvedBy.isNotEmpty) 'Approved by $approvedBy',
+].join(' · ');
+
+/// "12 orders found", with the refunds beside them when there are any.
+///
+/// Orders are sales. A refund is a row in the same table but not another
+/// order, so it is counted on its own rather than inflating the figure.
+String ordersFoundCaption(List<TransactionRecord> records) {
+  final refunds = records.where((r) => r.isRefund).length;
+  final orders = records.length - refunds;
+  final base = '$orders order${orders == 1 ? '' : 's'} found';
+  return refunds == 0
+      ? base
+      : '$base · $refunds refund${refunds == 1 ? '' : 's'}';
+}
 
 class OrdersScreen extends StatefulWidget {
   const OrdersScreen({super.key, required this.user});
@@ -22,6 +75,11 @@ class OrdersScreen extends StatefulWidget {
 }
 
 class _OrdersScreenState extends State<OrdersScreen> {
+  /// Set on each build and read by the rows, which are built lazily by the list
+  /// and would otherwise each have to look the same two things up again.
+  late AppUser _actingUser = widget.user;
+  Map<int, String> _staffNames = const {};
+
   final TextEditingController _searchController = TextEditingController();
 
   /// Separate from the transaction search: this one filters the list of
@@ -74,6 +132,14 @@ class _OrdersScreenState extends State<OrdersScreen> {
           ...state.records.map((r) => r.paymentMethod.trim()),
         }.where((value) => value.isNotEmpty).toList();
 
+        // The freshest assignments the server has given, for deciding who may
+        // refund, in place of the ones captured at sign-in.
+        _actingUser = state.withFreshAssignments(widget.user);
+        _staffNames = {
+          for (final person in context.watch<StaffCubit>().state)
+            person.id: person.name,
+        };
+
         final query = _searchController.text.trim().toLowerCase();
         var records = state.visibleRecords(widget.user);
         if (query.isNotEmpty) {
@@ -85,6 +151,10 @@ class _OrdersScreenState extends State<OrdersScreen> {
               )
               .toList();
         }
+
+        // Only while there is nothing to show; a reload over a populated table
+        // keeps the rows on screen rather than blanking them to grey.
+        final showSkeleton = state.isLoading && state.records.isEmpty;
 
         final eventName = state.selectedEventId == null
             ? null
@@ -167,12 +237,20 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 ],
               ),
               const SizedBox(height: 10),
-              Text(
-                '${records.length} order${records.length == 1 ? '' : 's'} found',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: Colors.black38),
-              ),
+              if (showSkeleton)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 2),
+                  child: SkeletonBreathing(
+                    child: SkeletonBar(width: 76, height: 11),
+                  ),
+                )
+              else
+                Text(
+                  ordersFoundCaption(records),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: Colors.black38),
+                ),
               const SizedBox(height: 16),
               Expanded(
                 child: Container(
@@ -181,7 +259,15 @@ class _OrdersScreenState extends State<OrdersScreen> {
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(color: const Color(0xFFEDEDF1)),
                   ),
-                  child: records.isEmpty
+                  child: showSkeleton
+                      ? Column(
+                          children: [
+                            _tableHeader(context),
+                            const Divider(height: 1, color: Color(0xFFEDEDF1)),
+                            const Expanded(child: OrderRowsSkeleton()),
+                          ],
+                        )
+                      : records.isEmpty
                       ? _emptyState(context)
                       : _transactionTable(context, records),
                 ),
@@ -252,6 +338,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
             flex: 2,
             child: Text('TOTAL', style: style, textAlign: TextAlign.center),
           ),
+          const SizedBox(width: kRefundColumnWidth),
         ],
       ),
     );
@@ -291,8 +378,20 @@ class _OrdersScreenState extends State<OrdersScreen> {
                   // Time and payment method, not the date: every row in one
                   // bazaar shares the date, so repeating it down the column
                   // says nothing while the payment method -- which this
-                  // screen can filter by -- was not shown at all.
-                  '${_fmtTime(record.timestamp)} · ${record.paymentMethod}',
+                  // screen can filter by -- was not shown at all. Then who
+                  // sold it, since everyone assigned to the bazaar sees every
+                  // sale and the person refunding is rarely the seller.
+                  record.isRefund
+                      ? refundSubLine(
+                          time: _fmtTime(record.timestamp),
+                          method: record.paymentMethod,
+                          approvedBy: record.approvedByName,
+                        )
+                      : orderSubLine(
+                          time: _fmtTime(record.timestamp),
+                          method: record.paymentMethod,
+                          soldBy: _soldByName(record.userId),
+                        ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodySmall?.copyWith(
@@ -349,16 +448,126 @@ class _OrdersScreenState extends State<OrdersScreen> {
           Expanded(
             flex: 2,
             child: Text(
-              formatPeso(record.total),
+              // `-PHP 1,900.00` in the error colour for a refund: money out.
+              formatPesoSigned(record.total),
               textAlign: TextAlign.center,
               style: theme.textTheme.bodyMedium?.copyWith(
                 fontWeight: FontWeight.w700,
+                color: record.isRefund ? AppColors.error : null,
               ),
+            ),
+          ),
+          SizedBox(
+            width: kRefundColumnWidth,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: _refundSlot(context, record),
             ),
           ),
         ],
       ),
     );
+  }
+
+  Widget _refundSlot(BuildContext context, TransactionRecord record) {
+    final event = context
+        .read<PosCubit>()
+        .state
+        .events
+        .where((e) => e.id == record.eventId)
+        .firstOrNull;
+    return RefundSlot(
+      record: record,
+      event: event,
+      user: _actingUser,
+      refunds: context.read<RefundRepository>(),
+      onRefund: () => _refund(record, event!),
+    );
+  }
+
+  Future<void> _refund(TransactionRecord record, BazaarEvent event) async {
+    // Everything that survives the dialog is taken before it opens.
+    final refunds = context.read<RefundRepository>();
+    final vendorMethods = context.read<VendorPaymentMethodRepository>();
+    final events = context.read<EventRepository>();
+    final posCubit = context.read<PosCubit>();
+    final dashboardCubit = context.read<DashboardCubit>();
+    final inventoryCubit = context.read<InventoryCubit>();
+    final ordersCubit = context.read<OrdersCubit>();
+    final settings = context.read<SettingsRepository>();
+
+    final refund = await showRefundDialog(
+      context: context,
+      record: record,
+      event: event,
+      refunds: refunds,
+      loadMethods: vendorMethods.catalog,
+      soldByName: _soldByName(record.userId),
+    );
+    if (refund == null) {
+      return;
+    }
+
+    // The stock came back and the sale is Returned, so every screen that
+    // counts either has to be read again. The sales and refunds were already
+    // reloaded by the repository.
+    try {
+      await events.refresh();
+    } on ApiException {
+      // The refund stands; the next refresh catches the stock up.
+    }
+    await posCubit.load(widget.user);
+    await dashboardCubit.load(widget.user);
+    await inventoryCubit.load();
+    await ordersCubit.load();
+
+    // The receipt, offered: the refund is done, and whether the customer is
+    // handed a copy is the person's call. Shown over the app's own navigator
+    // because this screen may have been left while the refund was reloading.
+    final overlay = appNavigatorKey.currentState?.overlay?.context;
+    if (overlay == null) {
+      return;
+    }
+    final receipt = await _refundReceiptFor(settings, refund, record, event);
+    if (!overlay.mounted) {
+      return;
+    }
+    await showRefundReceiptDialog(context: overlay, data: receipt);
+  }
+
+  /// What the refund receipt prints. The store and venue heads are read now, and
+  /// a failure to read them costs the heading, never the receipt: the money has
+  /// already gone back.
+  Future<RefundReceiptData> _refundReceiptFor(
+    SettingsRepository settings,
+    Refund refund,
+    TransactionRecord record,
+    BazaarEvent event,
+  ) async {
+    var storeName = '';
+    Company? venue;
+    try {
+      storeName = await settings.storeName();
+      final companies = await settings.listCompanies();
+      venue = companies.where((c) => c.id == event.companyId).firstOrNull;
+    } catch (_) {
+      // Printed without the heading rather than not at all.
+    }
+    return buildRefundReceipt(
+      refund: refund,
+      sale: record,
+      event: event,
+      storeName: storeName,
+      venue: venue,
+    );
+  }
+
+  /// Who rang the sale up, or null where the sale does not say.
+  String? _soldByName(int userId) {
+    if (userId <= 0) {
+      return null;
+    }
+    return _staffNames[userId] ?? 'Employee #$userId';
   }
 
   static String _fmtTime(DateTime value) {
@@ -402,6 +611,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
     return BlocBuilder<PosCubit, PosState>(
       builder: (context, state) {
         final theme = Theme.of(context);
+        final showSkeleton = state.isLoading && state.events.isEmpty;
         final query = _bazaarSearch.text.trim().toLowerCase();
         final visible = state.events.where((event) {
           if (_bazaarStatusFilter != null &&
@@ -461,15 +671,43 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 ],
               ),
               const SizedBox(height: 10),
-              Text(
-                '${visible.length} bazaar${visible.length == 1 ? '' : 's'} found',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: Colors.black38,
+              if (showSkeleton)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 2),
+                  child: SkeletonBreathing(
+                    child: SkeletonBar(width: 84, height: 11),
+                  ),
+                )
+              else
+                Text(
+                  '${visible.length} bazaar${visible.length == 1 ? '' : 's'} found',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: Colors.black38,
+                  ),
                 ),
-              ),
               const SizedBox(height: 16),
               Expanded(
-                child: visible.isEmpty
+                child: showSkeleton
+                    ? Semantics(
+                        label: 'Loading bazaars',
+                        child: ExcludeSemantics(
+                          child: GridView.builder(
+                            padding: EdgeInsets.zero,
+                            physics: const NeverScrollableScrollPhysics(),
+                            gridDelegate:
+                                const SliverGridDelegateWithMaxCrossAxisExtent(
+                                  maxCrossAxisExtent: 320,
+                                  mainAxisExtent: 152,
+                                  crossAxisSpacing: 16,
+                                  mainAxisSpacing: 16,
+                                ),
+                            itemCount: 6,
+                            itemBuilder: (_, __) =>
+                                const OrdersBazaarCardSkeleton(),
+                          ),
+                        ),
+                      )
+                    : visible.isEmpty
                     ? Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,

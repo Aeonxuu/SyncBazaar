@@ -74,6 +74,7 @@ class Sale {
     required this.employeeId,
     this.referenceSource,
     this.originServer,
+    this.serverId,
     required this.paymentMethod,
     required this.qty,
     required this.total,
@@ -131,6 +132,16 @@ class Sale {
   /// problem this prevents.
   final String? originServer;
 
+  /// The id the server gave this sale, which is the only one its endpoints
+  /// understand.
+  ///
+  /// Not [id]. That one is made up at the till from the clock, so it means
+  /// nothing outside this device, and a refund addressed with it asks the
+  /// server for a sale that does not exist. Null until the server has
+  /// confirmed the sale: a sale read back from the server has it from the
+  /// start, one rung up here learns it from the reply to its upload.
+  final int? serverId;
+
   final String paymentMethod;
   final int qty;
   final double total;
@@ -156,6 +167,7 @@ class Sale {
     'employee_id': employeeId,
     'reference_source': referenceSource?.name,
     'origin_server': originServer,
+    'server_id': serverId,
     'payment_method': paymentMethod,
     'qty': qty,
     'total': total,
@@ -184,6 +196,7 @@ class Sale {
         .where((source) => source.name == json['reference_source'])
         .firstOrNull,
     originServer: json['origin_server'] as String?,
+    serverId: (json['server_id'] as num?)?.toInt(),
     paymentMethod: json['payment_method'] as String? ?? 'CASH',
     qty: (json['qty'] as num).toInt(),
     total: (json['total'] as num).toDouble(),
@@ -199,6 +212,7 @@ class Sale {
     OrderStatus? orderStatus,
     bool? synced,
     String? originServer,
+    int? serverId,
   }) {
     return Sale(
       id: id,
@@ -219,6 +233,9 @@ class Sale {
       // connected now is a sale that will upload into the wrong database, and
       // the relabelling is exactly what restoring the queue would do.
       originServer: this.originServer ?? originServer,
+      // Learned once, from the server, and not overwritten by a later copy that
+      // does not know it.
+      serverId: serverId ?? this.serverId,
       paymentMethod: paymentMethod,
       qty: qty,
       total: total,

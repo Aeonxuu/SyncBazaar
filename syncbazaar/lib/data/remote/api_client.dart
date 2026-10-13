@@ -63,10 +63,15 @@ class ApiClient {
     String baseUrl = ApiConfig.baseUrl,
     ApiCache cache = const ApiCache(),
   }) : _http = httpClient ?? http.Client(),
+       _ownsClient = httpClient == null,
        _baseUrl = baseUrl,
        _cache = cache;
 
-  final http.Client _http;
+  http.Client _http;
+
+  /// Whether [_http] was made here, and so may be thrown away and remade. A
+  /// client handed in (a test's fake) is never replaced.
+  final bool _ownsClient;
   final String _baseUrl;
   final ApiCache _cache;
 
@@ -284,8 +289,14 @@ class ApiClient {
     return (name == null || name.isEmpty) ? null : name;
   }
 
-  Future<dynamic> post(String path, {Object? body}) =>
-      _send('POST', path, body: body);
+  /// [safeToRetry] says the server tolerates seeing this request twice, which
+  /// is what allows one automatic retry when a stale connection fails. Off by
+  /// default: repeating an ordinary POST could create something twice.
+  Future<dynamic> post(
+    String path, {
+    Object? body,
+    bool safeToRetry = false,
+  }) => _send('POST', path, body: body, safeToRetry: safeToRetry);
 
   Future<dynamic> put(String path, {Object? body}) =>
       _send('PUT', path, body: body);
@@ -295,7 +306,36 @@ class ApiClient {
 
   Future<dynamic> delete(String path) => _send('DELETE', path);
 
+  /// Sends, and on a dead connection remakes the client and tries once more.
+  ///
+  /// After the device drops off wifi and rejoins, the pooled connections are
+  /// dead but the client does not know. The first request on each fails, so the
+  /// first sync and the first refresh both failed while a restart, which builds
+  /// a fresh client, worked. Only an immediate failure is retried; a timeout is
+  /// not, because waiting out another one would double the pause.
   Future<dynamic> _send(
+    String method,
+    String path, {
+    Object? body,
+    String? cachePath,
+    bool safeToRetry = false,
+  }) async {
+    try {
+      return await _sendOnce(method, path, body: body, cachePath: cachePath);
+    } on ApiException catch (error) {
+      if (error.kind != ApiErrorKind.network || !_ownsClient) {
+        rethrow;
+      }
+      _http.close();
+      _http = http.Client();
+      if (method != 'GET' && !safeToRetry) {
+        rethrow;
+      }
+      return _sendOnce(method, path, body: body, cachePath: cachePath);
+    }
+  }
+
+  Future<dynamic> _sendOnce(
     String method,
     String path, {
     Object? body,
@@ -393,7 +433,12 @@ class ApiClient {
           final detail = field.value is List && (field.value as List).isNotEmpty
               ? (field.value as List).first.toString()
               : field.value.toString();
-          return '${field.key}: $detail';
+          // `non_field_errors` is DRF's name for a validation raised without a
+          // field of its own -- e.g. "Cannot sell on a finalized event." --
+          // and printing that key at a cashier is worse than printing nothing.
+          return field.key == 'non_field_errors'
+              ? detail
+              : '${field.key}: $detail';
         }
 
         for (final key in const ['error', 'detail', 'message']) {

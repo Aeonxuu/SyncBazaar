@@ -134,4 +134,34 @@ void main() {
       });
     });
   });
+
+  group('refund requests', () {
+    // The server raises RA when an owner picks a refund handler and RF for a
+    // refund awaiting approval. Neither is a statement of account, which is
+    // where the unknown-code fallback used to put them.
+    test('RA and RF are not listable', () {
+      expect(ApprovalApiMapper.isListable({'request_type': 'RA'}), isFalse);
+      expect(ApprovalApiMapper.isListable({'request_type': 'RF'}), isFalse);
+    });
+
+    test('every other request is still listed', () {
+      for (final code in ['ST', 'SA', 'EC', 'BF', null]) {
+        expect(
+          ApprovalApiMapper.isListable({'request_type': code}),
+          isTrue,
+          reason: '$code',
+        );
+      }
+    });
+
+    test('a refund request never maps to the statement-of-account type', () {
+      final listed = [
+        {'id': 1, 'request_type': 'RA', 'status': 'PD'},
+        {'id': 2, 'request_type': 'RF', 'status': 'PD'},
+        {'id': 3, 'request_type': 'SA', 'status': 'PD'},
+      ].where(ApprovalApiMapper.isListable).map(ApprovalApiMapper.fromJson);
+
+      expect(listed.map((r) => r.id), [3]);
+    });
+  });
 }

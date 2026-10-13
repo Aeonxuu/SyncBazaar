@@ -19,6 +19,7 @@ import 'bloc/settings/payment_methods_cubit.dart';
 import 'bloc/settings/settings_cubit.dart';
 import 'bloc/staff/staff_cubit.dart';
 import 'bloc/sync/sync_cubit.dart';
+import 'ui/widgets/app_message.dart';
 import 'core/constants/colors.dart';
 import 'core/routing/app_router.dart';
 import 'core/theme/app_theme.dart';
@@ -27,6 +28,7 @@ import 'data/repositories/auth_repository.dart';
 import 'data/repositories/event_repository.dart';
 import 'data/repositories/orders_repository.dart';
 import 'data/repositories/product_repository.dart';
+import 'data/repositories/refund_repository.dart';
 import 'data/repositories/sales_repository.dart';
 import 'data/repositories/settings_repository.dart';
 import 'data/repositories/vendor_payment_method_repository.dart';
@@ -52,6 +54,7 @@ import 'ui/screens/pre_bazaar/pre_bazaar_screen.dart';
 import 'ui/screens/settings/settings_screen.dart';
 import 'ui/screens/staff/staff_screen.dart';
 import 'ui/widgets/confirmation_dialog.dart';
+import 'ui/widgets/loading_dialog.dart';
 import 'ui/widgets/navigation_rail.dart';
 
 class SyncBazaarApp extends StatefulWidget {
@@ -86,6 +89,7 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
   late final ProductRepository _productRepository;
   late final SalesRepository _salesRepository;
   late final OrdersRepository _ordersRepository;
+  late final RefundRepository _refundRepository;
   late final ApprovalsRepository _approvalsRepository;
   late final SettingsRepository _settingsRepository;
   late final VendorPaymentMethodRepository _vendorPaymentMethodRepository;
@@ -117,6 +121,10 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
     // the combination it was sold from.
     _salesRepository = SalesRepository(auth: session, events: _eventRepository);
     _ordersRepository = OrdersRepository();
+    _refundRepository = RefundRepository(
+      auth: session,
+      sales: _salesRepository,
+    );
     // Null without a backend, so the in-memory build behaves exactly as before
     // and the POS has nothing to push to.
     _saleUploader = session == null
@@ -180,6 +188,9 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
         RepositoryProvider<ProductRepository>.value(value: _productRepository),
         RepositoryProvider<SalesRepository>.value(value: _salesRepository),
         RepositoryProvider<OrdersRepository>.value(value: _ordersRepository),
+        RepositoryProvider<RefundRepository>.value(value: _refundRepository),
+        // Null in the demo build, which has nowhere to send sales.
+        RepositoryProvider<SaleUploadService?>.value(value: _saleUploader),
         RepositoryProvider<SettingsRepository>.value(
           value: _settingsRepository,
         ),
@@ -214,8 +225,12 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
             ),
           ),
           BlocProvider(
-            create: (_) =>
-                OrdersCubit(_salesRepository, _productRepository)..load(),
+            create: (_) => OrdersCubit(
+              _salesRepository,
+              _productRepository,
+              events: _eventRepository,
+              uploader: _saleUploader,
+            )..load(),
           ),
           BlocProvider(
             create: (_) => ApprovalsCubit(
@@ -240,9 +255,7 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
             create: (_) =>
                 PaymentMethodsCubit(_vendorPaymentMethodRepository)..load(),
           ),
-          BlocProvider(
-            create: (_) => CatalogCubit(_productRepository)..load(),
-          ),
+          BlocProvider(create: (_) => CatalogCubit(_productRepository)..load()),
           BlocProvider(
             create: (_) =>
                 PreBazaarCubit(_approvalsRepository, _eventRepository),
@@ -256,6 +269,7 @@ class _SyncBazaarAppState extends State<SyncBazaarApp> {
           ),
         ],
         child: MaterialApp(
+          navigatorKey: appNavigatorKey,
           title: 'SyncBazaar',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.light,
@@ -325,12 +339,64 @@ class _MainShellState extends State<MainShell> {
   }
 
   void _loadForUser() {
-    context.read<DashboardCubit>().load(widget.user);
-    context.read<PosCubit>().load(widget.user);
+    // Reset before each load so nothing between login and the fetch
+    // resolving still shows the previous account's data -- the dashboard's
+    // KPIs, the POS product grid, and the nav rail's store name were all
+    // doing this, each for as long as their own load took.
+    context.read<DashboardCubit>()
+      ..reset()
+      ..load(widget.user);
+    context.read<PosCubit>()
+      ..reset()
+      ..load(widget.user);
     context.read<NotificationsCubit>().load();
+    // Who is on which bazaar. Only the Staff screen used to load this, which an
+    // employee never opens, so the till's seller picker had nobody to offer them.
+    context.read<StaffCubit>().load();
+    context.read<SettingsCubit>()
+      ..reset()
+      ..load();
+    // Cleared first, for the same reason as the rest: the bazaar picked and the
+    // rows shown belong to whoever was signed in before. Loading also sends any
+    // sale left unsent by an earlier account and learns which bazaars this one
+    // is assigned to.
+    context.read<OrdersCubit>()
+      ..reset()
+      ..load();
   }
 
+  /// Whether the Preparations form holds anything worth keeping, reported by
+  /// the screen itself. Never disposed: the screen clears it as it goes, and
+  /// a child can outlive this State's dispose. Owned here because the rail that can abandon the form
+  /// sits outside it, the same reason the sale guard is checked here.
+  final ValueNotifier<bool> _preBazaarHasProgress = ValueNotifier(false);
+
   Future<void> _handleSectionSelect(AppSection section) async {
+    // The form lives only in the screen, so leaving it throws it away: a bazaar
+    // name, dates, a whole stock allocation, gone on one stray tap of the rail.
+    if (section != _section &&
+        _section == AppSection.preBazaar &&
+        _preBazaarHasProgress.value) {
+      final leave = await showConfirmationDialog(
+        context: context,
+        title: 'Leave Preparations?',
+        message:
+            'Your progress on this bazaar will not be saved. You will have to '
+            'start over.',
+        // Staying is the filled, focused choice: nobody opened this asking to
+        // lose their work, they tapped away by accident. Leaving is the
+        // outlined one, reachable but not the thing Enter does.
+        confirmLabel: 'Leave',
+        cancelLabel: 'Stay',
+        emphasis: ConfirmationEmphasis.cancel,
+        outlineQuietButton: true,
+        icon: Icons.edit_note_rounded,
+      );
+      if (!leave || !mounted) {
+        return;
+      }
+    }
+
     // Leaving the POS mid-sale discards the cart, and the rail is the easiest
     // way to do it by accident — one stray tap while a customer waits. Asked
     // here rather than inside the POS because the rail sits outside it and the
@@ -350,6 +416,8 @@ class _MainShellState extends State<MainShell> {
         context.read<DashboardCubit>().load(widget.user);
       case AppSection.pos:
         context.read<PosCubit>().load(widget.user);
+        // The roster can change on another device while this one is open.
+        context.read<StaffCubit>().load();
       case AppSection.orders:
         context.read<OrdersCubit>().load();
       case AppSection.approvals:
@@ -382,7 +450,30 @@ class _MainShellState extends State<MainShell> {
   /// hand the tablet back.
   Future<void> _confirmLogout() async {
     final auth = context.read<AuthCubit>();
-    final pending = await context.read<SalesRepository>().listUnsyncedSales();
+    final sales = context.read<SalesRepository>();
+    final events = context.read<EventRepository>();
+    final orders = context.read<OrdersCubit>();
+    final uploader = context.read<SaleUploadService?>();
+    var pending = await sales.listUnsyncedSales();
+
+    // Tried before asking. A sale is sent the moment it is rung, but signing
+    // out straight afterwards can cut that off -- the token is gone before the
+    // request leaves -- and the sale then sits unsent through the next
+    // person's session, without the id the server needs to refund it. Sending
+    // here, while the session is still valid, is the last chance to do it as
+    // the person who made it.
+    if (pending.isNotEmpty && uploader != null && mounted) {
+      final dialogNavigator = Navigator.of(context, rootNavigator: true);
+      showLoadingDialog(context, 'Sending sales…');
+      try {
+        await uploader.uploadPending().timeout(const Duration(seconds: 20));
+      } catch (_) {
+        // Whatever happened, the question below reports what is still unsent.
+      } finally {
+        dialogNavigator.pop();
+      }
+      pending = await sales.listUnsyncedSales();
+    }
     if (!mounted) {
       return;
     }
@@ -399,10 +490,18 @@ class _MainShellState extends State<MainShell> {
       confirmLabel: 'Log out',
       cancelLabel: 'Stay signed in',
       emphasis: ConfirmationEmphasis.cancel,
+      outlineQuietButton: true,
     );
 
     if (confirmed == true) {
       await auth.logout();
+      // What the server told the last person is not the next person's picture:
+      // an employee is shown only their own bazaars, so the list held now would
+      // be the wrong one for the owner signing in next. Sales still unsent are
+      // kept, since they are the only copy of money already taken.
+      sales.clearSession();
+      events.invalidate();
+      orders.reset();
     }
   }
 
@@ -535,35 +634,37 @@ class _MainShellState extends State<MainShell> {
                   BlocBuilder<NotificationsCubit, NotificationsState>(
                     builder: (context, notificationsState) =>
                         BlocBuilder<ApprovalsCubit, List<ApprovalRequest>>(
-                          builder: (context, pendingApprovals) => BlocBuilder<
-                            ReconciliationCubit,
-                            ReconciliationState
-                          >(
-                            builder: (context, reconciliationState) =>
-                                SideNavigationRail(
-                                  groups: _navGroups,
-                                  selected: section,
-                                  onSelect: _handleSectionSelect,
-                                  isCollapsed: _isNavCollapsed,
-                                  onToggle: () => setState(
-                                    () => _isNavCollapsed = !_isNavCollapsed,
-                                  ),
-                                  onLogout: _confirmLogout,
-                                  isSyncing: syncState.isSyncing,
-                                  onSync: () =>
-                                      context.read<SyncCubit>().syncNow(),
-                                  syncMessage: syncState.lastMessage,
-                                  badges: {
-                                    AppSection.notifications:
-                                        notificationsState.unreadCount,
-                                    if (widget.user.isAdminOrOwner)
-                                      AppSection.approvals:
-                                          pendingApprovals.length,
-                                    AppSection.postBazaar:
-                                        reconciliationState.pendingCount,
-                                  },
-                                ),
-                          ),
+                          builder: (context, pendingApprovals) =>
+                              BlocBuilder<
+                                ReconciliationCubit,
+                                ReconciliationState
+                              >(
+                                builder: (context, reconciliationState) =>
+                                    SideNavigationRail(
+                                      groups: _navGroups,
+                                      selected: section,
+                                      onSelect: _handleSectionSelect,
+                                      isCollapsed: _isNavCollapsed,
+                                      onToggle: () => setState(
+                                        () =>
+                                            _isNavCollapsed = !_isNavCollapsed,
+                                      ),
+                                      onLogout: _confirmLogout,
+                                      isSyncing: syncState.isSyncing,
+                                      onSync: () =>
+                                          context.read<SyncCubit>().syncNow(),
+                                      syncMessage: syncState.lastMessage,
+                                      badges: {
+                                        AppSection.notifications:
+                                            notificationsState.unreadCount,
+                                        if (widget.user.isAdminOrOwner)
+                                          AppSection.approvals:
+                                              pendingApprovals.length,
+                                        AppSection.postBazaar:
+                                            reconciliationState.pendingCount,
+                                      },
+                                    ),
+                              ),
                         ),
                   ),
             ),
@@ -584,6 +685,7 @@ class _MainShellState extends State<MainShell> {
       case AppSection.preBazaar:
         return PreBazaarScreen(
           user: widget.user,
+          hasProgress: _preBazaarHasProgress,
           onOpenApprovals: () => _handleSectionSelect(AppSection.approvals),
         );
       case AppSection.pos:

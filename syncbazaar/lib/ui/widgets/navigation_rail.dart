@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../bloc/settings/settings_cubit.dart';
 import '../../core/constants/colors.dart';
 import '../../core/constants/motion.dart';
 import '../../core/routing/app_router.dart';
@@ -192,6 +194,9 @@ class _Brand extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final storeName = context.watch<SettingsCubit>().state.storeName;
+    final brandLabel = storeName.isEmpty ? 'SyncBazaar' : storeName;
+
     final logo = ClipRRect(
       borderRadius: BorderRadius.circular(8),
       child: Image.asset(
@@ -223,11 +228,12 @@ class _Brand extends StatelessWidget {
         children: [
           logo,
           const SizedBox(width: 10),
-          const Expanded(
+          Expanded(
             child: Text(
-              'SyncBazaar',
+              brandLabel,
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
@@ -575,7 +581,12 @@ class _SyncIconState extends State<_SyncIcon>
       color: Colors.white.withValues(alpha: 0.6),
     );
     if (!widget.isSyncing) return icon;
-    return RotationTransition(turns: _controller, child: icon);
+    // Counter-clockwise: the controller still runs 0→1 on a plain repeat(),
+    // the tween just walks it backwards so the icon turns the other way.
+    return RotationTransition(
+      turns: Tween<double>(begin: 1, end: 0).animate(_controller),
+      child: icon,
+    );
   }
 }
 

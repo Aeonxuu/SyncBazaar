@@ -27,6 +27,11 @@ Map<String, dynamic> saleUploadPayload({
     'quantity': sale.qty,
     'order_status': 'CM',
     'synced': true,
+    // Who made the sale, which is not always the account signed in: a shared
+    // tablet is used by whoever is at the stall. The batch endpoint has to
+    // honour this for per-employee figures to be right; until it does it still
+    // credits the signed-in user and ignores the field.
+    if (sale.soldById > 0) 'sold_by': sale.soldById,
     if (methodIds[sale.paymentMethod.trim().toUpperCase()] != null)
       'payment_method': methodIds[sale.paymentMethod.trim().toUpperCase()],
     if (reference.isNotEmpty) 'required_information': reference,
@@ -87,7 +92,24 @@ class SaleUploadService {
   /// checkout path can ignore the result: an unreachable server is the normal
   /// state at a bazaar, not an error worth interrupting a queue of customers
   /// for. The unsynced flag is what remembers the work.
-  Future<SaleUploadResult> uploadPending() async {
+  Future<SaleUploadResult> uploadPending() {
+    // One at a time. A sale triggers an upload the moment it is rung, and a
+    // second trigger -- the Sync button, logging out, opening Orders -- can
+    // arrive while that one is still on the wire. Run side by side they send
+    // the same sales twice; the server's client uuid makes that harmless, but
+    // the second would also race the first to mark them synced. Chained, the
+    // second starts when the first is done and finds nothing left to send.
+    final previous = _running;
+    final next = (previous ?? Future<void>.value())
+        .catchError((_) {})
+        .then((_) => _uploadPending());
+    _running = next.then<void>((_) {}, onError: (_) {});
+    return next;
+  }
+
+  Future<void>? _running;
+
+  Future<SaleUploadResult> _uploadPending() async {
     final queued = await _sales.listUnsyncedSales();
     final here = _auth.api.baseUrl;
 
@@ -193,10 +215,13 @@ class SaleUploadService {
       return SaleUploadResult(uploaded: 0, skipped: skipped);
     }
 
+    final Object? reply;
     try {
-      await _auth.api.post(
+      reply = await _auth.api.post(
         '/api/bazaar/event/$eventId/batch-sale/',
         body: {'sales': payload},
+        // The client uuid on every row makes a repeat harmless.
+        safeToRetry: true,
       );
     } on ApiException catch (error) {
       debugPrint(
@@ -225,8 +250,33 @@ class SaleUploadService {
       );
     }
 
-    await _sales.markSynced(sent.toSet());
+    await _sales.markSynced(
+      sent.toSet(),
+      serverIds: _serverIdsFrom(reply, sent),
+    );
     return SaleUploadResult(uploaded: sent.length, skipped: skipped);
+  }
+
+  /// The server's id for each sale just uploaded.
+  ///
+  /// The reply lists one result per sale in the order they were sent, and a
+  /// repeat of an earlier upload reports the existing sale's id the same way.
+  /// A reply that does not line up with what was sent yields nothing rather
+  /// than ids guessed onto the wrong sales.
+  static Map<String, int> _serverIdsFrom(Object? reply, List<String> sent) {
+    final results = reply is Map ? reply['batch_results'] : null;
+    if (results is! List || results.length != sent.length) {
+      return const {};
+    }
+    final ids = <String, int>{};
+    for (var i = 0; i < sent.length; i++) {
+      final row = results[i];
+      final id = row is Map ? (row['sale_id'] as num?)?.toInt() : null;
+      if (id != null) {
+        ids[sent[i]] = id;
+      }
+    }
+    return ids;
   }
 
   Future<Map<String, int>> _loadPaymentMethodIds() async {

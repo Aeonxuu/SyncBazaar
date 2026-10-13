@@ -310,7 +310,10 @@ class ProductRepository {
   }
 
   /// Renames a category in place and returns the updated row.
-  Future<Category> renameCategory({required int id, required String name}) async {
+  Future<Category> renameCategory({
+    required int id,
+    required String name,
+  }) async {
     final auth = _auth;
     final vendorId = auth?.vendorId;
     if (auth == null || vendorId == null) {
@@ -348,7 +351,10 @@ class ProductRepository {
               body: {'name': name.trim()},
             )
             as Map<String, dynamic>;
-    final brand = Brand(id: id, name: updated['name'] as String? ?? name.trim());
+    final brand = Brand(
+      id: id,
+      name: updated['name'] as String? ?? name.trim(),
+    );
     final idx = _brands.indexWhere((b) => b.id == id);
     if (idx == -1) {
       _brands.add(brand);
@@ -501,9 +507,8 @@ class ProductRepository {
     final resolvedByGroup = <int, Map<String, ({int id, double extraPrice})>>{};
     final attributeIds = <int>[];
 
-    var attributes =
-        (await api.get('/api/core/attribute/') as List)
-            .cast<Map<String, dynamic>>();
+    var attributes = (await api.get('/api/core/attribute/') as List)
+        .cast<Map<String, dynamic>>();
 
     for (var i = 0; i < groups.length; i++) {
       final group = groups[i];
@@ -631,8 +636,11 @@ class ProductRepository {
           );
           desired[key] = {
             'attribute_values': [entryA.value.id, entryB.value.id],
-            'price': (lowestPrice + entryA.value.extraPrice + entryB.value.extraPrice)
-                .toStringAsFixed(2),
+            'price':
+                (lowestPrice +
+                        entryA.value.extraPrice +
+                        entryB.value.extraPrice)
+                    .toStringAsFixed(2),
             'stock_quantity':
                 combinationStocks[combinationValueKey(
                   entryA.key,
@@ -703,14 +711,18 @@ class ProductRepository {
       }
     }
 
-    final localOnly = <int, ({ProductStatus status, String? description, Uint8List? imageBytes})>{
-      for (final product in _products)
-        product.id: (
-          status: product.status,
-          description: product.description,
-          imageBytes: product.imageBytes,
-        ),
-    };
+    final localOnly =
+        <
+          int,
+          ({ProductStatus status, String? description, Uint8List? imageBytes})
+        >{
+          for (final product in _products)
+            product.id: (
+              status: product.status,
+              description: product.description,
+              imageBytes: product.imageBytes,
+            ),
+        };
 
     await refresh();
 

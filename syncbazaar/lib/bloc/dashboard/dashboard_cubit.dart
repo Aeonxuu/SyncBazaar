@@ -4,6 +4,7 @@ import '../../data/repositories/event_repository.dart';
 import '../../data/repositories/product_repository.dart';
 import '../../data/repositories/sales_repository.dart';
 import '../../models/bazaar_event.dart';
+import '../../models/refund.dart';
 import '../../models/sale.dart';
 import '../../models/user.dart';
 import '../../services/dashboard_analytics_service.dart';
@@ -174,6 +175,14 @@ class DashboardCubit extends Cubit<DashboardState> {
     }
   }
 
+  /// Drops back to the default (unloaded) state, synchronously.
+  ///
+  /// Called right before [load] on a fresh login. Without it, the KPIs and
+  /// top-product figures from whichever account was signed in before stay on
+  /// screen for the whole time [load]'s awaits take to resolve -- one
+  /// account's numbers shown under another account's session.
+  void reset() => emit(const DashboardState());
+
   Future<void> load(AppUser user) async {
     final rawEvents = await _eventRepository.listVisibleForUser(user);
     final events = rawEvents;
@@ -239,6 +248,7 @@ class DashboardCubit extends Cubit<DashboardState> {
 
     _allOrders = _buildCustomerHistoryFromSales(
       sales: salesForVisibleEvents,
+      refunds: await _salesRepository.listRefunds(),
       eventNameById: eventNameById,
     );
 
@@ -397,6 +407,7 @@ class DashboardCubit extends Cubit<DashboardState> {
       final total = filteredSales
           .where(
             (sale) =>
+                sale.orderStatus == OrderStatus.completed &&
                 sale.timestamp.year == day.year &&
                 sale.timestamp.month == day.month &&
                 sale.timestamp.day == day.day,
@@ -408,10 +419,29 @@ class DashboardCubit extends Cubit<DashboardState> {
     return daily;
   }
 
+  /// The recent-orders rows: every sale, and beside them every refund as money
+  /// going out.
+  ///
+  /// Refunds are for display only. They are not in [_visibleSales], so nothing
+  /// that sums revenue can reach them.
   List<CustomerHistoryData> _buildCustomerHistoryFromSales({
     required List<Sale> sales,
+    List<Refund> refunds = const [],
     required Map<int, String> eventNameById,
   }) {
+    final refundRows = [
+      for (final refund in refunds)
+        // Only the bazaars the dashboard covers, the same as the sales.
+        if (eventNameById.containsKey(refund.eventId))
+          CustomerHistoryData(
+            timestamp: refund.createdAt,
+            customerName: normalizeCustomerName(refund.customerName),
+            bazaarName: eventNameById[refund.eventId]!,
+            paymentMethod: refund.methodName,
+            amount: -refund.amount,
+            status: 'Refunded',
+          ),
+    ];
     final rows =
         sales
             .map(
@@ -429,6 +459,7 @@ class DashboardCubit extends Cubit<DashboardState> {
               ),
             )
             .toList()
+          ..addAll(refundRows)
           ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
     return rows;
   }
@@ -476,12 +507,16 @@ _DashboardMetrics _metricsForFilter({
     eventNameById: eventNameById,
   );
 
+  // Revenue is what was kept. A returned sale -- every refunded sale is one --
+  // is left out, since its money went back out; refund amounts are never
+  // subtracted as well, which would take the same money off twice. Total Orders
+  // below still counts every sale, returned or not.
+  final kept = filteredSales
+      .where((sale) => sale.orderStatus == OrderStatus.completed)
+      .toList();
   final now = DateTime.now();
-  final totalRevenue = filteredSales.fold<double>(
-    0,
-    (sum, sale) => sum + sale.total,
-  );
-  final todayRevenue = filteredSales
+  final totalRevenue = kept.fold<double>(0, (sum, sale) => sum + sale.total);
+  final todayRevenue = kept
       .where(
         (sale) =>
             sale.timestamp.year == now.year &&

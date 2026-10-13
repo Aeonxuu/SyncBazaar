@@ -36,6 +36,27 @@ void main() {
       expect(events.map((e) => e.name), ['August Fair']);
     });
 
+    test('knows which bazaars are finalized, for the refund button', () {
+      const finalized = '''
+      [{"id": 15, "establishment": 6, "name": "Closed", "is_approved": true,
+        "is_finalized": true, "start_date": "2026-08-03T00:00:00Z",
+        "end_date": "2026-08-07T00:00:00Z"},
+       {"id": 16, "establishment": 6, "name": "Open", "is_approved": true,
+        "is_finalized": false, "start_date": "2026-08-03T00:00:00Z",
+        "end_date": "2026-08-07T00:00:00Z"},
+       {"id": 17, "establishment": 6, "name": "Older server",
+        "is_approved": true, "start_date": "2026-08-03T00:00:00Z",
+        "end_date": "2026-08-07T00:00:00Z"}]
+      ''';
+
+      final events = mapEventsResponse(
+        jsonDecode(finalized) as List,
+        statusFor: fixedStatus,
+      );
+
+      expect(events.map((e) => e.isFinalized), [true, false, false]);
+    });
+
     test('a bazaar from a server without the field is kept', () {
       // Absent is not false: dropping these would empty the app against any
       // backend that has not deployed the approval flow.

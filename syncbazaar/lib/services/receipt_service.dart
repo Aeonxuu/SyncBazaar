@@ -38,6 +38,35 @@ class ReceiptService {
   Future<String> printReceipt(
     ReceiptData data, {
     required BuildContext context,
+  }) {
+    return _capture(
+      ReceiptDocument(data: data),
+      estimatedHeight: ReceiptDocument.estimateHeight(data),
+      fileName: data.fileName,
+      context: context,
+    );
+  }
+
+  /// Renders a refund receipt, saves it the same way, and returns where it
+  /// landed. The same pipeline as [printReceipt]: a refund receipt is a second
+  /// document, not a second way of exporting one.
+  Future<String> printRefundReceipt(
+    RefundReceiptData data, {
+    required BuildContext context,
+  }) {
+    return _capture(
+      RefundReceiptDocument(data: data),
+      estimatedHeight: RefundReceiptDocument.estimateHeight(data),
+      fileName: data.fileName,
+      context: context,
+    );
+  }
+
+  Future<String> _capture(
+    Widget document, {
+    required double estimatedHeight,
+    required String fileName,
+    required BuildContext context,
   }) async {
     // No font loading to wait on: Inter ships with the app (see AppTheme
     // .fontFamily), so it is available from the first frame and the capture
@@ -52,15 +81,15 @@ class ReceiptService {
     }
 
     final bytes = await ScreenshotController().captureFromLongWidget(
-      ReceiptDocument(data: data),
+      document,
       // Passing context makes the package wrap the document in the app's
       // InheritedTheme and MediaQuery, so AppTheme and Inter carry into the
       // detached render tree. It also wraps it in a *transparent* Material,
-      // which is why ReceiptDocument paints its own white background.
+      // which is why the documents paint their own white background.
       context: context,
-      pixelRatio: _pixelRatioFor(data),
+      pixelRatio: _pixelRatioFor(estimatedHeight),
       // Width pinned, height free: this is what makes the PNG grow with the
-      // basket instead of being cropped to a viewport.
+      // content instead of being cropped to a viewport.
       constraints: const BoxConstraints(
         minWidth: ReceiptDocument.width,
         maxWidth: ReceiptDocument.width,
@@ -71,7 +100,7 @@ class ReceiptService {
       delay: const Duration(milliseconds: 120),
     );
 
-    return saver.save(bytes, data.fileName);
+    return saver.save(bytes, fileName);
   }
 
   /// Picks the largest pixel ratio that keeps both dimensions under the texture
@@ -87,8 +116,7 @@ class ReceiptService {
   /// would need to be captured in tiles and stitched. A single bazaar
   /// transaction with 70 distinct products is far outside what a stall till
   /// does, so that is left unbuilt rather than built untested.
-  static double _pixelRatioFor(ReceiptData data) {
-    final estimatedHeight = ReceiptDocument.estimateHeight(data);
+  static double _pixelRatioFor(double estimatedHeight) {
     final longestSide = math.max(ReceiptDocument.width, estimatedHeight);
     final ceiling = _maxTextureDimension / longestSide;
     return ceiling.clamp(1.0, _preferredPixelRatio).toDouble();

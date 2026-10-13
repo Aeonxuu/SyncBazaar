@@ -42,16 +42,35 @@ class _SalesLineChart extends StatelessWidget {
 
   static const _labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-  /// Uniform gridline step. Axis labels must be evenly spaced in *value* as
-  /// well as in pixels — an axis that jumped 0 → 5k → 10k → 20k would draw
-  /// equal gaps for unequal amounts and visually misreport the data.
-  static const double _yInterval = 5000;
-
-  /// Baseline top of the axis. Grown (never clipped) when a day exceeds it,
-  /// so a peak above ₱35k is still drawn truthfully instead of cut off.
-  static const double _baselineMaxY = 35000;
+  /// Floor for the gridline step so a near-zero week (or a single centavo
+  /// sale) doesn't produce a degenerate, near-infinitely-fine grid.
+  static const double _minInterval = 5;
 
   static const Color _gridColor = Color(0xFFECECF2);
+
+  /// Picks a "nice" gridline step (1/2/5 × a power of ten) sized to the
+  /// store's own week, so a ₱150-a-day booth and a ₱2,300-a-pair shoe stall
+  /// each get an axis their sales actually move on, instead of sharing one
+  /// fixed ₱0–35k scale that flattens the smaller store to a line at zero.
+  static double _niceInterval(double dataMax) {
+    if (dataMax <= 0) return _minInterval;
+    final rough = dataMax / 6;
+    final magnitude = math
+        .pow(10, (math.log(rough) / math.ln10).floor())
+        .toDouble();
+    final normalized = rough / magnitude;
+    final double niceNormalized;
+    if (normalized <= 1) {
+      niceNormalized = 1;
+    } else if (normalized <= 2) {
+      niceNormalized = 2;
+    } else if (normalized <= 5) {
+      niceNormalized = 5;
+    } else {
+      niceNormalized = 10;
+    }
+    return math.max(_minInterval, niceNormalized * magnitude);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -59,10 +78,10 @@ class _SalesLineChart extends StatelessWidget {
         ? dailySales
         : List<double>.filled(_labels.length, 0);
     final dataMax = data.fold<double>(0, math.max);
-    final maxY = math.max(
-      _baselineMaxY,
-      (dataMax / _yInterval).ceil() * _yInterval,
-    );
+    final yInterval = _niceInterval(dataMax);
+    final maxY = dataMax <= 0
+        ? yInterval * 4
+        : (dataMax / yInterval).ceil() * yInterval;
 
     final axisLabelStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
       color: Colors.black45,
@@ -81,7 +100,7 @@ class _SalesLineChart extends StatelessWidget {
         // Checkered plot area: horizontal lines on every value gridline,
         // vertical lines on every weekday.
         gridData: FlGridData(
-          horizontalInterval: _yInterval,
+          horizontalInterval: yInterval,
           verticalInterval: 1,
           getDrawingHorizontalLine: (_) =>
               const FlLine(color: _gridColor, strokeWidth: 1),
@@ -100,7 +119,7 @@ class _SalesLineChart extends StatelessWidget {
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              interval: _yInterval,
+              interval: yInterval,
               reservedSize: 38,
               getTitlesWidget: (value, meta) => Padding(
                 padding: const EdgeInsets.only(right: 6),
@@ -188,10 +207,14 @@ class _SalesLineChart extends StatelessWidget {
     );
   }
 
-  /// `0`, `10k`, `70k` — keeps the left gutter narrow enough that the plot
-  /// area, not the axis, gets the space in a side-by-side dashboard card.
+  /// `0`, `150`, `10k`, `70k` — keeps the left gutter narrow enough that the
+  /// plot area, not the axis, gets the space in a side-by-side dashboard
+  /// card. Sub-1000 values are shown whole rather than "k"-rounded, since a
+  /// gridline step below 1000 (a low-price booth's chart) would otherwise
+  /// round every label down to the same "0".
   String _compactPeso(double value) {
     if (value == 0) return '0';
+    if (value.abs() < 1000) return value.round().toString();
     return '${(value / 1000).round()}k';
   }
 }

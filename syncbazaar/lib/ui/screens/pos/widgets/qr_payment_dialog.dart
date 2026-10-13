@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/constants/colors.dart';
 import '../../../../core/constants/motion.dart';
 import '../../../../core/utils/formatters.dart';
+import '../../../widgets/action_buttons.dart';
 
 /// Shows the customer the QR to scan, and takes the reference number back.
 ///
@@ -282,58 +283,20 @@ class _QrPaymentDialogState extends State<_QrPaymentDialog> {
   Widget _footer(ThemeData theme) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        mainAxisSize: MainAxisSize.min,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          // A disabled button has to say why it is disabled, rather than just
-          // refusing to respond.
-          if (!_canConfirm)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Text(
-                'Enter the ${widget.extraFieldLabel!.toLowerCase()} to continue.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: Colors.black45,
-                ),
-              ),
-            ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, null),
-                style: TextButton.styleFrom(
-                  foregroundColor: Colors.black54,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
-                  ),
-                ),
-                child: const Text('Cancel'),
-              ),
-              const SizedBox(width: 12),
-              ElevatedButton(
-                onPressed: _canConfirm ? _confirm : null,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: AppColors.primary.withValues(
-                    alpha: 0.35,
-                  ),
-                  disabledForegroundColor: Colors.white,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 22,
-                    vertical: 14,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                child: const Text('Payment Received'),
-              ),
-            ],
+          QuietActionButton(
+            label: 'Cancel',
+            color: Colors.black54,
+            outlined: true,
+            onPressed: () => Navigator.pop(context, null),
+          ),
+          const SizedBox(width: 12),
+          FilledActionButton(
+            label: 'Payment Received',
+            color: AppColors.primary,
+            onPressed: _canConfirm ? _confirm : null,
           ),
         ],
       ),

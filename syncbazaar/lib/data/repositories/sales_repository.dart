@@ -1,6 +1,12 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+
+import '../../models/refund.dart';
 import '../../models/sale.dart';
 import '../../services/local_store.dart';
 import '../remote/api_client.dart';
+import '../remote/refund_api_mapper.dart';
 import '../remote/sale_api_mapper.dart';
 import 'auth_repository.dart';
 import 'event_repository.dart';
@@ -37,6 +43,36 @@ class SalesRepository {
 
   final List<Sale> _sales = [];
 
+  final StreamController<void> _changes = StreamController<void>.broadcast();
+
+  /// Fires whenever what [listSales] and [listRefunds] would answer has changed
+  /// underneath a screen that already read it: a sale was rung up, an upload
+  /// confirmed one, or a refresh brought something back.
+  ///
+  /// Not for the first lazy load, which the reader is waiting on anyway. A
+  /// screen listens so it can show the new state without being left and
+  /// reopened -- a sale's refund button appears the moment its upload lands.
+  Stream<void> get changes => _changes.stream;
+
+  void _notifyChanged() {
+    if (!_changes.isClosed) {
+      _changes.add(null);
+    }
+  }
+
+  /// Refunds the server holds, newest data from the last load.
+  ///
+  /// Never queued or written to the device: a refund exists only once the
+  /// server has accepted it, so there is nothing local to lose and nothing to
+  /// upload. Joined to [_sales] by [Refund.saleId].
+  final List<Refund> _refunds = [];
+
+  /// Stands in for the server's refunds in tests, which have no server.
+  @visibleForTesting
+  void debugSetRefunds(List<Refund> refunds) => _refunds
+    ..clear()
+    ..addAll(refunds);
+
   Future<void> addSale(Sale sale) async {
     await _restoreQueue();
     // Stamped here rather than at the till, which has no idea what it is
@@ -51,6 +87,7 @@ class SalesRepository {
     // is done as soon as this returns, and a sale that is only in memory at
     // that moment is one a crash can take with the money already in the till.
     await _persistQueue();
+    _notifyChanged();
   }
 
   Future<List<Sale>> listUnsyncedSales() async {
@@ -69,6 +106,32 @@ class SalesRepository {
     return _sales;
   }
 
+  /// Every refund on the loaded bazaars, loaded together with the sales so one
+  /// refresh brings back both. Empty without a session.
+  Future<List<Refund>> listRefunds() async {
+    await _ensureLoaded();
+    return List<Refund>.unmodifiable(_refunds);
+  }
+
+  /// Forgets what the server told the last person who was signed in, and keeps
+  /// what only this device knows.
+  ///
+  /// Called on logout. Without it the next account on the tablet inherits the
+  /// previous one's picture, and because loading is skipped once a vendor has
+  /// been loaded it never gets its own: a sale made elsewhere in between, or a
+  /// refund, would not appear until something forced a refresh.
+  ///
+  /// Sales still waiting to upload stay. They are the only copy of money
+  /// already in the till, they belong to the device rather than to whoever was
+  /// signed in, and each names who sold it, so they upload correctly under
+  /// whichever account sends them.
+  void clearSession() {
+    _sales.removeWhere((sale) => sale.synced);
+    _refunds.clear();
+    _loadedVendorId = null;
+    _load = null;
+  }
+
   /// Re-reads the sales history, discarding what is held now.
   Future<void> refresh() async {
     if (_auth?.vendorId == null) {
@@ -76,6 +139,7 @@ class SalesRepository {
     }
     _loadedVendorId = null;
     await _ensureLoaded();
+    _notifyChanged();
   }
 
   Future<void> _ensureLoaded() async {
@@ -104,33 +168,18 @@ class SalesRepository {
   Future<void> _loadFromApi(AuthRepository auth, EventRepository events) async {
     _paymentMethodNames = await _loadPaymentMethodNames(auth);
 
-    final fetched = <Sale>[];
-    for (final event in await events.loadedEvents()) {
-      // Two requests per bazaar: the server keeps the amount and the payment
-      // apart. Worth knowing as the history grows -- a vendor with a season of
-      // bazaars behind them pays for all of it on every load, and this is
-      // where a date filter or a single vendor-wide endpoint would go.
-      final sales =
-          await auth.api.get('/api/bazaar/event/${event.id}/sale/') as List;
-      if (sales.isEmpty) {
-        continue;
-      }
-      final payments =
-          await auth.api.get('/api/bazaar/event/${event.id}/payment/') as List;
-
-      fetched.addAll(
-        mapSalesResponse(
-          sales,
-          eventId: event.id,
-          paymentsPayload: payments,
-          allocationKeyForStockId: (stockId) => events.allocationKeyForStockId(
-            eventId: event.id,
-            stockId: stockId,
-          ),
-          paymentMethodNameById: (id) => _paymentMethodNames[id] ?? 'CASH',
-        ),
-      );
-    }
+    // One bazaar's sales and payments are fetched together with every other
+    // bazaar's, instead of a bazaar at a time. Two requests each, and a season
+    // of bazaars made the sync button wait on all of them in a row.
+    final loaded = await events.loadedEvents();
+    final perEvent = await Future.wait([
+      for (final event in loaded) _fetchEventSales(auth, events, event.id),
+    ]);
+    final fetched = [for (final sales in perEvent) ...sales];
+    final perEventRefunds = await Future.wait([
+      for (final event in loaded) _fetchEventRefunds(auth, event.id),
+    ]);
+    final fetchedRefunds = [for (final refunds in perEventRefunds) ...refunds];
 
     // Restored first, so a sale queued before the last relaunch is counted as
     // pending below rather than being wiped by the clear.
@@ -144,7 +193,54 @@ class SalesRepository {
       ..clear()
       ..addAll(fetched)
       ..addAll(pending);
+    _refunds
+      ..clear()
+      ..addAll(fetchedRefunds);
     await _persistQueue();
+  }
+
+  /// One bazaar's refunds.
+  ///
+  /// A server that refuses or lacks the endpoint costs the refund rows, not
+  /// the sales: the history is worth showing without them. An unreachable
+  /// server is different -- that one rethrows, as the sales request beside it
+  /// already would have.
+  Future<List<Refund>> _fetchEventRefunds(
+    AuthRepository auth,
+    int eventId,
+  ) async {
+    try {
+      final payload =
+          await auth.api.get('/api/bazaar/event/$eventId/refund/') as List;
+      return RefundApiMapper.refundsFromPayload(payload, eventId: eventId);
+    } on ApiException catch (error) {
+      if (error.isOffline) {
+        rethrow;
+      }
+      return const [];
+    }
+  }
+
+  Future<List<Sale>> _fetchEventSales(
+    AuthRepository auth,
+    EventRepository events,
+    int eventId,
+  ) async {
+    final sales =
+        await auth.api.get('/api/bazaar/event/$eventId/sale/') as List;
+    if (sales.isEmpty) {
+      return const [];
+    }
+    final payments =
+        await auth.api.get('/api/bazaar/event/$eventId/payment/') as List;
+    return mapSalesResponse(
+      sales,
+      eventId: eventId,
+      paymentsPayload: payments,
+      allocationKeyForStockId: (stockId) =>
+          events.allocationKeyForStockId(eventId: eventId, stockId: stockId),
+      paymentMethodNameById: (id) => _paymentMethodNames[id] ?? 'CASH',
+    );
   }
 
   Future<Map<int, String>> _loadPaymentMethodNames(AuthRepository auth) async {
@@ -167,17 +263,28 @@ class SalesRepository {
   /// Keyed on [Sale.clientUuid] rather than the local id, because that is the
   /// only identifier both sides agree on — the server assigns its own id and
   /// the local one is a timestamp that means nothing to it.
-  Future<void> markSynced(Set<String> clientUuids) async {
+  ///
+  /// [serverIds] maps a client uuid to the id the server gave that sale, read
+  /// from the reply to the upload. Without it a sale rung up here is "synced"
+  /// yet still known only by its local id, which the server cannot look up.
+  Future<void> markSynced(
+    Set<String> clientUuids, {
+    Map<String, int> serverIds = const {},
+  }) async {
     if (clientUuids.isEmpty) {
       return;
     }
     await _restoreQueue();
     for (var i = 0; i < _sales.length; i++) {
       if (clientUuids.contains(_sales[i].clientUuid)) {
-        _sales[i] = _sales[i].copyWith(synced: true);
+        _sales[i] = _sales[i].copyWith(
+          synced: true,
+          serverId: serverIds[_sales[i].clientUuid],
+        );
       }
     }
     await _persistQueue();
+    _notifyChanged();
   }
 
   /// Reads back sales that were queued before the app last closed.

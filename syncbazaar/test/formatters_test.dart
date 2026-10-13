@@ -60,4 +60,44 @@ void main() {
       expect(formatCount(4.6), '5');
     });
   });
+
+  group('formatDateRange', () {
+    test('says the month once when both ends share it', () {
+      expect(
+        formatDateRange(DateTime(2026, 10, 12), DateTime(2026, 10, 16)),
+        'Oct 12 – 16, 2026',
+      );
+    });
+
+    test('names both months when the run crosses one', () {
+      expect(
+        formatDateRange(DateTime(2026, 10, 30), DateTime(2026, 11, 2)),
+        'Oct 30 – Nov 2, 2026',
+      );
+    });
+
+    test('names both years when the run crosses the new year', () {
+      expect(
+        formatDateRange(DateTime(2026, 12, 30), DateTime(2027, 1, 2)),
+        'Dec 30, 2026 – Jan 2, 2027',
+      );
+    });
+
+    test('reads a single day as a date, not a range', () {
+      expect(
+        formatDateRange(DateTime(2026, 10, 12), DateTime(2026, 10, 12)),
+        'Oct 12, 2026',
+      );
+    });
+
+    test('ignores the time of day on either end', () {
+      expect(
+        formatDateRange(
+          DateTime(2026, 10, 12, 18, 30),
+          DateTime(2026, 10, 16, 2, 5),
+        ),
+        'Oct 12 – 16, 2026',
+      );
+    });
+  });
 }

@@ -42,12 +42,16 @@ void main() {
       });
 
       expect(
-        await repository.verifyAccount(email: 'a@b.com', code: '123456'),
+        await repository.verifyAccount(
+          email: 'a@b.com',
+          code: '123456',
+          password: 'correcthorse',
+        ),
         isNull,
       );
     });
 
-    test('sends the email lowercased, with the code', () async {
+    test('sends the email lowercased, with the code and the new password', () async {
       Map<String, dynamic>? sent;
       final repository = repositoryReplying(
         {'detail': 'ok'},
@@ -55,10 +59,19 @@ void main() {
             sent = jsonDecode(request.body) as Map<String, dynamic>,
       );
 
-      await repository.verifyAccount(email: '  A@B.com ', code: ' 123456 ');
+      await repository.verifyAccount(
+        email: '  A@B.com ',
+        code: ' 123456 ',
+        password: 'correcthorse',
+      );
 
       expect(sent!['email'], 'a@b.com');
+      // `code`, not `verification_code` — matches `VerifyAccountSerializer`
+      // on the backend.
       expect(sent!['code'], '123456');
+      expect(sent!['password'], 'correcthorse');
+      // The server checks the match itself too, so both go over the wire.
+      expect(sent!['password_confirm'], 'correcthorse');
     });
 
     test('a wrong code returns the server wording', () async {
@@ -68,27 +81,35 @@ void main() {
       );
 
       expect(
-        await repository.verifyAccount(email: 'a@b.com', code: '000000'),
+        await repository.verifyAccount(
+          email: 'a@b.com',
+          code: '000000',
+          password: 'correcthorse',
+        ),
         contains('Invalid verification code'),
       );
     });
 
-    test('an expired code says so, which is a different fix', () async {
-      // Retyping fixes a wrong code. Only a new code fixes an expired one, so
-      // collapsing the two into "that did not work" sends someone in circles.
-      final repository = repositoryReplying(
-        {'detail': 'Verification code expired. Please request a new one.'},
-        status: 400,
-      );
+    test(
+      'an expired code returns the same generic message as a wrong one',
+      () async {
+        // Unlike a password reset, the server collapses wrong and expired
+        // verification codes into one message on purpose (anti-enumeration),
+        // so there is nothing for the client to distinguish here.
+        final repository = repositoryReplying(
+          {'error': 'Invalid email or code.'},
+          status: 400,
+        );
 
-      final failure = await repository.verifyAccount(
-        email: 'a@b.com',
-        code: '123456',
-      );
+        final failure = await repository.verifyAccount(
+          email: 'a@b.com',
+          code: '123456',
+          password: 'correcthorse',
+        );
 
-      expect(failure, contains('expired'));
-      expect(failure, isNot(contains('Invalid')));
-    });
+        expect(failure, 'Invalid email or code.');
+      },
+    );
   });
 
   group('asking for a new code', () {

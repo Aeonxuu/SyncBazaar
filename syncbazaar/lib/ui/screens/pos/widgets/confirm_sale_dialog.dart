@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/constants/colors.dart';
 import '../../../../core/constants/motion.dart';
 import '../../../../core/utils/formatters.dart';
+import '../../../widgets/action_buttons.dart';
 
 /// The last check before a sale is committed.
 ///
@@ -173,37 +174,21 @@ Future<bool> showConfirmSaleDialog({
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      TextButton(
+                      QuietActionButton(
+                        label: 'Cancel',
+                        color: Colors.black54,
+                        outlined: true,
                         onPressed: () => Navigator.pop(context, false),
-                        style: TextButton.styleFrom(
-                          foregroundColor: Colors.black54,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 10,
-                          ),
-                        ),
-                        child: const Text('Cancel'),
                       ),
                       const SizedBox(width: 12),
-                      ElevatedButton(
+                      FilledActionButton(
+                        label: 'Confirm sale',
+                        color: AppColors.primary,
                         // Focused on open so Enter commits and Esc backs
                         // out — at a till the keyboard is faster than the
                         // mouse, and this runs dozens of times a shift.
                         autofocus: true,
                         onPressed: () => Navigator.pop(context, true),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 22,
-                            vertical: 14,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        child: const Text('Confirm sale'),
                       ),
                     ],
                   ),

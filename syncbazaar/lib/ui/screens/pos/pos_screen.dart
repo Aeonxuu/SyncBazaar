@@ -1,5 +1,5 @@
-
 import 'package:flutter/material.dart';
+import '../../widgets/app_message.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../data/remote/api_client.dart';
@@ -15,8 +15,14 @@ import '../../../models/sale.dart' show ReferenceSource;
 import '../../../models/product_variant.dart';
 import '../../../models/user.dart';
 import '../../../data/repositories/product_repository.dart';
+import '../../../data/repositories/refund_repository.dart';
+import '../../widgets/action_buttons.dart';
 import '../../widgets/confirmation_dialog.dart';
+import '../../widgets/detail_rows.dart';
+import '../../widgets/info_hint.dart';
+import '../../widgets/loading_dialog.dart';
 import '../../widgets/offline_data_notice.dart';
+import '../../widgets/refund_handler_field.dart';
 import 'widgets/discard_sale_guard.dart';
 import '../../widgets/date_range_picker_dialog.dart';
 import '../../widgets/custom_card.dart';
@@ -32,7 +38,10 @@ import '../../widgets/bazaar_status_filter_button.dart';
 import '../../widgets/quantity_stepper.dart';
 import '../../widgets/product_thumbnail.dart';
 import '../../widgets/selectable_option_button.dart';
+import '../../widgets/skeleton.dart';
+import 'widgets/bazaar_card_skeleton.dart';
 import 'widgets/pos_product_card.dart';
+import 'widgets/seller_button.dart';
 import '../../../core/utils/formatters.dart';
 import 'widgets/confirm_sale_dialog.dart';
 import 'widgets/qr_auto_payment_dialog.dart';
@@ -65,6 +74,14 @@ class _PosScreenState extends State<PosScreen> {
   // null = no filter ("All"). A single control cycling through every state
   // beats 3 separate toggle buttons for a filter this small and secondary.
   BazaarStatus? _bazaarStatusFilter;
+
+  /// Product filters; null means "all". Held here, not in the cubit: they
+  /// narrow what the cashier is looking at and are not part of the sale.
+  String? _categoryFilter;
+  String? _brandFilter;
+
+  static const _allCategories = 'All categories';
+  static const _allBrands = 'All brands';
 
   void _cycleBazaarStatusFilter() {
     setState(() {
@@ -131,6 +148,9 @@ class _PosScreenState extends State<PosScreen> {
   }
 
   Widget _eventSelector(BuildContext context, PosState state) {
+    // Only while there is nothing to show; a reload over a populated list keeps
+    // the cards on screen rather than blanking them to grey.
+    final showSkeleton = state.isLoading && state.events.isEmpty;
     final query = _bazaarSearchController.text.trim().toLowerCase();
     final filteredEvents = state.events.where((event) {
       if (_bazaarStatusFilter != null && event.status != _bazaarStatusFilter) {
@@ -192,15 +212,41 @@ class _PosScreenState extends State<PosScreen> {
           const SizedBox(height: 10),
           // Visibility of system status: a quiet result count confirms the
           // search actually did something, without shouting about it.
-          Text(
-            '${filteredEvents.length} bazaar${filteredEvents.length == 1 ? '' : 's'} found',
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: Colors.black38),
-          ),
+          if (showSkeleton)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 2),
+              child: SkeletonBreathing(
+                child: SkeletonBar(width: 84, height: 11),
+              ),
+            )
+          else
+            Text(
+              '${filteredEvents.length} bazaar${filteredEvents.length == 1 ? '' : 's'} found',
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: Colors.black38),
+            ),
           const SizedBox(height: 16),
           Expanded(
-            child: filteredEvents.isEmpty
+            child: showSkeleton
+                ? Semantics(
+                    label: 'Loading bazaars',
+                    child: ExcludeSemantics(
+                      child: GridView.builder(
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: 4,
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              mainAxisSpacing: 16,
+                              crossAxisSpacing: 16,
+                              mainAxisExtent: 200,
+                            ),
+                        itemBuilder: (_, __) => const BazaarCardSkeleton(),
+                      ),
+                    ),
+                  )
+                : filteredEvents.isEmpty
                 ? Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -251,17 +297,42 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
+  /// Non-empty, unique labels in alphabetical order.
+  static List<String> _distinct(Iterable<String?> values) {
+    final unique = <String>{
+      for (final value in values)
+        if (value != null && value.trim().isNotEmpty) value.trim(),
+    }.toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return unique;
+  }
+
   Widget _productPanel(BuildContext context, PosState state) {
     // Non-null when the catalogue on screen came from storage rather than the
     // server. It matters more here than on the dashboard: a stale stock count
     // can be sold past, and the customer is standing at the counter.
     final servedFrom = context.read<AuthRepository>().api.servingCacheFrom;
     final query = _productSearchController.text.trim().toLowerCase();
-    final visibleProducts = query.isEmpty
-        ? state.products
-        : state.products
-              .where((p) => p.name.toLowerCase().contains(query))
-              .toList();
+
+    bool matchesCategory(Product p) =>
+        _categoryFilter == null || p.categoryName == _categoryFilter;
+    bool matchesBrand(Product p) =>
+        _brandFilter == null || p.brandName == _brandFilter;
+
+    // Each list offers only what the other filter still leaves, so no choice
+    // can lead to an empty grid (Hick's law: fewer, valid choices).
+    final categories = _distinct(
+      state.products.where(matchesBrand).map((p) => p.categoryName),
+    );
+    final brands = _distinct(
+      state.products.where(matchesCategory).map((p) => p.brandName),
+    );
+    final hasFilters = _categoryFilter != null || _brandFilter != null;
+
+    final visibleProducts = state.products
+        .where(matchesCategory)
+        .where(matchesBrand)
+        .where((p) => query.isEmpty || p.name.toLowerCase().contains(query))
+        .toList();
 
     final eventName = state.selectedEvent?.name ?? 'Bazaar';
 
@@ -288,6 +359,12 @@ class _PosScreenState extends State<PosScreen> {
                 if (!context.mounted) {
                   return;
                 }
+                // A different bazaar carries different products, so a filter
+                // from this one would hide things at the next.
+                setState(() {
+                  _categoryFilter = null;
+                  _brandFilter = null;
+                });
                 context.read<PosCubit>().backToEventSelection();
               },
             ),
@@ -345,7 +422,80 @@ class _PosScreenState extends State<PosScreen> {
             ),
           ],
         ),
-        if (query.isNotEmpty) ...[
+        if (categories.isNotEmpty || brands.isNotEmpty || hasFilters) ...[
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              if (categories.isNotEmpty || _categoryFilter != null)
+                SizedBox(
+                  width: 200,
+                  child: AppDropdown<String>(
+                    options: [_allCategories, ...categories],
+                    selected: _categoryFilter ?? _allCategories,
+                    labelOf: (label) => label,
+                    hint: _allCategories,
+                    leadingIcon: Icons.category_outlined,
+                    onSelected: (value) => setState(() {
+                      _categoryFilter = value == _allCategories ? null : value;
+                      // A brand the new category does not carry would leave
+                      // an empty grid with no visible cause, so it is dropped.
+                      final stillOffered = _distinct(
+                        state.products
+                            .where(
+                              (p) =>
+                                  _categoryFilter == null ||
+                                  p.categoryName == _categoryFilter,
+                            )
+                            .map((p) => p.brandName),
+                      );
+                      if (!stillOffered.contains(_brandFilter)) {
+                        _brandFilter = null;
+                      }
+                    }),
+                  ),
+                ),
+              if ((categories.isNotEmpty || _categoryFilter != null) &&
+                  (brands.isNotEmpty || _brandFilter != null))
+                const SizedBox(width: 10),
+              if (brands.isNotEmpty || _brandFilter != null)
+                SizedBox(
+                  width: 200,
+                  child: AppDropdown<String>(
+                    options: [_allBrands, ...brands],
+                    selected: _brandFilter ?? _allBrands,
+                    labelOf: (label) => label,
+                    hint: _allBrands,
+                    leadingIcon: Icons.sell_outlined,
+                    onSelected: (value) => setState(() {
+                      _brandFilter = value == _allBrands ? null : value;
+                      final stillOffered = _distinct(
+                        state.products
+                            .where(
+                              (p) =>
+                                  _brandFilter == null ||
+                                  p.brandName == _brandFilter,
+                            )
+                            .map((p) => p.categoryName),
+                      );
+                      if (!stillOffered.contains(_categoryFilter)) {
+                        _categoryFilter = null;
+                      }
+                    }),
+                  ),
+                ),
+              // Pushed to the trailing edge, and says what the filters did
+              // (visibility of system status).
+              const Spacer(),
+              if (query.isNotEmpty || hasFilters)
+                Text(
+                  '${visibleProducts.length} of ${state.products.length} products',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: Colors.black45),
+                ),
+            ],
+          ),
+        ] else if (query.isNotEmpty) ...[
           const SizedBox(height: 8),
           Text(
             '${visibleProducts.length} of ${state.products.length} products',
@@ -361,7 +511,9 @@ class _PosScreenState extends State<PosScreen> {
           child: visibleProducts.isEmpty
               ? Center(
                   child: Text(
-                    'No products match "${_productSearchController.text}".',
+                    query.isEmpty
+                        ? 'No products match the selected filters.'
+                        : 'No products match "${_productSearchController.text}".',
                     style: Theme.of(
                       context,
                     ).textTheme.bodyMedium?.copyWith(color: Colors.black45),
@@ -416,6 +568,45 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
+  /// Who is ringing up this sale, shown only where there is a choice.
+  ///
+  /// The people on the bazaar's roster plus whoever is signed in. With one
+  /// person there is nothing to pick, so the control is not drawn: a dropdown
+  /// with a single entry is noise on a screen used at speed.
+  Widget _sellerPicker(BuildContext context, PosState state) {
+    final event = state.selectedEvent;
+    if (event == null) {
+      return const SizedBox.shrink();
+    }
+    return BlocBuilder<StaffCubit, List<AppUser>>(
+      builder: (context, staff) {
+        final sellers = <AppUser>[
+          widget.user,
+          for (final person in staff)
+            if (person.id != widget.user.id &&
+                person.role == UserRole.employee &&
+                person.assignedEventIdsEffective.contains(event.id))
+              person,
+        ];
+        if (sellers.length < 2) {
+          return const SizedBox.shrink();
+        }
+        final selected = sellers.firstWhere(
+          (person) => person.id == (state.sellerId ?? widget.user.id),
+          orElse: () => widget.user,
+        );
+        return SellerButton(
+          sellers: sellers,
+          selected: selected,
+          onSelected: (person) => context.read<PosCubit>().selectSeller(
+            id: person.id,
+            name: person.name,
+          ),
+        );
+      },
+    );
+  }
+
   Widget _cartPanel(BuildContext context, PosState state) {
     // Not shown when the reference is collected at checkout: asking for it in
     // both places would have the cashier type it twice, and for a gateway
@@ -430,11 +621,18 @@ class _PosScreenState extends State<PosScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Current order',
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Current order',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              _sellerPicker(context, state),
+            ],
           ),
           const SizedBox(height: 8),
           Text(
@@ -672,12 +870,10 @@ class _PosScreenState extends State<PosScreen> {
                                       .read<PosCubit>()
                                       .incrementCartItem(i);
                                   if (!ok && context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          'Cannot exceed available stock for this item.',
-                                        ),
-                                      ),
+                                    showAppMessage(
+                                      'Cannot exceed available stock for this item.',
+                                      kind: AppMessageKind.info,
+                                      title: 'Stock limit',
                                     );
                                   }
                                 },
@@ -756,23 +952,26 @@ class _PosScreenState extends State<PosScreen> {
           Row(
             children: [
               Expanded(
-                child: TextButton(
+                child: QuietActionButton(
+                  label: 'Cancel',
+                  color: Colors.black54,
+                  outlined: true,
                   onPressed: state.cart.isEmpty
                       ? null
                       : () => context.read<PosCubit>().cancelDraft(),
-                  child: const Text('Cancel'),
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: ElevatedButton(
+                child: FilledActionButton(
+                  label: 'Finish',
+                  color: AppColors.primary,
                   onPressed: state.cart.isEmpty
                       ? null
                       : () async {
                           // Resolved before any await: completing a sale
                           // reloads three cubits, and the confirmation must
                           // still reach the user afterwards.
-                          final messenger = ScaffoldMessenger.of(context);
                           final posCubit = context.read<PosCubit>();
                           final dashboardCubit = context.read<DashboardCubit>();
                           final ordersCubit = context.read<OrdersCubit>();
@@ -783,24 +982,20 @@ class _PosScreenState extends State<PosScreen> {
                           if (!state.collectsReferenceAtCheckout &&
                               state.requiresPaymentExtraField &&
                               state.paymentExtraFieldValue.trim().isEmpty) {
-                            messenger.showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  '${state.selectedExtraFieldLabel ?? 'Additional field'} is required for selected payment method.',
-                                ),
-                              ),
+                            showAppMessage(
+                              '${state.selectedExtraFieldLabel ?? 'Additional field'} is required for selected payment method.',
+                              kind: AppMessageKind.info,
+                              title: 'Missing detail',
                             );
                             return;
                           }
                           if (!state.cashTenderedIsSufficient) {
-                            messenger.showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  state.cashTendered.trim().isEmpty
-                                      ? 'Enter the cash received before finishing the sale.'
-                                      : 'Cash received must cover ${formatPeso(state.total)}.',
-                                ),
-                              ),
+                            showAppMessage(
+                              state.cashTendered.trim().isEmpty
+                                  ? 'Enter the cash received before finishing the sale.'
+                                  : 'Cash received must cover ${formatPeso(state.total)}.',
+                              kind: AppMessageKind.info,
+                              title: 'Cash received',
                             );
                             return;
                           }
@@ -865,12 +1060,10 @@ class _PosScreenState extends State<PosScreen> {
                             user: widget.user,
                           );
                           if (receipt == null) {
-                            messenger.showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Some items are out of stock. Please review cart quantities.',
-                                ),
-                              ),
+                            showAppMessage(
+                              'Some items are out of stock. Please review cart quantities.',
+                              kind: AppMessageKind.info,
+                              title: 'Out of stock',
                             );
                             return;
                           }
@@ -885,31 +1078,12 @@ class _PosScreenState extends State<PosScreen> {
                               data: receipt,
                             );
                           }
-                          messenger.showSnackBar(
-                            SnackBar(
-                              backgroundColor: AppColors.success,
-                              behavior: SnackBarBehavior.floating,
-                              duration: const Duration(milliseconds: 1800),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              content: const Row(
-                                children: [
-                                  Icon(
-                                    Icons.check_circle_outline,
-                                    color: Colors.white,
-                                  ),
-                                  SizedBox(width: 10),
-                                  Text(
-                                    'Sale completed.',
-                                    style: TextStyle(color: Colors.white),
-                                  ),
-                                ],
-                              ),
-                            ),
+                          showAppMessage(
+                            'Sale completed.',
+                            kind: AppMessageKind.success,
+                            title: 'Sale completed',
                           );
                         },
-                  child: const Text('Finish'),
                 ),
               ),
             ],
@@ -952,7 +1126,6 @@ class _PosScreenState extends State<PosScreen> {
   /// against a dead element -- which is why the success message could
   /// silently go missing.
   Future<void> _deleteEvent(BuildContext context, BazaarEvent event) async {
-    final messenger = ScaffoldMessenger.of(context);
     final posCubit = context.read<PosCubit>();
     final dashboardCubit = context.read<DashboardCubit>();
     final inventoryCubit = context.read<InventoryCubit>();
@@ -961,7 +1134,11 @@ class _PosScreenState extends State<PosScreen> {
     // cannot happen only to fail afterwards is worse than saying so up front.
     final blocked = posCubit.state.deleteBlockedReason(event);
     if (blocked != null) {
-      messenger.showSnackBar(SnackBar(content: Text(blocked)));
+      showAppMessage(
+        blocked,
+        kind: AppMessageKind.info,
+        title: 'Cannot delete bazaar',
+      );
       return;
     }
 
@@ -974,27 +1151,49 @@ class _PosScreenState extends State<PosScreen> {
       confirmLabel: 'Delete',
       tone: ConfirmationTone.destructive,
     );
-    if (confirmed != true) {
+    if (confirmed != true || !context.mounted) {
       return;
     }
 
     // The success message used to be printed unconditionally. When the server
     // refused, the bazaar stayed in the list with nothing said about why, so a
     // delete that plainly had not happened looked like the screen was stale.
+    final dialogNavigator = Navigator.of(context, rootNavigator: true);
+    showLoadingDialog(context, 'Deleting bazaar…');
     try {
       await posCubit.deleteEventFromPos(user: widget.user, event: event);
+      await dashboardCubit.load(widget.user);
+      await inventoryCubit.load();
     } on ApiException catch (error) {
-      messenger.showSnackBar(SnackBar(content: Text(error.message)));
+      dialogNavigator.pop();
+      showAppMessage(
+        error.message,
+        kind: AppMessageKind.error,
+        title: 'Could not delete bazaar',
+      );
       return;
     } on StateError catch (error) {
-      messenger.showSnackBar(SnackBar(content: Text(error.message)));
+      dialogNavigator.pop();
+      showAppMessage(
+        error.message,
+        kind: AppMessageKind.error,
+        title: 'Could not delete bazaar',
+      );
       return;
     }
+    dialogNavigator.pop();
 
-    await dashboardCubit.load(widget.user);
-    await inventoryCubit.load();
-    messenger.showSnackBar(
-      const SnackBar(content: Text('Bazaar deleted successfully.')),
+    if (!context.mounted) {
+      return;
+    }
+    await showNoticeDialog(
+      context: context,
+      title: 'Bazaar deleted',
+      message:
+          '"${event.name}" was deleted and its stock returned to the '
+          'master inventory.',
+      buttonLabel: 'Okay',
+      icon: Icons.check_circle_outline_rounded,
     );
   }
 
@@ -1012,6 +1211,7 @@ class _PosScreenState extends State<PosScreen> {
     final authRepository = context.read<AuthRepository>();
     final staffCubit = context.read<StaffCubit>();
     final settingsRepository = context.read<SettingsRepository>();
+    final refundRepository = context.read<RefundRepository>();
     final cubit = context.read<PosCubit>();
 
     final companies = await settingsRepository.listCompanies();
@@ -1023,6 +1223,16 @@ class _PosScreenState extends State<PosScreen> {
     final nameById = {for (final user in staffCubit.state) user.id: user.name};
     final allocations = await cubit.eventAllocations(event.id);
     final remaining = allocations.values.fold<int>(0, (sum, q) => sum + q);
+    final handlerSetup = await _refundHandlerSetup(
+      repository: refundRepository,
+      event: event,
+      rosteredIds: rostered.keys,
+      nameById: nameById,
+      employeeIds: {
+        for (final user in staffCubit.state)
+          if (user.role == UserRole.employee) user.id,
+      },
+    );
 
     if (!context.mounted) {
       return;
@@ -1037,8 +1247,8 @@ class _PosScreenState extends State<PosScreen> {
           for (final id in rostered.keys) nameById[id] ?? 'Employee #$id',
         ],
         remainingUnits: remaining,
-        formatDate: _formatDate,
         deleteBlockedReason: state.deleteBlockedReason(event),
+        refundHandler: handlerSetup,
       ),
     );
 
@@ -1054,6 +1264,52 @@ class _PosScreenState extends State<PosScreen> {
     }
   }
 
+  /// What the info dialog needs to offer the refund-handler choice, or null
+  /// where it should not be offered.
+  ///
+  /// Only the owner and admin choose who may refund, and only against a server:
+  /// the demo build has nobody to grant to. The people offered are those
+  /// rostered on this bazaar, who are employees; the current handler is added
+  /// if they are somehow no longer on it, so what the server holds is never
+  /// hidden by what the roster says.
+  Future<RefundHandlerSetup?> _refundHandlerSetup({
+    required RefundRepository repository,
+    required BazaarEvent event,
+    required Iterable<int> rosteredIds,
+    required Map<int, String> nameById,
+    required Set<int> employeeIds,
+  }) async {
+    if (!widget.user.isAdminOrOwner || !repository.isRemote) {
+      return null;
+    }
+    final candidates = <MapEntry<int, String>>[
+      for (final id in rosteredIds)
+        if (employeeIds.contains(id))
+          MapEntry(id, nameById[id] ?? 'Employee #$id'),
+    ];
+    try {
+      final current = await repository.currentHandler(event.id);
+      if (current != null && !candidates.any((c) => c.key == current.userId)) {
+        candidates.add(MapEntry(current.userId, current.userName));
+      }
+      return RefundHandlerSetup(
+        candidates: candidates,
+        currentId: current?.userId,
+        onChange: (userId) =>
+            repository.changeHandler(event.id, userId: userId),
+      );
+    } on ApiException catch (error) {
+      return RefundHandlerSetup(
+        candidates: candidates,
+        currentId: null,
+        onChange: (_) async {},
+        loadError: error.isOffline
+            ? 'Needs a connection to load.'
+            : error.message,
+      );
+    }
+  }
+
   Future<void> _showEditEventDialog(
     BuildContext context,
     PosState state,
@@ -1063,7 +1319,6 @@ class _PosScreenState extends State<PosScreen> {
     // nothing is resolved through a context that may have moved on.
     final cubit = context.read<PosCubit>();
     final productRepository = context.read<ProductRepository>();
-    final messenger = ScaffoldMessenger.of(context);
     final dashboardCubit = context.read<DashboardCubit>();
     final inventoryCubit = context.read<InventoryCubit>();
     // Everything about a finished bazaar is a record rather than a plan.
@@ -1085,7 +1340,6 @@ class _PosScreenState extends State<PosScreen> {
       event.id,
     );
     final rostered = assignmentIdByUserId.keys.toSet();
-    final originalRoster = Set<int>.from(rostered);
     final eventsById = {
       for (final other in await eventRepository.listAll()) other.id: other,
     };
@@ -1124,52 +1378,84 @@ class _PosScreenState extends State<PosScreen> {
       return;
     }
 
-    final ok = await cubit.updateEventFromPos(
-      user: widget.user,
-      event: event,
-      name: result.name.isEmpty ? event.name : result.name,
-      startDate: result.range.start,
-      endDate: result.range.end,
-      newAllocations: result.allocations,
-    );
-
-    // Only the difference is written. Re-posting the whole roster would rely
-    // on the server rejecting duplicates, and removals would never happen at
-    // all -- a roster that can only grow cannot be corrected.
-    for (final id in originalRoster.difference(result.roster)) {
-      final assignmentId = assignmentIdByUserId[id];
-      if (assignmentId != null) {
-        await authRepository.unassignEmployeeFromBazaar(
-          eventId: event.id,
-          assignmentId: assignmentId,
-          employeeId: id,
-        );
-      }
-    }
-    final added = result.roster.difference(originalRoster).toList();
-    if (added.isNotEmpty) {
-      await authRepository.assignEmployeesToBazaar(
-        eventId: event.id,
-        employeeIds: added,
+    // Saving is several requests in a row (the bazaar, then each roster change,
+    // then a reload of the staff), and the dialog has already closed, so
+    // without this the screen sat unchanged until the result appeared.
+    final dialogNavigator = Navigator.of(context, rootNavigator: true);
+    final refundRepository = context.read<RefundRepository>();
+    showLoadingDialog(context, 'Saving bazaar…');
+    String? revokeProblem;
+    final bool ok;
+    try {
+      ok = await cubit.updateEventFromPos(
+        user: widget.user,
+        event: event,
+        name: result.name.isEmpty ? event.name : result.name,
+        startDate: result.range.start,
+        endDate: result.range.end,
+        newAllocations: result.allocations,
       );
+
+      // Only the difference is written. Re-posting the whole roster would rely
+      // on the server rejecting duplicates, and removals would never happen at
+      // all -- a roster that can only grow cannot be corrected.
+      //
+      // Taking someone off a bazaar does not take their refund authority with
+      // it -- the server leaves it active -- so a removed handler is revoked
+      // too. Only the owner and admin can read or revoke it.
+      await authRepository.changeRoster(
+        eventId: event.id,
+        current: assignmentIdByUserId,
+        wanted: result.roster,
+        onRemoved: (removed) async {
+          if (!widget.user.isAdminOrOwner) {
+            return;
+          }
+          try {
+            await refundRepository.revokeHandlerIfRemoved(event.id, removed);
+          } on ApiException catch (error) {
+            revokeProblem = error.message;
+          }
+        },
+      );
+      await staffCubit.load();
+      // Still under the loader: these refresh what other screens show, and
+      // running them after it closed left a silent gap before the result.
+      if (ok) {
+        await dashboardCubit.load(widget.user);
+        await inventoryCubit.load();
+      }
+    } finally {
+      dialogNavigator.pop();
     }
-    await staffCubit.load();
 
     if (!ok) {
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Unable to update bazaar. Check stock allocations and try again.',
-          ),
-        ),
+      showAppMessage(
+        'Unable to update bazaar. Check stock allocations and try again.',
+        kind: AppMessageKind.error,
+        title: 'Unable to update bazaar',
       );
       return;
     }
 
-    await dashboardCubit.load(widget.user);
-    await inventoryCubit.load();
-    messenger.showSnackBar(
-      const SnackBar(content: Text('Bazaar updated successfully.')),
+    if (revokeProblem != null) {
+      // Said plainly: until this is fixed, the person removed from the bazaar
+      // can still approve refunds at it.
+      showAppMessage(
+        'The bazaar was updated, but the refund handler removed from it could '
+        'not be revoked: $revokeProblem Their password can still approve '
+        'refunds here. Open the bazaar info and choose another handler, or '
+        'try again.',
+        kind: AppMessageKind.error,
+        title: 'Refund handler still active',
+      );
+      return;
+    }
+
+    showAppMessage(
+      'Bazaar updated successfully.',
+      kind: AppMessageKind.success,
+      title: 'Bazaar updated',
     );
   }
 
@@ -1486,12 +1772,10 @@ class _PosScreenState extends State<PosScreen> {
                                 return;
                               }
                               if (!added) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Cannot add more than available stock.',
-                                    ),
-                                  ),
+                                showAppMessage(
+                                  'Cannot add more than available stock.',
+                                  kind: AppMessageKind.info,
+                                  title: 'Stock limit',
                                 );
                                 return;
                               }
@@ -2052,35 +2336,67 @@ class _NumericCrossfade extends StatelessWidget {
   }
 }
 
+/// What the bazaar info dialog needs to offer the refund-handler choice.
+class RefundHandlerSetup {
+  const RefundHandlerSetup({
+    required this.candidates,
+    required this.currentId,
+    required this.onChange,
+    this.loadError,
+  });
+
+  /// The employees assigned to the bazaar, as id and name.
+  final List<MapEntry<int, String>> candidates;
+
+  /// The current handler's id, or null for nobody.
+  final int? currentId;
+
+  /// Makes [userId] the handler, or removes the handler for null. Throws an
+  /// [ApiException] when the server refuses, which the dialog shows in place.
+  final Future<void> Function(int? userId) onChange;
+
+  /// Why the current handler could not be read, if it could not. The choice is
+  /// then not offered: showing "None" over an unknown would invite a change
+  /// made against the wrong picture.
+  final String? loadError;
+}
+
 /// A bazaar's facts, and the two things that can be done to it.
 ///
 /// Public so the dialog can be exercised on its own; nothing else builds it.
 ///
-/// Deliberately quiet. It is read far more often than it is acted on, so the
-/// facts carry the weight and the actions sit at the bottom in the secondary
-/// tier -- full-width buttons here would make a reference card look like a
-/// decision. Delete rests as an outline and only turns red on hover, the same
-/// way a destructive row action does elsewhere: a panel of facts should not
-/// look hazardous while you are reading it.
-class BazaarInfoDialog extends StatelessWidget {
+/// One surface: the dialog itself. The facts are label and value rows on a
+/// single axis, divided by hairlines, with nothing boxed inside anything else,
+/// and information that cannot be pressed is plain text rather than something
+/// that looks like a button. The only control in the body is the refund
+/// handler's dropdown, so it is the only thing that looks pressable.
+///
+/// Help is out of the way: a refund handler has an "i" that explains it when
+/// asked, and a bazaar that cannot be deleted has a padlock beside its name
+/// that says why, instead of a disabled button with its reason somewhere else.
+class BazaarInfoDialog extends StatefulWidget {
   const BazaarInfoDialog({
     super.key,
     required this.event,
     required this.venue,
     required this.staff,
     required this.remainingUnits,
-    required this.formatDate,
     this.deleteBlockedReason,
+    this.refundHandler,
   });
 
   final BazaarEvent event;
   final String venue;
   final List<String> staff;
   final int remainingUnits;
-  final String Function(DateTime) formatDate;
 
   /// Why this bazaar is protected from deletion, or null when it can go.
   final String? deleteBlockedReason;
+
+  /// The refund-handler choice, or null where this person cannot make it: only
+  /// the owner and admin decide who may refund, so an employee opening this
+  /// dialog is not shown it at all.
+  final RefundHandlerSetup? refundHandler;
 
   static const Map<BazaarStatus, Color> _statusColors = {
     BazaarStatus.ongoing: AppColors.statusOngoing,
@@ -2089,43 +2405,149 @@ class BazaarInfoDialog extends StatelessWidget {
   };
 
   @override
+  State<BazaarInfoDialog> createState() => _BazaarInfoDialogState();
+}
+
+class _BazaarInfoDialogState extends State<BazaarInfoDialog> {
+  late int? _handlerId = widget.refundHandler?.currentId;
+  bool _handlerBusy = false;
+  String? _handlerError;
+
+  /// Applies the pick at once: this dialog has no Save, and a choice that
+  /// looked made but was not sent would leave the wrong person able to refund.
+  /// The field shows the old choice again if the server refuses.
+  Future<void> _changeHandler(int? userId) async {
+    final setup = widget.refundHandler;
+    if (setup == null || userId == _handlerId) {
+      return;
+    }
+    setState(() {
+      _handlerBusy = true;
+      _handlerError = null;
+    });
+    try {
+      await setup.onChange(userId);
+      if (!mounted) return;
+      setState(() {
+        _handlerId = userId;
+        _handlerBusy = false;
+      });
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _handlerBusy = false;
+        _handlerError = error.isOffline
+            ? 'Changing the refund handler needs a connection.'
+            : error.message;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final statusColor = _statusColors[event.status] ?? AppColors.error;
+    final event = widget.event;
+    final statusColor =
+        BazaarInfoDialog._statusColors[event.status] ?? AppColors.error;
     final isEnded = event.status == BazaarStatus.ended;
+    final blocked = widget.deleteBlockedReason;
+    final handlerSetup = widget.refundHandler;
+    final methods = event.acceptedPaymentMethods.isEmpty
+        ? const ['CASH']
+        : event.acceptedPaymentMethods;
+    final units = widget.remainingUnits;
 
     return Dialog(
-      backgroundColor: Colors.white,
-      // 14 — a modal floats above the page and earns a step more shape than
+      backgroundColor: AppColors.surface,
+      surfaceTintColor: Colors.transparent,
+      elevation: 3,
+      clipBehavior: Clip.antiAlias,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      // 14 -- a modal floats above the page and earns a step more shape than
       // the cards behind it.
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 420),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+        // The same width as the refund dialog, so the two read as one family.
+        constraints: const BoxConstraints(maxWidth: 520),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 16, 16, 16),
+              child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          event.name,
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
+                        // As tall as the close button and centred in it, so
+                        // the title and the button share a middle line
+                        // whether or not a padlock sits beside the name.
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(minHeight: 32),
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 4,
+                            runAlignment: WrapAlignment.center,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Text(
+                                event.name,
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              if (blocked != null)
+                                InfoHint(
+                                  message: blocked,
+                                  icon: Icons.lock_outline_rounded,
+                                  semanticLabel: 'Cannot be deleted. $blocked',
+                                ),
+                              // The one coloured thing. Status is what changes
+                              // what can be done here, so it alone wears it.
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: statusColor.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  event.status.name.toUpperCase(),
+                                  style: TextStyle(
+                                    color: statusColor,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          venue,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: Colors.black45,
-                          ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.storefront_outlined,
+                              size: 16,
+                              color: Colors.black38,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                widget.venue,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: Colors.black45,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -2139,138 +2561,115 @@ class BazaarInfoDialog extends StatelessWidget {
                       width: 32,
                       height: 32,
                     ),
+                    // Exactly 32, so its middle is the title's middle; the
+                    // default pads a tap target out to 48 and drops it lower.
+                    style: IconButton.styleFrom(
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
                     icon: const Icon(Icons.close_rounded, size: 18),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              // The one isolated element. Status is what changes what you can
-              // do here, so it is the only thing wearing colour.
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  event.status.name.toUpperCase(),
-                  style: TextStyle(
-                    color: statusColor,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 11,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              _InfoRow(
-                label: 'Dates',
-                value:
-                    '${formatDate(event.startDate)} – '
-                    '${formatDate(event.endDate)}',
-              ),
-              const SizedBox(height: 12),
-              _InfoRow(
-                label: 'Staff',
-                value: staff.isEmpty ? 'Nobody assigned' : staff.join(', '),
-                // An unstaffed bazaar is a problem, not a blank. Said in the
-                // error colour so it is noticed here rather than on the
-                // morning it opens.
-                valueColor: staff.isEmpty ? AppColors.error : null,
-              ),
-              const SizedBox(height: 12),
-              _InfoRow(
-                label: 'Payment',
-                value: event.acceptedPaymentMethods.isEmpty
-                    ? 'CASH'
-                    : event.acceptedPaymentMethods.join(' · '),
-              ),
-              const SizedBox(height: 12),
-              _InfoRow(
-                label: isEnded ? 'Unreturned stock' : 'Stock left',
-                value: '${formatCount(remainingUnits)} units',
-              ),
-              const SizedBox(height: 24),
-              const Divider(height: 1, color: Color(0xFFEDEDF1)),
-              const SizedBox(height: 16),
-              // Auto-width and right-aligned: two occasional actions, not a
-              // pair of calls to action.
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  _QuietDeleteButton(
-                    onPressed: deleteBlockedReason == null
-                        ? () => Navigator.pop(context, 'delete')
-                        : null,
-                    blockedReason: deleteBlockedReason,
-                  ),
-                  const SizedBox(width: 8),
-                  ElevatedButton.icon(
-                    onPressed: () => Navigator.pop(context, 'edit'),
-                    icon: const Icon(Icons.edit_outlined, size: 16),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 10,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+            ),
+            const Divider(height: 1, color: AppColors.border),
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    DetailRow.text(
+                      label: 'Dates',
+                      value: formatDateRange(event.startDate, event.endDate),
                     ),
-                    label: const Text('Edit'),
+                    const _RowRule(),
+                    DetailRow.text(
+                      // "Stock left" is a fact about a live bazaar; on a
+                      // finished one the same number is a job nobody has done.
+                      label: isEnded ? 'Unreturned stock' : 'Stock left',
+                      value:
+                          '${formatCount(units)} '
+                          '${units == 1 ? 'unit' : 'units'}',
+                    ),
+                    const _RowRule(),
+                    DetailRow.text(label: 'Payment', value: methods.join(', ')),
+                    const _RowRule(),
+                    DetailRow.text(
+                      label: 'Staff',
+                      // An unstaffed bazaar is a problem, not a blank. Said in
+                      // the error colour so it is noticed here rather than on
+                      // the morning it opens.
+                      value: widget.staff.isEmpty
+                          ? 'Nobody assigned'
+                          : widget.staff.join(', '),
+                      valueColor: widget.staff.isEmpty ? AppColors.error : null,
+                    ),
+                    if (handlerSetup != null) ...[
+                      const _RowRule(),
+                      if (handlerSetup.loadError != null)
+                        DetailRow.text(
+                          label: 'Refund handler',
+                          value: handlerSetup.loadError!,
+                          valueColor: AppColors.error,
+                        )
+                      else
+                        DetailRow(
+                          label: 'Refund handler',
+                          hint:
+                              'Besides the owner, this person can approve '
+                              'refunds here.',
+                          // The dropdown is 44 tall: the label sits at its
+                          // middle rather than at the top of the row.
+                          controlHeight: 44,
+                          child: RefundHandlerDropdown(
+                            candidates: handlerSetup.candidates,
+                            selectedId: _handlerId,
+                            busy: _handlerBusy,
+                            errorText: _handlerError,
+                            onChanged: _changeHandler,
+                          ),
+                        ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            const Divider(height: 1, color: AppColors.border),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+              child: Row(
+                children: [
+                  // Offered only when it can be used. A bazaar that cannot be
+                  // deleted says why at the padlock by its name; a disabled
+                  // button with its reason elsewhere asks the person to connect
+                  // two things that should not have been apart.
+                  if (blocked == null)
+                    _QuietDeleteButton(
+                      onPressed: () => Navigator.pop(context, 'delete'),
+                    ),
+                  const Spacer(),
+                  FilledActionButton(
+                    label: 'Edit bazaar',
+                    color: AppColors.primary,
+                    onPressed: () => Navigator.pop(context, 'edit'),
                   ),
                 ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-/// Label above, value below, both left-aligned at the same x.
-///
-/// Stacked rather than set in a sentence: every value lands at one x and one
-/// weight, so the eye scans a column instead of reading four lines to find
-/// the one it wants.
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.label, required this.value, this.valueColor});
-
-  final String label;
-  final String value;
-  final Color? valueColor;
+/// The hairline between two rows of facts.
+class _RowRule extends StatelessWidget {
+  const _RowRule();
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label.toUpperCase(),
-          style: theme.textTheme.labelSmall?.copyWith(
-            color: Colors.black38,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.8,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          value,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            fontWeight: FontWeight.w600,
-            color: valueColor,
-          ),
-        ),
-      ],
-    );
-  }
+  Widget build(BuildContext context) =>
+      const Divider(height: 1, color: AppColors.border);
 }
 
 /// Rests neutral, turns red on hover.
@@ -2279,12 +2678,9 @@ class _InfoRow extends StatelessWidget {
 /// hazardous; one that never turns red gives no warning at the moment of
 /// intent. This does both, matching the row actions elsewhere in the app.
 class _QuietDeleteButton extends StatefulWidget {
-  const _QuietDeleteButton({required this.onPressed, this.blockedReason});
+  const _QuietDeleteButton({required this.onPressed});
 
-  /// Null disables the button, in which case [blockedReason] says why.
-  final VoidCallback? onPressed;
-
-  final String? blockedReason;
+  final VoidCallback onPressed;
 
   @override
   State<_QuietDeleteButton> createState() => _QuietDeleteButtonState();
@@ -2295,42 +2691,23 @@ class _QuietDeleteButtonState extends State<_QuietDeleteButton> {
 
   @override
   Widget build(BuildContext context) {
-    final blocked = widget.onPressed == null;
-    final color = blocked
-        ? Colors.black26
-        : (_hovered ? AppColors.error : Colors.black45);
-    // A disabled control has to account for itself, so the reason rides on the
-    // button rather than only appearing after someone presses it.
-    return Tooltip(
-      message: widget.blockedReason ?? '',
-      // An empty message would otherwise draw an empty tooltip.
-      triggerMode: blocked
-          ? TooltipTriggerMode.longPress
-          : TooltipTriggerMode.manual,
-      child: MouseRegion(
-        onEnter: (_) => setState(() => _hovered = true),
-        onExit: (_) => setState(() => _hovered = false),
-        child: AnimatedContainer(
-          duration: AppMotion.feedback,
-          curve: AppMotion.easeOut,
-          child: OutlinedButton.icon(
-            onPressed: widget.onPressed,
-            icon: Icon(Icons.delete_outline, size: 16, color: color),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: color,
-              side: BorderSide(
-                color: _hovered && !blocked
-                    ? AppColors.error
-                    : const Color(0xFFDCDCE3),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            label: Text('Delete', style: TextStyle(color: color)),
+    final color = _hovered ? AppColors.error : Colors.black45;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: OutlinedButton.icon(
+        onPressed: widget.onPressed,
+        icon: Icon(Icons.delete_outline, size: 16, color: color),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: color,
+          side: BorderSide(
+            color: _hovered ? AppColors.error : const Color(0xFFDCDCE3),
           ),
+          minimumSize: const Size(0, 48),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
         ),
+        label: Text('Delete bazaar', style: TextStyle(color: color)),
       ),
     );
   }

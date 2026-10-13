@@ -137,25 +137,34 @@ class DashboardAnalyticsService {
       return DashboardAnalytics.empty(scopeLabel: scopeLabel);
     }
 
-    final revenue = scoped.fold<double>(0, (sum, sale) => sum + sale.total);
-    final units = scoped.fold<int>(0, (sum, sale) => sum + sale.qty);
-    final completed = scoped
+    // Money and units count only what was kept. A returned sale -- which every
+    // refunded sale is -- brought its stock back and its money went out, so
+    // counting it would overstate both. It still counts as a transaction: it
+    // happened, which is what Total Orders and the completion rate measure.
+    //
+    // Refunds themselves never reach this service. It is given sales only, so
+    // there is no refund amount here to subtract on top of that and count the
+    // same money twice.
+    final kept = scoped
         .where((sale) => sale.orderStatus == OrderStatus.completed)
-        .length;
+        .toList();
+    final revenue = kept.fold<double>(0, (sum, sale) => sum + sale.total);
+    final units = kept.fold<int>(0, (sum, sale) => sum + sale.qty);
+    final completed = kept.length;
 
     final candidates = <AnalyticsMetric?>[
-      _topProduct(scoped, productNameById),
-      _topVariant(scoped, variantLabelByOptionId),
-      if (isWholeScope) _topBazaar(scoped, eventNameById),
+      _topProduct(kept, productNameById),
+      _topVariant(kept, variantLabelByOptionId),
+      if (isWholeScope) _topBazaar(kept, eventNameById),
       _paymentMix(scoped),
-      _unitsSold(units, scoped.length),
-      _busiestDay(scoped),
+      _unitsSold(units, kept.length),
+      _busiestDay(kept),
     ];
 
     return DashboardAnalytics(
       transactionCount: scoped.length,
-      averageOrderValue: revenue / scoped.length,
-      averageOrderValueTrend: _averageOrderValueTrend(scoped),
+      averageOrderValue: kept.isEmpty ? 0 : revenue / kept.length,
+      averageOrderValueTrend: _averageOrderValueTrend(kept),
       metrics: candidates
           .whereType<AnalyticsMetric>()
           .take(_metricSlots)
@@ -256,7 +265,7 @@ class DashboardAnalyticsService {
   }
 
   AnalyticsMetric _unitsSold(int units, int transactions) {
-    final perOrder = units / transactions;
+    final perOrder = transactions == 0 ? 0 : units / transactions;
     return AnalyticsMetric(
       kind: AnalyticsMetricKind.unitsSold,
       label: 'Units sold',

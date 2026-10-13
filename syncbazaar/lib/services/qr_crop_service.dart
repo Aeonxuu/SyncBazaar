@@ -42,7 +42,9 @@ class QrCropService {
   Future<QrCropResult> cropToQr(Uint8List source) async {
     final decoded = img.decodeImage(source);
     if (decoded == null) {
-      return const QrCropResult.failed('That file is not an image we can read.');
+      return const QrCropResult.failed(
+        'That file is not an image we can read.',
+      );
     }
 
     final working = _fitWithin(decoded, _workingMaxEdge);
@@ -78,9 +80,7 @@ class QrCropService {
           width: _outputSize,
           height: _outputSize,
         );
-        return QrCropResult.cropped(
-          Uint8List.fromList(img.encodePng(sized)),
-        );
+        return QrCropResult.cropped(Uint8List.fromList(img.encodePng(sized)));
       }
     }
 

@@ -6,7 +6,7 @@ import 'package:syncbazaar/ui/screens/pos/widgets/pos_product_card.dart';
 
 /// The POS grid went from three columns to four, so every card is narrower.
 /// The photo is a square (its height is the card's own width) and the
-/// details block below it — name, price row and a 32px Add button — is a
+/// details block below it — name, price row and a 44px Add button — is a
 /// fixed height regardless of column width. These pin the sizing rule that
 /// keeps the button from being clipped.
 void main() {

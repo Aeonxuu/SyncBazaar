@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/app_message.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../bloc/settings/settings_cubit.dart';
@@ -100,8 +101,10 @@ class _VenuesScreenState extends State<VenuesScreen> {
                         horizontal: 16,
                         vertical: 12,
                       ),
+                      minimumSize: const Size(0, 48),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(6),
                       ),
                     ),
                     label: const Text('Add venue'),
@@ -203,7 +206,6 @@ class _VenuesScreenState extends State<VenuesScreen> {
     Company? existing,
   }) async {
     final cubit = context.read<SettingsCubit>();
-    final messenger = ScaffoldMessenger.of(context);
     final result = await showDialog<_VenueDraft>(
       context: context,
       builder: (_) => _VenueEditorDialog(existing: existing),
@@ -236,14 +238,12 @@ class _VenuesScreenState extends State<VenuesScreen> {
         );
       }
     } on ApiException catch (error) {
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            error.isOffline
-                ? 'Cannot reach the server, so ${result.name} was not saved.'
-                : '${result.name} could not be saved. ${error.message}',
-          ),
-        ),
+      showAppMessage(
+        error.isOffline
+            ? 'Cannot reach the server, so ${result.name} was not saved.'
+            : '${result.name} could not be saved. ${error.message}',
+        kind: AppMessageKind.error,
+        title: 'Venue not saved',
       );
     }
   }
@@ -627,8 +627,17 @@ class _VenueEditorDialogState extends State<_VenueEditorDialog> {
               child: Row(
                 children: [
                   const Spacer(),
-                  TextButton(
+                  OutlinedButton(
                     onPressed: () => Navigator.pop(context),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.primary,
+                      side: const BorderSide(color: AppColors.primary),
+                      minimumSize: const Size(0, 48),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
                     child: const Text('Cancel'),
                   ),
                   const SizedBox(width: 8),
@@ -642,8 +651,10 @@ class _VenueEditorDialogState extends State<_VenueEditorDialog> {
                         horizontal: 20,
                         vertical: 12,
                       ),
+                      minimumSize: const Size(0, 48),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(6),
                       ),
                     ),
                     child: Text(_isCreate ? 'Add venue' : 'Save venue'),

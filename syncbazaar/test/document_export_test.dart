@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:syncbazaar/data/repositories/auth_repository.dart';
+import 'package:syncbazaar/data/repositories/save_folder_repository.dart';
 import 'package:syncbazaar/services/document_saver.dart';
 import 'package:syncbazaar/services/orders_workbook.dart';
 import 'package:syncbazaar/services/report_service.dart';
@@ -80,13 +81,23 @@ void main() {
       expect(DocumentSaver.usesSaveSheet, isTrue);
     });
 
-    test('macOS writes straight to Downloads', () {
+    test('macOS is not routed through the mobile save sheet', () {
       debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
       expect(
         DocumentSaver.usesSaveSheet,
         isFalse,
-        reason: 'desktop already lands somewhere the user can find',
+        reason: 'macOS gets its own Save As dialog, not the mobile sheet',
       );
+    });
+
+    test('macOS gets its own Save As dialog', () {
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      expect(DocumentSaver.usesMacSaveDialog, isTrue);
+    });
+
+    test('Android does not use the macOS dialog', () {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      expect(DocumentSaver.usesMacSaveDialog, isFalse);
     });
   });
 }
@@ -98,16 +109,19 @@ class _StubSaver implements DocumentSaver {
   Uint8List? receivedBytes;
   String? receivedName;
   DocumentFormat? receivedFormat;
+  SaveDocumentKind? receivedKind;
 
   @override
   Future<String?> save({
     required Uint8List bytes,
     required String fileName,
     required DocumentFormat format,
+    required SaveDocumentKind kind,
   }) async {
     receivedBytes = bytes;
     receivedName = fileName;
     receivedFormat = format;
+    receivedKind = kind;
     return _result;
   }
 }

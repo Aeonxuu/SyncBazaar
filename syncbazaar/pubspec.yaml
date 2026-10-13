@@ -58,6 +58,13 @@ dependencies:
   screenshot: ^3.0.0
   file_saver: ^0.4.0
   gal: ^2.3.3
+  # macOS-only "Save As" dialog for reports, so a statement of account or
+  # order list lands wherever the user chooses instead of always in
+  # ~/Downloads -- see SaveFolderRepository and DocumentSaver.
+  file_picker: ^8.1.6
+  # Used directly (not just transitively via file_picker) to pull the folder
+  # back out of a chosen save path -- see DocumentSaver._saveOnMacOS.
+  path: ^1.9.0
   excel: ^4.0.6
   # QR payment methods. Both are pure Dart, so they run on the tablet, macOS and
   # the browser alike. zxing2 locates the QR inside an uploaded picture (its
@@ -86,6 +93,7 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
 
+
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
   # activated in the `analysis_options.yaml` file located at the root of your
@@ -93,8 +101,24 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^3.0.0
 
+  flutter_launcher_icons: ^0.14.1
+
 dependency_overrides:
   objective_c: 9.3.0
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  macos:
+    generate: true
+  web:
+    generate: true
+    image_path: "assets/icons/app_icon.png"
+    background_color: "#7C3AED"
+    theme_color: "#7C3AED"
+  image_path: "assets/icons/app_icon.png"
+  adaptive_icon_background: "#7C3AED"
+  adaptive_icon_foreground: "assets/icons/app_icon.png"
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

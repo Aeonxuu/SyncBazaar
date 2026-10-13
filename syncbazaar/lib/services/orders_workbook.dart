@@ -20,6 +20,7 @@ class OrderLine {
     required this.quantity,
     required this.total,
     required this.returned,
+    this.refunded = false,
   });
 
   final DateTime date;
@@ -45,6 +46,19 @@ class OrderLine {
   final double total;
 
   final bool returned;
+
+  /// Whether this line is a refund, money going back to the customer. Its
+  /// [total] is negative and it lands on the sheet of the method the money was
+  /// returned by, so a sheet's column adds up to what is actually in the box.
+  final bool refunded;
+
+  /// What the Status column says. A refund line says so even though the sale it
+  /// undoes is itself returned.
+  String get status => refunded
+      ? 'Refunded'
+      : returned
+      ? 'Returned'
+      : 'Completed';
 
   /// Derived rather than stored: the app records a line total, and a discount
   /// is applied to it. Dividing back out gives the price the customer really
@@ -72,6 +86,7 @@ class OrdersWorkbook {
     'Customer Name',
     'Product',
   ];
+
   /// Header for the column qualifying the reference beside it.
   static const String referenceSourceColumn = 'Reference From';
 
@@ -141,7 +156,7 @@ class OrdersWorkbook {
           DoubleCellValue(_round(line.unitPrice)),
           IntCellValue(line.quantity),
           DoubleCellValue(_round(line.total)),
-          TextCellValue(line.returned ? 'Returned' : 'Completed'),
+          TextCellValue(line.status),
         ]);
       }
 

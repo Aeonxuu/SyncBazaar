@@ -64,6 +64,13 @@ running against the backend — update it when a new recurring one appears.
 - **Fonts are bundled, not fetched.** Inter ships in `assets/fonts/` on purpose: `google_fonts`
   throws on an offline tablet, which once took down receipt printing entirely. Don't swap it for a
   runtime fetch.
+- **A new account's password is set over email.** Account creation carries no password; the person
+  sets their own when they confirm the emailed verification code, at `/api/auth/verify-account/`.
+  This means anyone with access to a new employee's inbox during that window can take the account
+  before they do. Accepted deliberately — a temp password typed by the admin would be a second
+  insecure channel without adding security, since a compromised inbox exposes both equally. Not a
+  bug to fix, just a known limitation of email-based provisioning (the same tradeoff as how e.g.
+  Microsoft/NeoLMS accounts get provisioned).
 
 ## Design work
 
