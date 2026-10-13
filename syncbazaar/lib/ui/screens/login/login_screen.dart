@@ -43,6 +43,17 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  /// Shared by the SIGN IN button and Enter in the password field. Checks
+  /// the cubit's own state rather than the button's, since Enter bypasses
+  /// the button's disabled state.
+  void _signIn() {
+    final cubit = context.read<AuthCubit>();
+    if (cubit.state.isLoading) {
+      return;
+    }
+    cubit.login(_emailController.text.trim(), _passwordController.text, true);
+  }
+
   @override
   Widget build(BuildContext context) {
     final lightPurple = Color.lerp(AppColors.primary, Colors.white, 0.92)!;
@@ -147,6 +158,7 @@ class _LoginScreenState extends State<LoginScreen> {
           labelText: 'Email',
           prefixIcon: Icons.mail_outline,
           keyboardType: TextInputType.emailAddress,
+          textInputAction: TextInputAction.next,
         ),
         const SizedBox(height: 14),
         FloatingLabelTextField(
@@ -154,6 +166,8 @@ class _LoginScreenState extends State<LoginScreen> {
           labelText: 'Password',
           prefixIcon: Icons.lock_outline,
           obscureText: true,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => _signIn(),
         ),
         const SizedBox(height: 4),
         Align(
@@ -266,15 +280,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 borderRadius: BorderRadius.circular(10),
               ),
             ),
-            onPressed: state.isLoading
-                ? null
-                : () {
-                    context.read<AuthCubit>().login(
-                      _emailController.text.trim(),
-                      _passwordController.text,
-                      true,
-                    );
-                  },
+            onPressed: state.isLoading ? null : _signIn,
             child: Text(state.isLoading ? 'SIGNING IN...' : 'SIGN IN'),
           ),
         ),
@@ -603,6 +609,8 @@ class _ResetPasswordPanelState extends State<_ResetPasswordPanel> {
           labelText: 'Email',
           prefixIcon: Icons.mail_outline,
           keyboardType: TextInputType.emailAddress,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => _sendCode(),
         ),
         _buildMessage(),
         const SizedBox(height: 18),
@@ -626,6 +634,7 @@ class _ResetPasswordPanelState extends State<_ResetPasswordPanel> {
           length: 6,
           initialValue: _codeController.text,
           onChanged: (value) => _codeController.text = value,
+          onSubmitted: (_) => _continueFromCode(),
         ),
         const SizedBox(height: 8),
         Align(
@@ -670,6 +679,7 @@ class _ResetPasswordPanelState extends State<_ResetPasswordPanel> {
           labelText: 'New password',
           prefixIcon: Icons.lock_outline,
           obscureText: true,
+          textInputAction: TextInputAction.next,
         ),
         const SizedBox(height: 14),
         FloatingLabelTextField(
@@ -677,6 +687,8 @@ class _ResetPasswordPanelState extends State<_ResetPasswordPanel> {
           labelText: 'Confirm password',
           prefixIcon: Icons.lock_outline,
           obscureText: true,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => _resetPassword(),
         ),
         _buildMessage(),
         const SizedBox(height: 18),

@@ -18,6 +18,8 @@ class FloatingLabelTextField extends StatefulWidget {
     this.helperText,
     this.inputFormatters,
     this.autofocus = false,
+    this.textInputAction,
+    this.onSubmitted,
   });
 
   final String labelText;
@@ -44,6 +46,14 @@ class FloatingLabelTextField extends StatefulWidget {
 
   /// Takes focus when it first appears, bringing up the keyboard.
   final bool autofocus;
+
+  /// What Enter does on a soft keyboard, and the hint for the key's label:
+  /// [TextInputAction.next] for a field with another one below it,
+  /// [TextInputAction.done] for the last.
+  final TextInputAction? textInputAction;
+
+  /// Called when Enter is pressed. Left null, Enter does nothing.
+  final ValueChanged<String>? onSubmitted;
 
   @override
   State<FloatingLabelTextField> createState() => _FloatingLabelTextFieldState();
@@ -83,6 +93,8 @@ class _FloatingLabelTextFieldState extends State<FloatingLabelTextField> {
       enabled: widget.enabled,
       inputFormatters: widget.inputFormatters,
       autofocus: widget.autofocus,
+      textInputAction: widget.textInputAction,
+      onFieldSubmitted: widget.onSubmitted,
       cursorColor: colorScheme.primary,
       style: theme.textTheme.bodyLarge?.copyWith(color: AppColors.text),
       decoration: InputDecoration(

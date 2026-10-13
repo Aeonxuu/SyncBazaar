@@ -277,6 +277,8 @@ class _VerifyAccountPanelState extends State<VerifyAccountPanel> {
           labelText: 'Email',
           prefixIcon: Icons.mail_outline,
           keyboardType: TextInputType.emailAddress,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => _continueFromEmail(),
         ),
         Align(
           alignment: Alignment.centerLeft,
@@ -319,6 +321,7 @@ class _VerifyAccountPanelState extends State<VerifyAccountPanel> {
           length: 6,
           initialValue: _codeController.text,
           onChanged: (value) => _codeController.text = value,
+          onSubmitted: (_) => _continueFromCode(),
         ),
         _buildMessage(),
         const SizedBox(height: 18),
@@ -346,6 +349,7 @@ class _VerifyAccountPanelState extends State<VerifyAccountPanel> {
           labelText: 'Password',
           prefixIcon: Icons.lock_outline,
           obscureText: true,
+          textInputAction: TextInputAction.next,
         ),
         const SizedBox(height: 14),
         FloatingLabelTextField(
@@ -353,6 +357,8 @@ class _VerifyAccountPanelState extends State<VerifyAccountPanel> {
           labelText: 'Confirm password',
           prefixIcon: Icons.lock_outline,
           obscureText: true,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => _verify(),
         ),
         _buildMessage(),
         const SizedBox(height: 18),

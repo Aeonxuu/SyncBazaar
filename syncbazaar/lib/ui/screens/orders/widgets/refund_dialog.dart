@@ -537,6 +537,7 @@ class _RefundDialogState extends State<RefundDialog> {
                   errorText: _approvalError,
                   autofocus: true,
                   onChanged: (_) => setState(() => _approvalError = null),
+                  onSubmitted: (_) => _submit(),
                 ),
                 AnimatedSize(
                   duration: AppMotion.small,
@@ -652,6 +653,7 @@ class RefundApprovalField extends StatelessWidget {
     required this.controller,
     required this.enabled,
     required this.onChanged,
+    this.onSubmitted,
     this.errorText,
     this.autofocus = false,
   });
@@ -660,6 +662,9 @@ class RefundApprovalField extends StatelessWidget {
   final bool enabled;
   final String? errorText;
   final ValueChanged<String> onChanged;
+
+  /// Enter in the field; the dialog points this at its Refund button.
+  final ValueChanged<String>? onSubmitted;
 
   /// Brings up the keyboard on arrival. The password is the only thing this
   /// step asks for.
@@ -675,6 +680,8 @@ class RefundApprovalField extends StatelessWidget {
       autofocus: autofocus,
       onChanged: onChanged,
       errorText: errorText,
+      textInputAction: TextInputAction.done,
+      onSubmitted: onSubmitted,
     );
   }
 }

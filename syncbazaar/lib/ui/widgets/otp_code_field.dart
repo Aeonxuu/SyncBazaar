@@ -13,6 +13,7 @@ class OtpCodeField extends StatefulWidget {
     required this.onChanged,
     this.initialValue = '',
     this.autofocus = true,
+    this.onSubmitted,
   });
 
   final int length;
@@ -22,6 +23,9 @@ class OtpCodeField extends StatefulWidget {
   /// a digit instead of retyping all of it.
   final String initialValue;
   final bool autofocus;
+
+  /// Called with the code so far when Enter is pressed in any box.
+  final ValueChanged<String>? onSubmitted;
 
   @override
   State<OtpCodeField> createState() => _OtpCodeFieldState();
@@ -92,6 +96,11 @@ class _OtpCodeFieldState extends State<OtpCodeField> {
             focusNode: _focusNodes[i],
             autofocus: widget.autofocus && i == 0,
             onChanged: (value) => _handleChanged(i, value),
+            onSubmitted: widget.onSubmitted == null
+                ? null
+                : (_) => widget.onSubmitted!(
+                    _controllers.map((c) => c.text).join(),
+                  ),
             onBackspaceOnEmpty: () => _handleBackspaceOnEmpty(i),
           ),
       ],
@@ -105,6 +114,7 @@ class _OtpBox extends StatefulWidget {
     required this.focusNode,
     required this.autofocus,
     required this.onChanged,
+    required this.onSubmitted,
     required this.onBackspaceOnEmpty,
   });
 
@@ -112,6 +122,7 @@ class _OtpBox extends StatefulWidget {
   final FocusNode focusNode;
   final bool autofocus;
   final ValueChanged<String> onChanged;
+  final ValueChanged<String>? onSubmitted;
   final VoidCallback onBackspaceOnEmpty;
 
   @override
@@ -160,6 +171,7 @@ class _OtpBoxState extends State<_OtpBox> {
           controller: widget.controller,
           focusNode: widget.focusNode,
           autofocus: widget.autofocus,
+          onSubmitted: widget.onSubmitted,
           textAlign: TextAlign.center,
           keyboardType: TextInputType.number,
           maxLength: 6, // Wide enough that a full-code paste is not truncated.
