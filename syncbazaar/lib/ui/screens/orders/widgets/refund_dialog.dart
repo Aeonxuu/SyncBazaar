@@ -38,6 +38,11 @@ const String _otherReason = 'Other';
 const String kRefundPasswordRefused =
     "That password can't approve refunds at this bazaar.";
 
+/// Shown under the reference when it is the original payment's own.
+const String kRefundReusedReference =
+    "This is the original payment's reference. Enter the reference of the "
+    'money you sent back.';
+
 const String kRefundNeedsConnection = 'Refunds need a connection.';
 
 /// The tinted surface the sale's facts sit on.
@@ -173,6 +178,24 @@ class _RefundDialogState extends State<RefundDialog> {
     return label == null || label.isEmpty ? 'Reference number' : label;
   }
 
+  /// Strips spaces and case, so "gc 77" and "GC77" are the same reference.
+  static String _comparable(String value) =>
+      value.replaceAll(RegExp(r'\s+'), '').toLowerCase();
+
+  /// Whether what was typed is the reference of the original payment.
+  ///
+  /// A GCash reference cannot be checked against GCash from here, but this slip
+  /// can be: the money sent back has a reference of its own, and typing the one
+  /// the customer paid with is the likeliest mistake. It would put a payment's
+  /// reference on a refund, where an audit would take it for the same
+  /// transaction.
+  bool get _reusesPaymentReference {
+    final original = _comparable(widget.record.paymentReference);
+    return _needsReference &&
+        original.isNotEmpty &&
+        _comparable(_reference.text) == original;
+  }
+
   /// The text sent as `reason`: the choice, or "Other: <text>".
   String? get _reasonToSend {
     final reason = _reason;
@@ -189,7 +212,8 @@ class _RefundDialogState extends State<RefundDialog> {
       widget.record.onServer &&
       _entry != null &&
       _reasonToSend != null &&
-      (!_needsReference || _reference.text.trim().isNotEmpty);
+      (!_needsReference || _reference.text.trim().isNotEmpty) &&
+      !_reusesPaymentReference;
 
   bool get _canRefund => !_busy && _canContinue && _approval.text.isNotEmpty;
 
@@ -335,6 +359,10 @@ class _RefundDialogState extends State<RefundDialog> {
                     labelText: _referenceLabel,
                     controller: _reference,
                     helperText: 'Reference of the money sent back',
+                    // Under the field it concerns, in place of the helper.
+                    errorText: _reusesPaymentReference
+                        ? kRefundReusedReference
+                        : null,
                     onChanged: (_) => setState(() {}),
                   ),
                 ),

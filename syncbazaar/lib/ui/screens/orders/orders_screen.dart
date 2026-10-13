@@ -13,6 +13,12 @@ import '../../../data/repositories/event_repository.dart';
 import '../../../data/repositories/refund_repository.dart';
 import '../../../data/repositories/vendor_payment_method_repository.dart';
 import '../../widgets/app_message.dart';
+import '../../../data/repositories/settings_repository.dart';
+import '../../../models/company.dart';
+import '../../../models/receipt.dart';
+import '../../../models/refund.dart';
+import '../../../services/refund_receipt_builder.dart';
+import 'widgets/refund_receipt_dialog.dart';
 import '../../widgets/app_dropdown.dart';
 import '../../widgets/bazaar_search_field.dart';
 import '../../widgets/bazaar_status_filter_button.dart';
@@ -488,6 +494,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
     final dashboardCubit = context.read<DashboardCubit>();
     final inventoryCubit = context.read<InventoryCubit>();
     final ordersCubit = context.read<OrdersCubit>();
+    final settings = context.read<SettingsRepository>();
 
     final refund = await showRefundDialog(
       context: context,
@@ -514,11 +521,44 @@ class _OrdersScreenState extends State<OrdersScreen> {
     await inventoryCubit.load();
     await ordersCubit.load();
 
-    showAppMessage(
-      'Refunded ${formatPeso(refund.amount)} to ${record.customerName}. '
-      'Approved by ${refund.authorizedByName}.',
-      kind: AppMessageKind.success,
-      title: 'Refund issued',
+    // The receipt, offered: the refund is done, and whether the customer is
+    // handed a copy is the person's call. Shown over the app's own navigator
+    // because this screen may have been left while the refund was reloading.
+    final overlay = appNavigatorKey.currentState?.overlay?.context;
+    if (overlay == null) {
+      return;
+    }
+    final receipt = await _refundReceiptFor(settings, refund, record, event);
+    if (!overlay.mounted) {
+      return;
+    }
+    await showRefundReceiptDialog(context: overlay, data: receipt);
+  }
+
+  /// What the refund receipt prints. The store and venue heads are read now, and
+  /// a failure to read them costs the heading, never the receipt: the money has
+  /// already gone back.
+  Future<RefundReceiptData> _refundReceiptFor(
+    SettingsRepository settings,
+    Refund refund,
+    TransactionRecord record,
+    BazaarEvent event,
+  ) async {
+    var storeName = '';
+    Company? venue;
+    try {
+      storeName = await settings.storeName();
+      final companies = await settings.listCompanies();
+      venue = companies.where((c) => c.id == event.companyId).firstOrNull;
+    } catch (_) {
+      // Printed without the heading rather than not at all.
+    }
+    return buildRefundReceipt(
+      refund: refund,
+      sale: record,
+      event: event,
+      storeName: storeName,
+      venue: venue,
     );
   }
 

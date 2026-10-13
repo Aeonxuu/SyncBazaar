@@ -72,7 +72,17 @@ class RefundRepository {
                 ),
               )
               as Map<String, dynamic>;
-      refund = RefundApiMapper.refundFromJson(created, eventId: eventId);
+      final returned = RefundApiMapper.refundFromJson(
+        created,
+        eventId: eventId,
+      );
+      // The server does not store the reference yet and so does not send it
+      // back. The receipt still has to print what the person typed, so it is
+      // put back on the refund; a server that does return one wins.
+      final typed = reference?.trim() ?? '';
+      refund = returned.reference.isEmpty && typed.isNotEmpty
+          ? returned.withReference(typed)
+          : returned;
     } on ApiException catch (error) {
       // The address, never the body: that carries the approver's password.
       debugPrint(

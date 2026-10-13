@@ -56,6 +56,26 @@ class Refund {
   final String customerName;
   final DateTime createdAt;
   final String? clientUuid;
+
+  /// The same refund with the reference filled in. The server does not return
+  /// one yet, so the one the person typed is put back on what it returned.
+  Refund withReference(String reference) => Refund(
+    id: id,
+    saleId: saleId,
+    eventId: eventId,
+    amount: amount,
+    methodId: methodId,
+    methodName: methodName,
+    reason: reason,
+    reference: reference,
+    issuedById: issuedById,
+    issuedByName: issuedByName,
+    authorizedById: authorizedById,
+    authorizedByName: authorizedByName,
+    customerName: customerName,
+    createdAt: createdAt,
+    clientUuid: clientUuid,
+  );
 }
 
 /// The employee who may approve refunds at one bazaar, besides the owner.

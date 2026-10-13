@@ -41,7 +41,13 @@ class TransactionRecord {
     this.stockLabel,
     this.kind = TransactionKind.sale,
     this.approvedByName,
+    this.paymentReference = '',
   });
+
+  /// The reference the sale was paid with: a GCash number, a bank slip. Empty
+  /// for cash. Kept so a refund can be checked against it -- the money sent back
+  /// has its own reference, and typing the original's again is a slip.
+  final String paymentReference;
 
   /// Whether this row is a sale or the refund of one.
   final TransactionKind kind;
@@ -338,6 +344,9 @@ class OrdersCubit extends Cubit<OrdersState> {
             ? null
             : refundByServerSaleId[sale.serverId],
         serverSaleId: sale.serverId,
+        // Named `employeeId` on the model, which it has never held: the POS
+        // writes the payment method's extra field into it.
+        paymentReference: sale.employeeId,
       );
     }
 

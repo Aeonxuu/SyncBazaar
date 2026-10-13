@@ -105,3 +105,81 @@ class ReceiptData {
   /// Stem for the exported file — `receipt-SB-260810-144233`.
   String get fileName => 'receipt-$receiptNo';
 }
+
+/// Everything printed on one refund receipt, resolved when the refund went
+/// through.
+///
+/// What the customer is handed when money goes back, as the sale receipt is what
+/// they were handed when it came in. A plain data object with no Flutter
+/// import, for the same reasons as [ReceiptData]: it is what the builder
+/// produces, what the renderer consumes, and what a test can assert on without
+/// pumping a widget.
+class RefundReceiptData {
+  const RefundReceiptData({
+    required this.storeName,
+    required this.venueName,
+    required this.venueAddress,
+    required this.venueContact,
+    required this.eventName,
+    required this.receiptNo,
+    required this.refundedAt,
+    required this.cashierName,
+    required this.approvedByName,
+    required this.customerName,
+    required this.itemName,
+    required this.itemVariantLabel,
+    required this.qty,
+    required this.unitPrice,
+    required this.soldAt,
+    required this.soldPaymentMethod,
+    required this.refundAmount,
+    required this.refundMethod,
+    required this.reason,
+    this.reference = '',
+  });
+
+  final String storeName;
+  final String venueName;
+  final String venueAddress;
+  final String venueContact;
+  final String eventName;
+
+  /// `RF-260810-144233`: readable at a glance and sorts chronologically, like a
+  /// sale's `SB-` number, so the two never look alike.
+  final String receiptNo;
+
+  /// When the money went back, not when the item was sold.
+  final DateTime refundedAt;
+
+  /// Whoever tapped refund at the till.
+  final String cashierName;
+
+  /// Whose password approved it: the owner, or the bazaar's refund handler.
+  final String approvedByName;
+
+  final String customerName;
+
+  /// What came back, as the sale receipt named it.
+  final String itemName;
+  final String itemVariantLabel;
+  final int qty;
+  final double unitPrice;
+
+  /// The sale being undone, so the two can be matched.
+  final DateTime soldAt;
+  final String soldPaymentMethod;
+
+  /// Positive, as the server stores it. The receipt prints it as money out.
+  final double refundAmount;
+
+  /// The way the money went back. Always the way it came in.
+  final String refundMethod;
+
+  /// The GCash or bank reference of the money sent back. Empty for cash.
+  final String reference;
+
+  final String reason;
+
+  /// Stem for the exported file: `refund-RF-260810-144233`.
+  String get fileName => 'refund-$receiptNo';
+}

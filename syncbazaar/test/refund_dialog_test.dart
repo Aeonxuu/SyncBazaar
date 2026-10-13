@@ -56,7 +56,9 @@ void main() {
     int? serverSaleId = 2302,
     String customer = 'Aaron Domingo',
     bool withParts = true,
+    String paymentReference = '',
   }) => TransactionRecord(
+    paymentReference: paymentReference,
     orderId: 1760000000123,
     serverSaleId: serverSaleId,
     customerName: customer,
@@ -129,6 +131,7 @@ void main() {
     int? serverSaleId = 2302,
     String customer = 'Aaron Domingo',
     bool withParts = true,
+    String paymentReference = '',
     Size size = const Size(1280, 800),
     Future<List<ModeOfPaymentCatalogEntry>> Function()? loadMethods,
   }) async {
@@ -152,6 +155,7 @@ void main() {
                       serverSaleId: serverSaleId,
                       customer: customer,
                       withParts: withParts,
+                      paymentReference: paymentReference,
                     ),
                     event: event(),
                     refunds: refunds,
@@ -316,6 +320,91 @@ void main() {
 
       await chooseReason(tester, 'Defective');
       expect(isEnabled(tester, continueButton()), isTrue);
+    });
+
+    group('the original payment\'s reference', () {
+      Future<void> typeReference(WidgetTester tester, String text) async {
+        await chooseReason(tester, 'Wrong size');
+        await fill(tester, 'GCash reference no.', text);
+        // The helper fades out as the message fades in.
+        await tester.pumpAndSettle();
+      }
+
+      testWidgets('blocks Continue and says why under the field', (
+        tester,
+      ) async {
+        await open(tester, paymentReference: '1234 5678 90');
+        await typeReference(tester, '1234 5678 90');
+
+        expect(isEnabled(tester, continueButton()), isFalse);
+        expect(find.text(kRefundReusedReference), findsOneWidget);
+        expect(
+          kRefundReusedReference,
+          "This is the original payment's reference. Enter the reference of "
+          'the money you sent back.',
+        );
+        // Under the reference field, in place of its helper.
+        expect(find.text('Reference of the money sent back'), findsNothing);
+        expect(
+          tester.getTopLeft(find.text(kRefundReusedReference)).dy,
+          greaterThan(tester.getTopLeft(find.text('GCash reference no.')).dy),
+        );
+      });
+
+      testWidgets('ignores spaces and letter case', (tester) async {
+        await open(tester, paymentReference: 'GC-12 34');
+        await typeReference(tester, '  gc-1234 ');
+
+        expect(isEnabled(tester, continueButton()), isFalse);
+        expect(find.text(kRefundReusedReference), findsOneWidget);
+      });
+
+      testWidgets('a different reference goes through', (tester) async {
+        await open(tester, paymentReference: '1234567890');
+        await typeReference(tester, '9876543210');
+
+        expect(isEnabled(tester, continueButton()), isTrue);
+        expect(find.text(kRefundReusedReference), findsNothing);
+        expect(find.text('Reference of the money sent back'), findsOneWidget);
+      });
+
+      testWidgets('clears again once it is changed', (tester) async {
+        await open(tester, paymentReference: '1234567890');
+        await typeReference(tester, '1234567890');
+        expect(isEnabled(tester, continueButton()), isFalse);
+
+        await fill(tester, 'GCash reference no.', '1234567891');
+        await tester.pumpAndSettle();
+
+        expect(isEnabled(tester, continueButton()), isTrue);
+      });
+
+      testWidgets('a sale with no recorded reference blocks nothing', (
+        tester,
+      ) async {
+        await open(tester);
+        await typeReference(tester, 'GC-77');
+
+        expect(isEnabled(tester, continueButton()), isTrue);
+      });
+
+      testWidgets('a reference that only contains the original is allowed', (
+        tester,
+      ) async {
+        // Identical is the slip; similar is not.
+        await open(tester, paymentReference: '1234');
+        await typeReference(tester, '12345');
+
+        expect(isEnabled(tester, continueButton()), isTrue);
+      });
+
+      testWidgets('is not asked of a cash refund at all', (tester) async {
+        await open(tester, method: 'CASH', paymentReference: '1234');
+        await chooseReason(tester, 'Wrong size');
+
+        expect(isEnabled(tester, continueButton()), isTrue);
+        expect(find.text(kRefundReusedReference), findsNothing);
+      });
     });
 
     testWidgets('a GCash sale asks for its reference, with a short helper', (

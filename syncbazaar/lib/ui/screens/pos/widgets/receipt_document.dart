@@ -220,6 +220,203 @@ class ReceiptDocument extends StatelessWidget {
   }
 }
 
+/// The printable refund receipt, laid out like the sale receipt it answers.
+///
+/// Same thermal-roll width, the same store and venue head, the same dashed
+/// rules, so the two read as a pair; what differs is the word REFUND across the
+/// top, who approved it, and the money printed as going out. The same two
+/// constraints as [ReceiptDocument] hold and for the same reasons: nothing in
+/// the outer column may flex vertically, because the capture runs with an
+/// unbounded height, and the white background is load-bearing because the
+/// capture supplies a transparent Material.
+class RefundReceiptDocument extends StatelessWidget {
+  const RefundReceiptDocument({super.key, required this.data});
+
+  final RefundReceiptData data;
+
+  static const double width = ReceiptDocument.width;
+
+  // Measured against the rendered layout; `refund_receipt_test.dart` fails if
+  // the estimate stops covering the real height. It picks the capture's pixel
+  // ratio, so under-estimating is the truncation the ratio exists to avoid.
+  static const double _fixedHeight = 556;
+  static const double _variantHeight = 14;
+  static const double _referenceHeight = 20;
+
+  /// A reason is free text and can wrap. Two extra lines is more than the
+  /// longest one a text field here allows will ever need on a 380px roll.
+  static const double _wrappedReasonHeight = 36;
+  static const double _estimateMargin = 1.10;
+
+  /// Rendered height in logical pixels. Errs tall: over-estimating costs a
+  /// little sharpness, under-estimating risks losing the bottom of the receipt.
+  static double estimateHeight(RefundReceiptData data) {
+    final body =
+        _fixedHeight +
+        (data.itemVariantLabel.trim().isNotEmpty ? _variantHeight : 0) +
+        (data.reference.trim().isNotEmpty ? _referenceHeight : 0) +
+        (data.reason.length > 28 ? _wrappedReasonHeight : 0);
+    return body * _estimateMargin;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final base =
+        theme.textTheme.bodySmall?.copyWith(color: AppColors.text) ??
+        const TextStyle(color: AppColors.text);
+    final customer = data.customerName.trim();
+    final variant = data.itemVariantLabel.trim();
+
+    return Container(
+      width: width,
+      color: Colors.white,
+      padding: const EdgeInsets.symmetric(
+        horizontal: ReceiptDocument._pagePaddingH,
+        vertical: ReceiptDocument._pagePaddingV,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            data.storeName.toUpperCase(),
+            textAlign: TextAlign.center,
+            style: base.copyWith(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+              height: 1.2,
+            ),
+          ),
+          const SizedBox(height: 5),
+          if (data.venueName.trim().isNotEmpty)
+            ReceiptDocument._centered(
+              data.venueName,
+              base,
+              color: Colors.black54,
+            ),
+          if (data.venueAddress.trim().isNotEmpty)
+            ReceiptDocument._centered(data.venueAddress, base),
+          if (data.venueContact.trim().isNotEmpty)
+            ReceiptDocument._centered(data.venueContact, base),
+
+          const SizedBox(height: 12),
+          const _DashedRule(),
+          const SizedBox(height: 12),
+
+          // The word that makes this unmistakably not a sale receipt.
+          Text(
+            'REFUND',
+            textAlign: TextAlign.center,
+            style: base.copyWith(
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 4,
+              height: 1.2,
+            ),
+          ),
+
+          const SizedBox(height: 12),
+          const _DashedRule(),
+          const SizedBox(height: 12),
+
+          _MetaRow(label: 'Receipt', value: data.receiptNo, style: base),
+          _MetaRow(
+            label: 'Date',
+            value: ReceiptDocument._timestamp(data.refundedAt),
+            style: base,
+          ),
+          if (data.eventName.trim().isNotEmpty)
+            _MetaRow(label: 'Bazaar', value: data.eventName, style: base),
+          _MetaRow(label: 'Cashier', value: data.cashierName, style: base),
+          _MetaRow(
+            label: 'Approved by',
+            value: data.approvedByName,
+            style: base,
+          ),
+          if (customer.isNotEmpty)
+            _MetaRow(label: 'Customer', value: customer, style: base),
+
+          const SizedBox(height: 12),
+          const _DashedRule(),
+          const SizedBox(height: 12),
+
+          // What came back, laid out as it was on the sale receipt.
+          Text(
+            'ITEM RETURNED',
+            style: base.copyWith(
+              fontSize: 9.5,
+              letterSpacing: 0.8,
+              fontWeight: FontWeight.w700,
+              color: Colors.black38,
+            ),
+          ),
+          const SizedBox(height: 6),
+          _LineBlock(
+            line: ReceiptLine(
+              name: data.itemName,
+              variantLabel: variant,
+              qty: data.qty,
+              unitPrice: data.unitPrice,
+              lineTotal: data.unitPrice * data.qty,
+            ),
+            style: base,
+          ),
+          _MetaRow(
+            label: 'Sold',
+            value: ReceiptDocument._timestamp(data.soldAt),
+            style: base,
+          ),
+          _MetaRow(
+            label: 'Paid with',
+            value: data.soldPaymentMethod.toUpperCase(),
+            style: base,
+          ),
+
+          const SizedBox(height: 9),
+          const _DashedRule(),
+          const SizedBox(height: 12),
+
+          // The money, going out: negative, as the records print it.
+          _AmountRow(
+            label: 'REFUND',
+            value: formatPesoSigned(-data.refundAmount),
+            style: base,
+            emphasize: true,
+          ),
+          const SizedBox(height: 10),
+          _AmountRow(
+            label: 'Refunded via',
+            value: data.refundMethod.toUpperCase(),
+            style: base,
+          ),
+          if (data.reference.trim().isNotEmpty) ...[
+            const SizedBox(height: 4),
+            _AmountRow(label: 'Reference', value: data.reference, style: base),
+          ],
+          const SizedBox(height: 4),
+          _AmountRow(label: 'Reason', value: data.reason, style: base),
+
+          const SizedBox(height: 12),
+          const _DashedRule(),
+          const SizedBox(height: 12),
+
+          ReceiptDocument._centered(
+            "The item was returned to this bazaar's stock.",
+            base,
+          ),
+          const SizedBox(height: 4),
+          ReceiptDocument._centered(
+            'This serves as your proof of refund.',
+            base,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// `label            value` — label left, value right, one line.
 class _MetaRow extends StatelessWidget {
   const _MetaRow({
