@@ -1,9 +1,7 @@
 import 'package:flutter/foundation.dart';
 
-import '../../models/approval_request.dart';
 import '../../models/refund.dart';
 import '../remote/api_client.dart';
-import '../remote/approval_api_mapper.dart';
 import '../remote/refund_api_mapper.dart';
 import 'auth_repository.dart';
 import 'sales_repository.dart';
@@ -152,37 +150,16 @@ class RefundRepository {
 
   /// Makes [userId] the bazaar's refund handler.
   ///
-  /// There is no direct grant endpoint yet, so this is the two-step the server
-  /// does offer: raise a refund-authorization request, then approve it as the
-  /// owner or admin. This is the only method that knows that; a direct
-  /// endpoint replaces its body and nothing else.
-  ///
-  /// Fails with a 400 when another employee is already the handler. The
-  /// request is then left pending on the server, so it is deleted again,
-  /// best effort, rather than lingering as a request nobody will answer.
+  /// One direct call. The server refuses with a 400 -- and says why -- when the
+  /// person is not in the vendor, is not assigned to the bazaar, or another
+  /// employee is already the handler. The last needs a revoke first; see
+  /// [changeHandler].
   Future<void> grantRefundHandler(int eventId, int userId) async {
     final auth = _requireSession();
-    final created =
-        await auth.api.post(
-              '/api/bazaar/event/$eventId/approval/',
-              body: RefundApiMapper.grantRequestBody(userId),
-            )
-            as Map<String, dynamic>;
-    final requestId = (created['id'] as num).toInt();
-    final path = '/api/bazaar/event/$eventId/approval/$requestId/';
-    try {
-      await auth.api.patch(
-        path,
-        body: ApprovalApiMapper.decisionBody(ApprovalStatus.approved),
-      );
-    } on ApiException {
-      try {
-        await auth.api.delete(path);
-      } on ApiException {
-        // Left behind. The approvals screen never lists it, so it is harmless.
-      }
-      rethrow;
-    }
+    await auth.api.post(
+      '/api/bazaar/event/$eventId/refund-authorization/',
+      body: RefundApiMapper.grantBody(userId),
+    );
   }
 
   Future<void> revokeRefundHandler(int eventId, int authorizationId) async {

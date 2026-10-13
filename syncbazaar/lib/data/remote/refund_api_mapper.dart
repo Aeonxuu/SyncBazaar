@@ -70,12 +70,8 @@ class RefundApiMapper {
   static String moneyString(double value) =>
       ((value * 100).round() / 100).toStringAsFixed(2);
 
-  /// The body that asks for a refund handler. The server's own default status
-  /// is pending, so none is sent.
-  static Map<String, dynamic> grantRequestBody(int userId) => {
-    'request_type': 'RA',
-    'details_json': {'user_id': userId},
-  };
+  /// The body that makes someone a bazaar's refund handler.
+  static Map<String, dynamic> grantBody(int userId) => {'user_id': userId};
 
   /// Every authorization row for a bazaar, revoked ones included.
   static RefundHandler? activeHandlerFromPayload(List<dynamic> payload) {

@@ -137,11 +137,8 @@ void main() {
       expect(RefundApiMapper.activeHandlerFromPayload([]), isNull);
     });
 
-    test('asks for the grant with the refund-authorization request code', () {
-      expect(RefundApiMapper.grantRequestBody(11), {
-        'request_type': 'RA',
-        'details_json': {'user_id': 11},
-      });
+    test('asks for the grant with just the user', () {
+      expect(RefundApiMapper.grantBody(11), {'user_id': 11});
     });
   });
 }

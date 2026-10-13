@@ -169,63 +169,24 @@ void main() {
       expect(handler?.authorizationId, 2);
     });
 
-    test('granting raises the request, then approves it', () async {
-      final h = harness((r) {
-        if (r.method == 'POST') {
-          return http.Response(jsonEncode({'id': 77}), 201);
-        }
-        return http.Response('{}', 200);
-      });
+    test('granting is one direct call with just the user', () async {
+      final h = harness((r) => http.Response('{"id": 3}', 201));
 
       await h.repo.grantRefundHandler(5, 11);
 
       expect(h.requests.map(label), [
-        'POST /api/bazaar/event/5/approval/',
-        'PATCH /api/bazaar/event/5/approval/77/',
+        'POST /api/bazaar/event/5/refund-authorization/',
       ]);
-      expect(jsonDecode(h.requests[0].body), {
-        'request_type': 'RA',
-        'details_json': {'user_id': 11},
-      });
-      expect(jsonDecode(h.requests[1].body), {'status': 'AP'});
+      expect(jsonDecode(h.requests.single.body), {'user_id': 11});
     });
 
-    test('a refused grant deletes the request it raised and says why', () async {
-      final h = harness((r) {
-        if (r.method == 'POST') {
-          return http.Response(jsonEncode({'id': 77}), 201);
-        }
-        if (r.method == 'PATCH') {
-          return http.Response(
-            '{"details_json": ["An employee is already authorized for this event."]}',
-            400,
-          );
-        }
-        return http.Response('', 204);
-      });
-
-      await expectLater(
-        h.repo.grantRefundHandler(5, 11),
-        throwsA(isA<ApiException>()),
+    test('a refused grant says why, and raises nothing to clean up', () async {
+      final h = harness(
+        (r) => http.Response(
+          '{"user_id": ["User is not assigned to this event."]}',
+          400,
+        ),
       );
-
-      expect(h.requests.map(label), [
-        'POST /api/bazaar/event/5/approval/',
-        'PATCH /api/bazaar/event/5/approval/77/',
-        'DELETE /api/bazaar/event/5/approval/77/',
-      ]);
-    });
-
-    test('a delete that also fails does not hide the real error', () async {
-      final h = harness((r) {
-        if (r.method == 'POST') {
-          return http.Response(jsonEncode({'id': 77}), 201);
-        }
-        if (r.method == 'PATCH') {
-          return http.Response('{"error": "already authorized"}', 400);
-        }
-        return http.Response('{"detail": "gone"}', 500);
-      });
 
       await expectLater(
         h.repo.grantRefundHandler(5, 11),
@@ -233,10 +194,15 @@ void main() {
           isA<ApiException>().having(
             (e) => e.message,
             'message',
-            'already authorized',
+            'User is not assigned to this event.',
           ),
         ),
       );
+
+      // The old two-call flow left a pending request behind to delete.
+      expect(h.requests.map(label), [
+        'POST /api/bazaar/event/5/refund-authorization/',
+      ]);
     });
 
     test('revoking posts to the authorization row', () async {
@@ -256,9 +222,6 @@ void main() {
         if (r.method == 'GET') {
           return http.Response(jsonEncode([authRow(2, 10)]), 200);
         }
-        if (r.url.path.endsWith('/approval/')) {
-          return http.Response(jsonEncode({'id': 77}), 201);
-        }
         return http.Response('{}', 200);
       });
 
@@ -267,9 +230,9 @@ void main() {
       expect(h.requests.map(label), [
         'GET /api/bazaar/event/5/refund-authorization/',
         'POST /api/bazaar/event/5/refund-authorization/2/revoke/',
-        'POST /api/bazaar/event/5/approval/',
-        'PATCH /api/bazaar/event/5/approval/77/',
+        'POST /api/bazaar/event/5/refund-authorization/',
       ]);
+      expect(jsonDecode(h.requests.last.body), {'user_id': 11});
     });
 
     test('choosing nobody revokes and grants nothing', () async {
@@ -304,17 +267,21 @@ void main() {
     );
 
     test('a failed grant puts the previous handler back', () async {
-      var approvalPosts = 0;
+      var grants = <dynamic>[];
       final h = harness((r) {
         if (r.method == 'GET') {
           return http.Response(jsonEncode([authRow(2, 10)]), 200);
         }
-        if (r.method == 'POST' && r.url.path.endsWith('/approval/')) {
-          approvalPosts++;
-          return http.Response(jsonEncode({'id': 70 + approvalPosts}), 201);
-        }
-        if (r.method == 'PATCH' && r.url.path.endsWith('/approval/71/')) {
-          return http.Response('{"error": "not assigned"}', 400);
+        if (r.method == 'POST' &&
+            r.url.path.endsWith('/refund-authorization/')) {
+          final user = jsonDecode(r.body)['user_id'];
+          grants.add(user);
+          if (user == 11) {
+            return http.Response(
+              '{"user_id": ["User is not assigned to this event."]}',
+              400,
+            );
+          }
         }
         return http.Response('{}', 200);
       });
@@ -324,9 +291,6 @@ void main() {
         throwsA(isA<ApiException>()),
       );
 
-      final grants = h.requests
-          .where((r) => r.method == 'POST' && r.url.path.endsWith('/approval/'))
-          .map((r) => jsonDecode(r.body)['details_json']['user_id']);
       expect(grants, [11, 10], reason: 'the old handler was restored');
     });
   });
