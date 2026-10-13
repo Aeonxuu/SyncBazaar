@@ -11,6 +11,13 @@ import '../../models/sale.dart';
 import '../../models/user.dart';
 import '../../services/sale_upload_service.dart';
 
+/// What a row of the history records.
+///
+/// A refund is its own row rather than a change to the sale it undoes: the sale
+/// keeps its positive total and shows as returned, and the refund sits beside
+/// it as money going out, so a column of totals adds up to the cash on hand.
+enum TransactionKind { sale, refund }
+
 /// A single completed transaction, joining an [Order]'s resolved product
 /// label with its [Sale]'s financial figures — purely for display in the
 /// read-only Transaction History table.
@@ -32,7 +39,17 @@ class TransactionRecord {
     this.productName,
     this.variantDetail,
     this.stockLabel,
+    this.kind = TransactionKind.sale,
+    this.approvedByName,
   });
+
+  /// Whether this row is a sale or the refund of one.
+  final TransactionKind kind;
+
+  bool get isRefund => kind == TransactionKind.refund;
+
+  /// Whose password approved the refund. Only on a refund row.
+  final String? approvedByName;
 
   final int orderId;
   final String customerName;
@@ -78,7 +95,7 @@ class TransactionRecord {
   /// Where the refund button belongs on this row: only a sale the server holds
   /// that is neither returned nor already refunded can still be refunded.
   bool get isRefundable =>
-      onServer && status != OrderStatus.returned && refund == null;
+      !isRefund && onServer && status != OrderStatus.returned && refund == null;
 }
 
 class OrdersState {
@@ -175,7 +192,48 @@ class OrdersCubit extends Cubit<OrdersState> {
     SaleUploadService? uploader,
   }) : _events = events,
        _uploader = uploader,
-       super(const OrdersState());
+       super(const OrdersState()) {
+    // So the rows follow the data: a sale uploaded, a refund issued or a sync
+    // finished while this screen is open shows at once, without leaving it.
+    _changes = _salesRepository.changes.listen((_) => _reloadQuietly());
+  }
+
+  StreamSubscription<void>? _changes;
+  bool _reloading = false;
+  bool _dirty = false;
+
+  @override
+  Future<void> close() {
+    _changes?.cancel();
+    return super.close();
+  }
+
+  /// Rebuilds the rows after the data changed underneath them.
+  ///
+  /// Quiet: no loading state, since the rows on screen stay until the new ones
+  /// replace them. Changes that arrive while a rebuild runs are folded into one
+  /// more pass rather than each starting its own.
+  Future<void> _reloadQuietly() async {
+    // Nobody signed in means nothing of anybody's to show.
+    if (isClosed || !(_events?.hasSession ?? true)) {
+      return;
+    }
+    if (_reloading) {
+      _dirty = true;
+      return;
+    }
+    _reloading = true;
+    try {
+      do {
+        _dirty = false;
+        await _loadRecords();
+      } while (_dirty && !isClosed);
+    } catch (_) {
+      // The rows on screen stay; the next change tries again.
+    } finally {
+      _reloading = false;
+    }
+  }
 
   final SalesRepository _salesRepository;
   final ProductRepository _productRepository;
@@ -234,10 +292,9 @@ class OrdersCubit extends Cubit<OrdersState> {
       if (waiting.isEmpty) {
         return;
       }
-      final result = await uploader.uploadPending();
-      if (result.uploaded > 0 && !isClosed) {
-        await _loadRecords();
-      }
+      // The rows update themselves when the upload lands: it changes the
+      // sales, and the repository says so.
+      await uploader.uploadPending();
     } catch (_) {
       // Stays waiting, and is tried again next time.
     }
@@ -284,7 +341,67 @@ class OrdersCubit extends Cubit<OrdersState> {
       );
     }
 
-    final records = [for (final sale in sales) recordFor(sale)];
+    final saleByServerId = {
+      for (final sale in sales)
+        if (sale.serverId != null) sale.serverId!: sale,
+    };
+
+    TransactionRecord refundRecordFor(Refund refund) {
+      // The sale it undoes, for what was sold and who sold it. A refund whose
+      // sale is not among those loaded is still money that went out, so it is
+      // shown rather than dropped.
+      final sale = saleByServerId[refund.saleId];
+      final parts = sale == null
+          ? null
+          : labels.partsFor(
+              productId: sale.productId,
+              optionIdA: sale.variantOptionIdA,
+              optionIdB: sale.variantOptionIdB,
+            );
+      return TransactionRecord(
+        kind: TransactionKind.refund,
+        // Negative so it can never collide with a sale's id.
+        orderId: -refund.id,
+        customerName: refund.customerName.isNotEmpty
+            ? refund.customerName
+            : (sale?.customerName ?? kWalkInCustomer),
+        timestamp: refund.createdAt,
+        productLabel: sale == null
+            ? 'Unknown product'
+            : labels.labelFor(
+                productId: sale.productId,
+                optionIdA: sale.variantOptionIdA,
+                optionIdB: sale.variantOptionIdB,
+              ),
+        productName: parts?.name,
+        variantDetail: parts?.variantDetail,
+        stockLabel: parts?.stockLabel,
+        // Money out, so negative. The quantity stays positive: it is how many
+        // came back, and a negative count would read as a different thing.
+        unitPrice: -(sale != null && sale.qty > 0
+            ? refund.amount / sale.qty
+            : refund.amount),
+        quantity: sale?.qty ?? 1,
+        total: -refund.amount,
+        eventId: refund.eventId,
+        paymentMethod: refund.methodName.isNotEmpty
+            ? refund.methodName
+            : (sale?.paymentMethod ?? 'CASH'),
+        // The seller's, not whoever tapped refund: an employee sees refunds of
+        // sales at their bazaars the same as the sales themselves.
+        userId: sale?.soldById ?? 0,
+        status: OrderStatus.returned,
+        refund: refund,
+        approvedByName: refund.authorizedByName,
+        serverSaleId: refund.saleId,
+      );
+    }
+
+    final records = [
+      for (final sale in sales) recordFor(sale),
+      for (final refund in await _salesRepository.listRefunds())
+        refundRecordFor(refund),
+    ];
     records.sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
     emit(

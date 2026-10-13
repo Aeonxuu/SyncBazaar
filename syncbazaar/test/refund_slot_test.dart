@@ -322,6 +322,10 @@ void main() {
       synced: synced,
     );
 
+    /// Just the sales: a refund for a sale not loaded still gets its own row.
+    Iterable<TransactionRecord> sales(List<TransactionRecord> records) =>
+        records.where((r) => !r.isRefund);
+
     Future<List<TransactionRecord>> load(
       List<Sale> sales,
       List<Refund> refunds,
@@ -353,9 +357,13 @@ void main() {
     test('a sale that never reached the server is not refundable', () async {
       final records = await load([sale(synced: false)], [refund()]);
 
-      expect(records.single.onServer, isFalse);
-      expect(records.single.refund, isNull, reason: 'its id is only local');
-      expect(records.single.isRefundable, isFalse);
+      expect(sales(records).single.onServer, isFalse);
+      expect(
+        sales(records).single.refund,
+        isNull,
+        reason: 'its id is only local',
+      );
+      expect(sales(records).single.isRefundable, isFalse);
     });
 
     test(
@@ -366,16 +374,16 @@ void main() {
         // never seen.
         final records = await load([sale(synced: true)], [refund()]);
 
-        expect(records.single.serverSaleId, isNull);
-        expect(records.single.isRefundable, isFalse);
+        expect(sales(records).single.serverSaleId, isNull);
+        expect(sales(records).single.isRefundable, isFalse);
       },
     );
 
     test('the record carries the server id, not the local one', () async {
       final records = await load([sale(id: 1760000000123, serverId: 2302)], []);
 
-      expect(records.single.orderId, 1760000000123);
-      expect(records.single.serverSaleId, 2302);
+      expect(sales(records).single.orderId, 1760000000123);
+      expect(sales(records).single.serverSaleId, 2302);
     });
   });
 }

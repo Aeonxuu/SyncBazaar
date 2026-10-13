@@ -40,6 +40,32 @@ void main() {
   SalesRepository reopened() => SalesRepository();
 
   group('surviving a relaunch', () {
+    test('a queued sale survives signing out and a relaunch', () async {
+      // Logging out forgets what the server said, never the sales it has not
+      // been told about: they are the only copy of money already in the till.
+      final repo = SalesRepository();
+      await repo.addSale(sale(uuid: 'a'));
+      await repo.addSale(sale(uuid: 'sent', id: 2, synced: true));
+
+      repo.clearSession();
+
+      expect(
+        (await repo.listUnsyncedSales()).map((s) => s.clientUuid),
+        ['a'],
+      );
+      final afterRelaunch = await reopened().listUnsyncedSales();
+      expect(afterRelaunch.map((s) => s.clientUuid), ['a']);
+    });
+
+    test('what is written is the unsent queue, in the device store', () async {
+      // The queue lives in shared_preferences under one key, so a relaunch
+      // reads it from the device, not from anything held in memory.
+      await SalesRepository().addSale(sale(uuid: 'a'));
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('sales.pendingUpload'), contains('"a"'));
+    });
+
     test('a queued sale is still there', () async {
       await SalesRepository().addSale(sale(uuid: 'a'));
 

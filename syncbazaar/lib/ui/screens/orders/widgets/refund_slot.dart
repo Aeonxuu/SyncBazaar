@@ -45,6 +45,11 @@ class RefundSlot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // A refund row is the money going out; there is nothing to refund on it
+    // and no tag to put, the row says what it is.
+    if (record.isRefund) {
+      return const SizedBox.shrink();
+    }
     if (record.refund != null) {
       return const RefundedTag();
     }

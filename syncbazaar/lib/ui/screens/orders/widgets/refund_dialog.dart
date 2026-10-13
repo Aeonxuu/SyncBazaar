@@ -436,7 +436,10 @@ class _RefundDialogState extends State<RefundDialog> {
               Expanded(child: DetailFact('Sold by', widget.soldByName ?? '—')),
               const SizedBox(width: 16),
               Expanded(
-                child: DetailFact('Refund via', '$_methodName (same as payment)'),
+                child: DetailFact(
+                  'Refund via',
+                  '$_methodName (same as payment)',
+                ),
               ),
             ],
           ),

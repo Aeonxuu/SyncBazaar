@@ -92,8 +92,12 @@ class CustomerHistoryCard extends StatelessWidget {
           Expanded(
             flex: 2,
             child: Text(
-              formatPeso(row.amount),
-              style: textStyle?.copyWith(fontWeight: FontWeight.w700),
+              // `-PHP 1,900.00` in the error colour where money went back out.
+              formatPesoSigned(row.amount),
+              style: textStyle?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: row.amount < 0 ? AppColors.error : null,
+              ),
               textAlign: TextAlign.left,
             ),
           ),

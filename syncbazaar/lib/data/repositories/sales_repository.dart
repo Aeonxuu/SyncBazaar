@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../../models/refund.dart';
@@ -41,6 +43,23 @@ class SalesRepository {
 
   final List<Sale> _sales = [];
 
+  final StreamController<void> _changes = StreamController<void>.broadcast();
+
+  /// Fires whenever what [listSales] and [listRefunds] would answer has changed
+  /// underneath a screen that already read it: a sale was rung up, an upload
+  /// confirmed one, or a refresh brought something back.
+  ///
+  /// Not for the first lazy load, which the reader is waiting on anyway. A
+  /// screen listens so it can show the new state without being left and
+  /// reopened -- a sale's refund button appears the moment its upload lands.
+  Stream<void> get changes => _changes.stream;
+
+  void _notifyChanged() {
+    if (!_changes.isClosed) {
+      _changes.add(null);
+    }
+  }
+
   /// Refunds the server holds, newest data from the last load.
   ///
   /// Never queued or written to the device: a refund exists only once the
@@ -68,6 +87,7 @@ class SalesRepository {
     // is done as soon as this returns, and a sale that is only in memory at
     // that moment is one a crash can take with the money already in the till.
     await _persistQueue();
+    _notifyChanged();
   }
 
   Future<List<Sale>> listUnsyncedSales() async {
@@ -119,6 +139,7 @@ class SalesRepository {
     }
     _loadedVendorId = null;
     await _ensureLoaded();
+    _notifyChanged();
   }
 
   Future<void> _ensureLoaded() async {
@@ -263,6 +284,7 @@ class SalesRepository {
       }
     }
     await _persistQueue();
+    _notifyChanged();
   }
 
   /// Reads back sales that were queued before the app last closed.

@@ -22,6 +22,13 @@ final NumberFormat _countFormat = NumberFormat('#,##0');
 /// five-figure basket against a receipt cannot scan `12495.00`.
 String formatPeso(num value) => 'PHP ${_amountFormat.format(value)}';
 
+/// `-PHP 1,900.00` for money going out, `PHP 1,900.00` otherwise.
+///
+/// The sign leads, ahead of the currency, the way a ledger writes a debit.
+/// [formatPeso] would print `PHP -1,900.00`, which reads as a different thing.
+String formatPesoSigned(num value) =>
+    value < 0 ? '-${formatPeso(-value)}' : formatPeso(value);
+
 /// `12,495.00` — the amount alone.
 ///
 /// For places where the currency is already stated by a column header, a

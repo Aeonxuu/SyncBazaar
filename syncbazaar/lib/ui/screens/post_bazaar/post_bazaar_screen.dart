@@ -19,6 +19,7 @@ import '../../../services/report_service.dart';
 import '../../../models/bazaar_event.dart';
 import '../../../models/product.dart';
 import '../../../models/user.dart';
+import '../../../models/refund.dart';
 import '../../../models/sale.dart';
 import '../../widgets/action_buttons.dart';
 import '../../widgets/confirmation_dialog.dart';
@@ -64,6 +65,7 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
     final reportService = ReportService(auth: context.read<AuthRepository>());
 
     final sales = await salesRepository.listSales();
+    final refunds = await salesRepository.listRefunds();
     final products = await productRepository.listProducts();
     final events = await eventRepository.listAll();
     final documentEvents = await eventRepository.listAllIncludingFinalized();
@@ -136,6 +138,7 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
     };
     return _PostBazaarData(
       sales: sales,
+      refunds: refunds,
       products: products,
       events: events,
       documentEvents: documentEvents,
@@ -191,6 +194,11 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
       for (final product in data.products) product.id: product.name,
     };
 
+    final saleByServerId = {
+      for (final sale in data.sales)
+        if (sale.serverId != null) sale.serverId!: sale,
+    };
+
     return [
       for (final sale in data.sales.where((sale) => sale.eventId == event.id))
         OrderLine(
@@ -206,7 +214,46 @@ class _PostBazaarScreenState extends State<PostBazaarScreen> {
           total: sale.total,
           returned: sale.orderStatus == OrderStatus.returned,
         ),
+      // A refund is a line of its own, after the sale it undoes: the money came
+      // in and then went out, and both are on the sheet. Negative, on the sheet
+      // of the method it went back by, which is always the sale's own.
+      for (final refund in data.refunds.where(
+        (refund) => refund.eventId == event.id,
+      ))
+        _refundLine(
+          data,
+          refund,
+          saleByServerId[refund.saleId],
+          productNameById,
+        ),
     ];
+  }
+
+  OrderLine _refundLine(
+    _PostBazaarData data,
+    Refund refund,
+    Sale? sale,
+    Map<int, String> productNameById,
+  ) {
+    return OrderLine(
+      date: refund.createdAt,
+      customerName: normalizeCustomerName(
+        refund.customerName.isNotEmpty
+            ? refund.customerName
+            : sale?.customerName,
+      ),
+      product: sale == null
+          ? 'Unknown product'
+          : _productLabel(data, sale, productNameById),
+      paymentMethod: refund.methodName.isNotEmpty
+          ? refund.methodName
+          : (sale?.paymentMethod ?? ''),
+      reference: refund.reference,
+      quantity: sale?.qty ?? 1,
+      total: -refund.amount,
+      returned: false,
+      refunded: true,
+    );
   }
 
   /// `Nike Air Max SC (Color Black, Size 42)` — the same wording the cart and
@@ -1227,6 +1274,7 @@ class _InteractiveCardState extends State<_InteractiveCard> {
 class _PostBazaarData {
   const _PostBazaarData({
     required this.sales,
+    required this.refunds,
     required this.products,
     required this.events,
     required this.documentEvents,
@@ -1241,6 +1289,9 @@ class _PostBazaarData {
   });
 
   final List<Sale> sales;
+
+  /// Refunds on those sales, for the order list's refund lines.
+  final List<Refund> refunds;
   final List<Product> products;
 
   /// Bazaars still working -- upcoming, ongoing, or ended but not finalized.

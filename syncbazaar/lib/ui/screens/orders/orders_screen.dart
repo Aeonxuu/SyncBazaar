@@ -34,6 +34,31 @@ String orderSubLine({
   String? soldBy,
 }) => [time, method, if (soldBy != null) 'Sold by $soldBy'].join(' · ');
 
+/// The line under a refund's customer: when the money went back, by what, and
+/// whose password approved it.
+String refundSubLine({
+  required String time,
+  required String method,
+  String? approvedBy,
+}) => [
+  time,
+  method,
+  if (approvedBy != null && approvedBy.isNotEmpty) 'Approved by $approvedBy',
+].join(' · ');
+
+/// "12 orders found", with the refunds beside them when there are any.
+///
+/// Orders are sales. A refund is a row in the same table but not another
+/// order, so it is counted on its own rather than inflating the figure.
+String ordersFoundCaption(List<TransactionRecord> records) {
+  final refunds = records.where((r) => r.isRefund).length;
+  final orders = records.length - refunds;
+  final base = '$orders order${orders == 1 ? '' : 's'} found';
+  return refunds == 0
+      ? base
+      : '$base · $refunds refund${refunds == 1 ? '' : 's'}';
+}
+
 class OrdersScreen extends StatefulWidget {
   const OrdersScreen({super.key, required this.user});
 
@@ -215,7 +240,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 )
               else
                 Text(
-                  '${records.length} order${records.length == 1 ? '' : 's'} found',
+                  ordersFoundCaption(records),
                   style: Theme.of(
                     context,
                   ).textTheme.bodySmall?.copyWith(color: Colors.black38),
@@ -350,11 +375,17 @@ class _OrdersScreenState extends State<OrdersScreen> {
                   // screen can filter by -- was not shown at all. Then who
                   // sold it, since everyone assigned to the bazaar sees every
                   // sale and the person refunding is rarely the seller.
-                  orderSubLine(
-                    time: _fmtTime(record.timestamp),
-                    method: record.paymentMethod,
-                    soldBy: _soldByName(record.userId),
-                  ),
+                  record.isRefund
+                      ? refundSubLine(
+                          time: _fmtTime(record.timestamp),
+                          method: record.paymentMethod,
+                          approvedBy: record.approvedByName,
+                        )
+                      : orderSubLine(
+                          time: _fmtTime(record.timestamp),
+                          method: record.paymentMethod,
+                          soldBy: _soldByName(record.userId),
+                        ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodySmall?.copyWith(
@@ -411,10 +442,12 @@ class _OrdersScreenState extends State<OrdersScreen> {
           Expanded(
             flex: 2,
             child: Text(
-              formatPeso(record.total),
+              // `-PHP 1,900.00` in the error colour for a refund: money out.
+              formatPesoSigned(record.total),
               textAlign: TextAlign.center,
               style: theme.textTheme.bodyMedium?.copyWith(
                 fontWeight: FontWeight.w700,
+                color: record.isRefund ? AppColors.error : null,
               ),
             ),
           ),
